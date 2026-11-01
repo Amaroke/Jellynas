@@ -1,18 +1,11 @@
 # Jellynas
 
-A personal media server built on Jellyfin, shared with Friends over the internet. Follow these steps in order to build the NAS from scratch.
+A personal media server built on Jellyfin, shared with Friends over the internet. Follow these steps in order, running every command from the repo folder.
 
 ## Prerequisites
 
 - Docker: Docker Desktop on Windows, Docker Engine with the Compose plugin on Linux.
 - Git, with Git Bash on Windows to run the verification script.
-
-## Clone the repo
-
-```sh
-git clone https://github.com/Amaroke/Jellynas.git
-cd Jellynas
-```
 
 ## Fill in the settings
 
