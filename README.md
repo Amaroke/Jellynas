@@ -90,7 +90,7 @@ Friends reach Jellyfin from the internet over HTTPS. DuckDNS gives the NAS a fre
 
 1. Sign in on [duckdns.org](https://www.duckdns.org) and add a subdomain. It must point to your home public IP, which DuckDNS fills in for you.
 2. Copy the token shown at the top of the page.
-3. In `.env`, set `DUCKDNS_SUBDOMAIN` to the subdomain without `.duckdns.org`, `DUCKDNS_TOKEN` to the token, and `JELLYFIN_HOSTNAME` to a name under your subdomain, for example `jellyfin.<subdomain>.duckdns.org`. DuckDNS resolves every name under your subdomain to the same IP.
+3. In `.env`, set `DUCKDNS_SUBDOMAIN` to the subdomain without `.duckdns.org`, `DUCKDNS_TOKEN` to the token, and `JELLYFIN_HOSTNAME` to a name under your subdomain. `jellyfin.${DUCKDNS_SUBDOMAIN}.duckdns.org` reuses the subdomain set just above. DuckDNS resolves every name under your subdomain to the same IP.
 
 The duckdns service then updates the address every five minutes. Your DuckDNS address and token stay in `.env` only.
 

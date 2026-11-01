@@ -28,7 +28,14 @@ container_state() {
 }
 
 env_value() {
-  grep -E "^$1=" .env 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d '\r' | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
+  local value ref
+  value="$(grep -E "^$1=" .env 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d '\r' | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")"
+  while [[ "$value" =~ \$\{([A-Z_]+)\} ]]; do
+    ref="${BASH_REMATCH[1]}"
+    [ "$ref" != "$1" ] || break
+    value="${value//\$\{$ref\}/$(env_value "$ref")}"
+  done
+  printf '%s' "$value"
 }
 
 http_code() {
