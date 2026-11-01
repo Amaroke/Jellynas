@@ -98,12 +98,12 @@ The duckdns service then updates the address every five minutes. Your DuckDNS ad
 
 On your router, forward these two TCP ports to the local IP of the NAS, and nothing else:
 
-| Port | Used for |
-| --- | --- |
-| 80 | Certificate challenge, then redirect to HTTPS |
-| 443 | HTTPS for Friends |
+| Public port | Port of the NAS | Used for |
+| --- | --- | --- |
+| 80 | `CADDY_HTTP_PORT`, 80 if empty | Certificate challenge, then redirect to HTTPS |
+| 443 | `CADDY_HTTPS_PORT`, 443 if empty | HTTPS for Friends |
 
-Every other port, including the Jellyfin port and the admin tools, stays reachable on the local network only. Give the NAS a fixed local IP in the router so the forwards keep working. Ports 80 and 443 must be free on the NAS, stop any other web server using them.
+Every other port, including the Jellyfin port and the admin tools, stays reachable on the local network only. Give the NAS a fixed local IP in the router so the forwards keep working. If port 80 or 443 is already taken on the NAS, set `CADDY_HTTP_PORT` or `CADDY_HTTPS_PORT` to a free port and forward the public port to it. The public ports stay 80 and 443, so Friends still open the address without a port.
 
 ### Start Caddy and DuckDNS
 

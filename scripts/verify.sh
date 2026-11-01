@@ -122,13 +122,13 @@ check_internet_ports() {
     [ -n "$id" ] || continue
     ports="$(docker inspect -f '{{range $p, $b := .HostConfig.PortBindings}}{{range $b}} {{.HostPort}}{{end}}{{end}}' "$id")"
     case "$ports " in
-      *" 80 "* | *" 443 "*) exposed="$exposed $service" ;;
+      *" $http_port "* | *" $https_port "*) exposed="$exposed $service" ;;
     esac
   done
   if [ -n "$exposed" ]; then
-    fail compose "only caddy may publish ports 80 and 443, also published by:$exposed"
+    fail compose "only caddy may publish ports $http_port and $https_port, also published by:$exposed"
   else
-    pass compose "only caddy publishes ports 80 and 443"
+    pass compose "only caddy publishes ports $http_port and $https_port"
   fi
 }
 
@@ -145,10 +145,10 @@ check_public_hostname() {
   [ -n "$host" ] || return
   caddy_running "https://$host" || return
   deadline=$((SECONDS + health_timeout))
-  code="$(http_code --resolve "$host:443:127.0.0.1" "https://$host/")"
+  code="$(http_code --resolve "$host:$https_port:127.0.0.1" "https://$host:$https_port/")"
   while [ "$code" = 000 ] && [ "$SECONDS" -lt "$deadline" ]; do
     sleep 5
-    code="$(http_code --resolve "$host:443:127.0.0.1" "https://$host/")"
+    code="$(http_code --resolve "$host:$https_port:127.0.0.1" "https://$host:$https_port/")"
   done
   case "$code" in
     2?? | 3??)
@@ -163,20 +163,20 @@ check_public_hostname() {
 check_unknown_host_refused() {
   local known="$1" unknown="unknown.invalid" code
   caddy_running "that unknown hosts are refused" || return
-  code="$(http_code --resolve "$unknown:80:127.0.0.1" "http://$unknown/")"
+  code="$(http_code --resolve "$unknown:$http_port:127.0.0.1" "http://$unknown:$http_port/")"
   if [ "$code" = 000 ]; then
     pass caddy "refuses an unknown host over HTTP"
   else
     fail caddy "answers $code to an unknown host over HTTP"
   fi
-  code="$(http_code --insecure --resolve "$unknown:443:127.0.0.1" "https://$unknown/")"
+  code="$(http_code --insecure --resolve "$unknown:$https_port:127.0.0.1" "https://$unknown:$https_port/")"
   if [ "$code" = 000 ]; then
     pass caddy "refuses an unknown host over HTTPS"
   else
     fail caddy "answers $code to an unknown host over HTTPS"
   fi
   [ -n "$known" ] || return
-  code="$(http_code --insecure --resolve "$known:443:127.0.0.1" --header "Host: $unknown" "https://$known/")"
+  code="$(http_code --insecure --resolve "$known:$https_port:127.0.0.1" --header "Host: $unknown" "https://$known:$https_port/")"
   if [ "$code" = 000 ]; then
     pass caddy "refuses an unknown host sent over a known TLS name"
   else
@@ -185,6 +185,10 @@ check_unknown_host_refused() {
 }
 
 jellyfin_hostname="$(env_value JELLYFIN_HOSTNAME)"
+http_port="$(env_value CADDY_HTTP_PORT)"
+http_port="${http_port:-80}"
+https_port="$(env_value CADDY_HTTPS_PORT)"
+https_port="${https_port:-443}"
 
 check_compose_renders
 check_env_filled
