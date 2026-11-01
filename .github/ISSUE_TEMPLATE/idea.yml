@@ -1,0 +1,19 @@
+name: Idea
+description: A new service or an improvement
+labels:
+  - enhancement
+  - needs-triage
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: The problem it solves for the Admin or the Friends
+    validations:
+      required: true
