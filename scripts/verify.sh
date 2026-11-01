@@ -42,13 +42,14 @@ check_env_filled() {
     return
   fi
   for name in $(grep -oE '^[A-Z_]+=' .env.example | tr -d '='); do
+    grep -rqF "\${$name:-" --include=compose.yaml . && continue
     value="$(grep -E "^$name=" .env | tail -n 1 | cut -d= -f2- | tr -d '\r')"
     [ -n "$value" ] || missing="$missing $name"
   done
   if [ -n "$missing" ]; then
     fail env "empty or missing in .env:$missing"
   else
-    pass env "every variable of .env.example is set in .env"
+    pass env "every required variable of .env.example is set in .env"
   fi
 }
 

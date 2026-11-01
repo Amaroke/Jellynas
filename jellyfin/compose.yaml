@@ -11,7 +11,7 @@ services:
       - ${APPDATA_ROOT}/jellyfin:/config
       - ${DATA_ROOT}/media:/data/media:ro
     ports:
-      - ${JELLYFIN_PORT}:8096
+      - ${JELLYFIN_PORT:-8096}:8096
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8096/health"]
       interval: 30s
