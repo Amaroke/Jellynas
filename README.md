@@ -25,15 +25,17 @@ Both roots live outside the repo, at the paths set in `DATA_ROOT` and `APPDATA_R
 └── media
     ├── movies
     ├── shows
+    ├── anime
     ├── music
-    └── books
+    ├── books
+    └── manga
 ```
 
 Create it from the repo folder, in bash (Git Bash on Windows):
 
 ```bash
 set -a && . <(tr -d '\r' < .env) && set +a
-mkdir -p "$DATA_ROOT"/torrents "$DATA_ROOT"/media/{movies,shows,music,books} "$APPDATA_ROOT"
+mkdir -p "$DATA_ROOT"/torrents "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$APPDATA_ROOT"
 ```
 
 On Linux, make sure the user matching `PUID` and `PGID` owns both roots.
@@ -64,8 +66,10 @@ The media tree is mounted read-only under `/data/media`, so Jellyfin can never d
 | --- | --- | --- |
 | Movies | Movies | `/data/media/movies` |
 | Shows | Shows | `/data/media/shows` |
+| Anime | Shows | `/data/media/anime` |
 | Music | Music | `/data/media/music` |
 | Books | Books | `/data/media/books` |
+| Manga | Books | `/data/media/manga` |
 
 For each library, leave "Save artwork into media folders" and every "Metadata savers" option unchecked: Jellyfin cannot write into the Library and keeps its metadata in its appdata folder instead.
 
@@ -76,7 +80,7 @@ Each Friend gets their own Account, so their watch history and progress are thei
 1. Enter the Friend's name and a password, then give both to the Friend privately.
 2. Grant access to all libraries.
 3. Leave "Allow this user to manage the server" unchecked.
-4. Check "Allow media downloading" so the Friend can download movies and books to their phone.
+4. Check "Allow media downloading" so the Friend can download videos, books and manga to their phone.
 
 ## Verify the NAS
 
