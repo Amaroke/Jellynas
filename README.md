@@ -1,22 +1,18 @@
-# Installation guide
+# Jellynas
 
-Follow these steps in order to build the NAS from scratch. Every later piece of the NAS adds its own section here.
+A personal media server built on Jellyfin, shared with Friends over the internet. Follow these steps in order to build the NAS from scratch.
 
 ## Prerequisites
 
 - Docker: Docker Desktop on Windows, Docker Engine with the Compose plugin on Linux.
 - Git, with Git Bash on Windows to run the verification script.
-- [pre-commit](https://pre-commit.com), to block any commit containing a secret.
 
-## Clone the repo and enable the secret hook
+## Clone the repo
 
 ```sh
 git clone https://github.com/Amaroke/Jellynas.git
 cd Jellynas
-pre-commit install
 ```
-
-From now on, gitleaks scans every commit and refuses it if it finds a secret.
 
 ## Fill in the settings
 
@@ -98,3 +94,13 @@ Run the verification script from the repo folder, in Git Bash on Windows:
 ```
 
 It checks the NAS from the outside and prints one line per promise. A failing line names the service that broke it, and the script exits with an error if any check fails.
+
+## Contributing
+
+Before committing to this repo, enable the secret hook with [pre-commit](https://pre-commit.com):
+
+```sh
+pre-commit install
+```
+
+gitleaks then scans every commit and refuses it if it finds a secret.
