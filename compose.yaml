@@ -2,3 +2,5 @@ name: jellynas
 
 include:
   - jellyfin/compose.yaml
+  - caddy/compose.yaml
+  - duckdns/compose.yaml

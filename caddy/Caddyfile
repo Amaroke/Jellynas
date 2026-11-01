@@ -1,0 +1,15 @@
+{
+	auto_https disable_redirects
+	acme_dns duckdns {env.DUCKDNS_TOKEN}
+	servers {
+		protocols h1 h2
+	}
+}
+
+{$JELLYFIN_HOSTNAME} {
+	reverse_proxy jellyfin:8096
+}
+
+:443 {
+	abort
+}

@@ -27,6 +27,21 @@ container_state() {
   docker inspect -f '{{.State.Status}}{{if .State.Health}}/{{.State.Health.Status}}{{end}}' "$id"
 }
 
+env_value() {
+  local value ref
+  value="$(grep -E "^$1=" .env 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d '\r' | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")"
+  while [[ "$value" =~ \$\{([A-Z_]+)\} ]]; do
+    ref="${BASH_REMATCH[1]}"
+    [ "$ref" != "$1" ] || break
+    value="${value//\$\{$ref\}/$(env_value "$ref")}"
+  done
+  printf '%s' "$value"
+}
+
+http_code() {
+  curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 "$@"
+}
+
 check_compose_renders() {
   if docker compose --env-file .env.example config --quiet; then
     pass compose "config renders with .env.example"
@@ -43,7 +58,7 @@ check_env_filled() {
   fi
   for name in $(grep -oE '^[A-Z_]+=' .env.example | tr -d '='); do
     grep -rqF "\${$name:-" --include=compose.yaml . && continue
-    value="$(grep -E "^$name=" .env | tail -n 1 | cut -d= -f2- | tr -d '\r')"
+    value="$(env_value "$name")"
     [ -n "$value" ] || missing="$missing $name"
   done
   if [ -n "$missing" ]; then
@@ -99,10 +114,88 @@ check_read_only() {
   fi
 }
 
+check_internet_ports() {
+  local service id ports exposed=""
+  for service in $(docker compose config --services 2>/dev/null); do
+    [ "$service" = caddy ] && continue
+    id="$(docker compose ps -q "$service" 2>/dev/null | head -n 1)"
+    [ -n "$id" ] || continue
+    ports="$(docker inspect -f '{{range $p, $b := .HostConfig.PortBindings}}{{range $b}} {{.HostPort}}{{end}}{{end}}' "$id")"
+    case "$ports " in
+      *" $https_port "*) exposed="$exposed $service" ;;
+    esac
+  done
+  if [ -n "$exposed" ]; then
+    fail compose "only caddy may publish port $https_port, also published by:$exposed"
+  else
+    pass compose "only caddy publishes port $https_port"
+  fi
+}
+
+caddy_running() {
+  case "$(container_state caddy)" in
+    running*) return 0 ;;
+  esac
+  fail caddy "is not running, cannot check $1"
+  return 1
+}
+
+check_public_hostname() {
+  local host="$1" code deadline
+  [ -n "$host" ] || return
+  caddy_running "https://$host" || return
+  deadline=$((SECONDS + health_timeout))
+  code="$(http_code --resolve "$host:$https_port:127.0.0.1" "https://$host:$https_port/")"
+  while { [ "$code" = 000 ] || [ "${code#5}" != "$code" ]; } && [ "$SECONDS" -lt "$deadline" ]; do
+    sleep 5
+    code="$(http_code --resolve "$host:$https_port:127.0.0.1" "https://$host:$https_port/")"
+  done
+  case "$code" in
+    2?? | 3??)
+      pass caddy "https://$host answers $code with a valid certificate"
+      ;;
+    *)
+      fail caddy "https://$host does not answer with a valid certificate (HTTP $code)"
+      ;;
+  esac
+}
+
+check_unknown_host_refused() {
+  local known="$1" unknown="unknown.invalid" code
+  caddy_running "that unknown hosts are refused" || return
+  code="$(http_code --insecure --resolve "$unknown:$https_port:127.0.0.1" "https://$unknown:$https_port/")"
+  if [ "$code" = 000 ]; then
+    pass caddy "refuses an unknown host over HTTPS"
+  else
+    fail caddy "answers $code to an unknown host over HTTPS"
+  fi
+  [ -n "$known" ] || return
+  code="$(http_code --insecure --resolve "$known:$https_port:127.0.0.1" --header "Host: $unknown" "https://$known:$https_port/")"
+  if [ "$code" = 000 ]; then
+    pass caddy "refuses an unknown host sent over a known TLS name"
+  else
+    fail caddy "answers $code to an unknown host sent over a known TLS name"
+  fi
+}
+
+jellyfin_hostname="$(env_value JELLYFIN_HOSTNAME)"
+https_port="$(env_value CADDY_HTTPS_PORT)"
+https_port="${https_port:-443}"
+public_port=""
+[ "$https_port" = 443 ] || public_port=":$https_port"
+
 check_compose_renders
 check_env_filled
 check_containers_up
 check_read_only jellyfin /data/media
+check_internet_ports
+check_public_hostname "$jellyfin_hostname"
+check_unknown_host_refused "$jellyfin_hostname"
+
+if [ -n "$jellyfin_hostname" ]; then
+  printf '\nOn a phone on 4G with wifi off, open each address and check that it loads:\n'
+  printf '  https://%s%s\n' "$jellyfin_hostname" "$public_port"
+fi
 
 if [ "$failures" -gt 0 ]; then
   printf '\n%d check(s) failed\n' "$failures"

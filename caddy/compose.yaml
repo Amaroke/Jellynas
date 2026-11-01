@@ -1,0 +1,21 @@
+services:
+  caddy:
+    build: .
+    image: jellynas-caddy
+    container_name: caddy
+    restart: unless-stopped
+    environment:
+      JELLYFIN_HOSTNAME: ${JELLYFIN_HOSTNAME}
+      DUCKDNS_TOKEN: ${DUCKDNS_TOKEN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${APPDATA_ROOT}/caddy/data:/data
+      - ${APPDATA_ROOT}/caddy/config:/config
+    ports:
+      - ${CADDY_HTTPS_PORT:-443}:443
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
