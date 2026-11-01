@@ -35,7 +35,7 @@ Create it from the repo folder, in bash (Git Bash on Windows):
 
 ```bash
 set -a && . <(tr -d '\r' < .env) && set +a
-mkdir -p "$DATA_ROOT"/torrents "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$APPDATA_ROOT"
+mkdir -p "$DATA_ROOT"/torrents "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$APPDATA_ROOT"/seerr
 ```
 
 On Linux, make sure the user matching `PUID` and `PGID` owns both roots.
@@ -121,6 +121,36 @@ In Dashboard > Networking, add `caddy` to "Known proxies" and save. Jellyfin the
 ```sh
 docker compose restart jellyfin
 ```
+
+## Seerr
+
+Friends make Requests in Seerr, on its own public hostname, and log in with their Jellyfin Account. Seerr has no access to the Library files.
+
+### Hostname
+
+In `.env`, set `SEERR_HOSTNAME` to another name under your subdomain, for example `seerr.${DUCKDNS_SUBDOMAIN}.duckdns.org`. It uses the same HTTPS port, so the router needs no new rule. Recreate Caddy so it picks up the new name and obtains its certificate:
+
+```sh
+docker compose up -d
+```
+
+### Setup wizard
+
+1. Open `http://<NAS address>:<SEERR_PORT>` from a browser on the local network.
+2. Choose Jellyfin as the media server.
+3. Enter `jellyfin` as the hostname, `8096` as the port, leave SSL off and the URL base empty.
+4. Enter an email address and the username and password of the Jellyfin Admin Account. This Account becomes the Seerr Admin.
+5. Sync the libraries and enable Movies, Shows and Anime.
+6. Skip the Radarr and Sonarr step, they are added later.
+
+### Settings
+
+1. In Settings > General, set "Application URL" to `https://<SEERR_HOSTNAME>:<CADDY_HTTPS_PORT>`, without the port if it is 443.
+2. In Settings > Network, check "Enable Proxy Support" so Seerr sees the real address of each Friend.
+3. In Settings > Jellyfin, set "External URL" to `https://<JELLYFIN_HOSTNAME>:<CADDY_HTTPS_PORT>` so links to a movie open the public Jellyfin.
+4. In Settings > Users, check "Enable Jellyfin Sign-In" and "Enable New Jellyfin Sign-In", uncheck "Enable Local Sign-In", and leave the default permissions on "Request".
+
+A Friend then opens the Seerr address, picks "Sign in with Jellyfin" and enters their Jellyfin Account, with no second login to create.
 
 ## Verify the NAS
 

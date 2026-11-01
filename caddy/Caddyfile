@@ -10,6 +10,10 @@
 	reverse_proxy jellyfin:8096
 }
 
+{$SEERR_HOSTNAME} {
+	reverse_proxy seerr:5055
+}
+
 :443 {
 	abort
 }
