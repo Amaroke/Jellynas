@@ -82,6 +82,51 @@ Each Friend gets their own Account, so their watch history and progress are thei
 3. Leave "Allow this user to manage the server" unchecked.
 4. Check "Allow media downloading" so the Friend can download videos, books and manga to their phone.
 
+## Public access
+
+Friends reach Jellyfin from the internet over HTTPS. DuckDNS gives the NAS a free address that follows your home IP, and Caddy is the only service the router lets in. Caddy obtains the certificate on its own and refuses any hostname other than the ones set in `.env`, so ports 80 and 443 can never lead to an admin tool.
+
+### DuckDNS
+
+1. Sign in on [duckdns.org](https://www.duckdns.org) and add a subdomain. It must point to your home public IP, which DuckDNS fills in for you.
+2. Copy the token shown at the top of the page.
+3. In `.env`, set `DUCKDNS_SUBDOMAIN` to the subdomain without `.duckdns.org`, `DUCKDNS_TOKEN` to the token, and `JELLYFIN_HOSTNAME` to a name under your subdomain, for example `jellyfin.<subdomain>.duckdns.org`. DuckDNS resolves every name under your subdomain to the same IP.
+
+The duckdns service then updates the address every five minutes. Your DuckDNS address and token stay in `.env` only.
+
+### Router port forwards
+
+On your router, forward these two TCP ports to the local IP of the NAS, and nothing else:
+
+| Port | Used for |
+| --- | --- |
+| 80 | Certificate challenge, then redirect to HTTPS |
+| 443 | HTTPS for Friends |
+
+Every other port, including the Jellyfin port and the admin tools, stays reachable on the local network only. Give the NAS a fixed local IP in the router so the forwards keep working. Ports 80 and 443 must be free on the NAS, stop any other web server using them.
+
+### Start Caddy and DuckDNS
+
+```sh
+docker compose up -d
+```
+
+Caddy requests the certificate within a minute. Follow it with:
+
+```sh
+docker compose logs -f caddy
+```
+
+The line `certificate obtained successfully` means it worked.
+
+### Jellyfin behind Caddy
+
+In Dashboard > Networking, add `caddy` to "Known proxies" and save. Jellyfin then sees the real address of each Friend instead of the address of Caddy. Jellyfin looks up the address of Caddy when it starts, so restart it now and whenever Caddy is recreated:
+
+```sh
+docker compose restart jellyfin
+```
+
 ## Verify the NAS
 
 Run the verification script from the repo folder, in Git Bash on Windows:
@@ -91,6 +136,8 @@ Run the verification script from the repo folder, in Git Bash on Windows:
 ```
 
 It checks the NAS from the outside and prints one line per promise. A failing line names the service that broke it, and the script exits with an error if any check fails.
+
+The script ends with the public addresses to test yourself. Open each one on a phone on 4G with wifi off: it must load over HTTPS without a certificate warning.
 
 ## Contributing
 

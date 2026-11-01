@@ -1,0 +1,13 @@
+{
+	servers {
+		protocols h1 h2
+	}
+}
+
+{$JELLYFIN_HOSTNAME} {
+	reverse_proxy jellyfin:8096
+}
+
+:80, :443 {
+	abort
+}

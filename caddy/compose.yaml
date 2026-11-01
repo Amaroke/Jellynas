@@ -1,0 +1,20 @@
+services:
+  caddy:
+    image: caddy:2.11.7-alpine
+    container_name: caddy
+    restart: unless-stopped
+    environment:
+      JELLYFIN_HOSTNAME: ${JELLYFIN_HOSTNAME}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${APPDATA_ROOT}/caddy/data:/data
+      - ${APPDATA_ROOT}/caddy/config:/config
+    ports:
+      - 80:80
+      - 443:443
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
