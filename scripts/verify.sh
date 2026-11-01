@@ -146,7 +146,7 @@ check_public_hostname() {
   caddy_running "https://$host" || return
   deadline=$((SECONDS + health_timeout))
   code="$(http_code --resolve "$host:$https_port:127.0.0.1" "https://$host:$https_port/")"
-  while [ "$code" = 000 ] && [ "$SECONDS" -lt "$deadline" ]; do
+  while { [ "$code" = 000 ] || [ "${code#5}" != "$code" ]; } && [ "$SECONDS" -lt "$deadline" ]; do
     sleep 5
     code="$(http_code --resolve "$host:$https_port:127.0.0.1" "https://$host:$https_port/")"
   done
