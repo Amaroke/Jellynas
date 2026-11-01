@@ -1,0 +1,4 @@
+name: jellynas
+
+include:
+  - jellyfin/compose.yaml
