@@ -224,9 +224,11 @@ check_public_hostname "$jellyfin_hostname"
 check_public_hostname "$seerr_hostname"
 check_unknown_host_refused "$jellyfin_hostname"
 
-if [ -n "$jellyfin_hostname" ]; then
+if [ -n "$jellyfin_hostname$seerr_hostname" ]; then
   printf '\nOn a phone on 4G with wifi off, open each address and check that it loads:\n'
-  printf '  https://%s%s\n' "$jellyfin_hostname" "$public_port"
+  for host in "$jellyfin_hostname" "$seerr_hostname"; do
+    [ -z "$host" ] || printf '  https://%s%s\n' "$host" "$public_port"
+  done
 fi
 
 if [ "$failures" -gt 0 ]; then
