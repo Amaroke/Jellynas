@@ -1,4 +1,8 @@
 {
+	auto_https disable_redirects
+	cert_issuer acme {
+		disable_http_challenge
+	}
 	servers {
 		protocols h1 h2
 	}
@@ -8,6 +12,6 @@
 	reverse_proxy jellyfin:8096
 }
 
-:80, :443 {
+:443 {
 	abort
 }

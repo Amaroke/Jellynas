@@ -122,13 +122,13 @@ check_internet_ports() {
     [ -n "$id" ] || continue
     ports="$(docker inspect -f '{{range $p, $b := .HostConfig.PortBindings}}{{range $b}} {{.HostPort}}{{end}}{{end}}' "$id")"
     case "$ports " in
-      *" $http_port "* | *" $https_port "*) exposed="$exposed $service" ;;
+      *" $https_port "*) exposed="$exposed $service" ;;
     esac
   done
   if [ -n "$exposed" ]; then
-    fail compose "only caddy may publish ports $http_port and $https_port, also published by:$exposed"
+    fail compose "only caddy may publish port $https_port, also published by:$exposed"
   else
-    pass compose "only caddy publishes ports $http_port and $https_port"
+    pass compose "only caddy publishes port $https_port"
   fi
 }
 
@@ -163,12 +163,6 @@ check_public_hostname() {
 check_unknown_host_refused() {
   local known="$1" unknown="unknown.invalid" code
   caddy_running "that unknown hosts are refused" || return
-  code="$(http_code --resolve "$unknown:$http_port:127.0.0.1" "http://$unknown:$http_port/")"
-  if [ "$code" = 000 ]; then
-    pass caddy "refuses an unknown host over HTTP"
-  else
-    fail caddy "answers $code to an unknown host over HTTP"
-  fi
   code="$(http_code --insecure --resolve "$unknown:$https_port:127.0.0.1" "https://$unknown:$https_port/")"
   if [ "$code" = 000 ]; then
     pass caddy "refuses an unknown host over HTTPS"
@@ -185,8 +179,6 @@ check_unknown_host_refused() {
 }
 
 jellyfin_hostname="$(env_value JELLYFIN_HOSTNAME)"
-http_port="$(env_value CADDY_HTTP_PORT)"
-http_port="${http_port:-80}"
 https_port="$(env_value CADDY_HTTPS_PORT)"
 https_port="${https_port:-443}"
 
