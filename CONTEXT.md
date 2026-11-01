@@ -9,7 +9,7 @@ All the services and data hosted for this project, whatever machine runs them.
 _Avoid_: server, box, stack
 
 **Library**:
-The movies, shows, music and books served by Jellyfin.
+The movies, shows, anime, music, books and manga served by Jellyfin.
 _Avoid_: media collection, catalog
 
 **Automation stack**:
