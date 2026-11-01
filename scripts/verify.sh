@@ -114,6 +114,35 @@ check_read_only() {
   fi
 }
 
+check_no_media_mount() {
+  local service="$1" data_root id source mounted=""
+  data_root="$(env_value DATA_ROOT | tr '\\' / | tr '[:upper:]' '[:lower:]')"
+  data_root="${data_root%/}"
+  if [ -z "$data_root" ]; then
+    fail "$service" "DATA_ROOT is empty, cannot check that it has no media mount"
+    return
+  fi
+  case "$(container_state "$service")" in
+    running*) ;;
+    *)
+      fail "$service" "is not running, cannot check that it has no media mount"
+      return
+      ;;
+  esac
+  id="$(docker compose ps -q "$service" 2>/dev/null | head -n 1)"
+  while IFS= read -r source; do
+    source="$(printf '%s' "$source" | tr '\\' / | tr '[:upper:]' '[:lower:]')"
+    case "$source" in
+      "$data_root" | "$data_root"/*) mounted="$mounted $source" ;;
+    esac
+  done < <(docker inspect -f '{{range .Mounts}}{{println .Source}}{{end}}' "$id")
+  if [ -n "$mounted" ]; then
+    fail "$service" "mounts the data root:$mounted"
+  else
+    pass "$service" "has no media mount"
+  fi
+}
+
 check_internet_ports() {
   local service id ports exposed=""
   for service in $(docker compose config --services 2>/dev/null); do
@@ -179,6 +208,7 @@ check_unknown_host_refused() {
 }
 
 jellyfin_hostname="$(env_value JELLYFIN_HOSTNAME)"
+seerr_hostname="$(env_value SEERR_HOSTNAME)"
 https_port="$(env_value CADDY_HTTPS_PORT)"
 https_port="${https_port:-443}"
 public_port=""
@@ -188,13 +218,17 @@ check_compose_renders
 check_env_filled
 check_containers_up
 check_read_only jellyfin /data/media
+check_no_media_mount seerr
 check_internet_ports
 check_public_hostname "$jellyfin_hostname"
+check_public_hostname "$seerr_hostname"
 check_unknown_host_refused "$jellyfin_hostname"
 
-if [ -n "$jellyfin_hostname" ]; then
+if [ -n "$jellyfin_hostname$seerr_hostname" ]; then
   printf '\nOn a phone on 4G with wifi off, open each address and check that it loads:\n'
-  printf '  https://%s%s\n' "$jellyfin_hostname" "$public_port"
+  for host in "$jellyfin_hostname" "$seerr_hostname"; do
+    [ -z "$host" ] || printf '  https://%s%s\n' "$host" "$public_port"
+  done
 fi
 
 if [ "$failures" -gt 0 ]; then
