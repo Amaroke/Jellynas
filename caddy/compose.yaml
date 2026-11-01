@@ -1,10 +1,12 @@
 services:
   caddy:
-    image: caddy:2.11.7-alpine
+    build: .
+    image: jellynas-caddy
     container_name: caddy
     restart: unless-stopped
     environment:
       JELLYFIN_HOSTNAME: ${JELLYFIN_HOSTNAME}
+      DUCKDNS_TOKEN: ${DUCKDNS_TOKEN}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ${APPDATA_ROOT}/caddy/data:/data

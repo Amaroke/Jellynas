@@ -1,8 +1,6 @@
 {
 	auto_https disable_redirects
-	cert_issuer acme {
-		disable_http_challenge
-	}
+	acme_dns duckdns {env.DUCKDNS_TOKEN}
 	servers {
 		protocols h1 h2
 	}

@@ -181,6 +181,8 @@ check_unknown_host_refused() {
 jellyfin_hostname="$(env_value JELLYFIN_HOSTNAME)"
 https_port="$(env_value CADDY_HTTPS_PORT)"
 https_port="${https_port:-443}"
+public_port=""
+[ "$https_port" = 443 ] || public_port=":$https_port"
 
 check_compose_renders
 check_env_filled
@@ -192,7 +194,7 @@ check_unknown_host_refused "$jellyfin_hostname"
 
 if [ -n "$jellyfin_hostname" ]; then
   printf '\nOn a phone on 4G with wifi off, open each address and check that it loads:\n'
-  printf '  https://%s\n' "$jellyfin_hostname"
+  printf '  https://%s%s\n' "$jellyfin_hostname" "$public_port"
 fi
 
 if [ "$failures" -gt 0 ]; then

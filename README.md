@@ -84,7 +84,7 @@ Each Friend gets their own Account, so their watch history and progress are thei
 
 ## Public access
 
-Friends reach Jellyfin from the internet over HTTPS. DuckDNS gives the NAS a free address that follows your home IP, and Caddy is the only service the router lets in. Caddy obtains the certificate on its own and refuses any hostname other than the ones set in `.env`, so port 443 can never lead to an admin tool. Port 80 is not used: the certificate is validated over 443 too.
+Friends reach Jellyfin from the internet over HTTPS. DuckDNS gives the NAS a free address that follows your home IP, and Caddy is the only service the router lets in. Caddy obtains the certificate on its own and refuses any hostname other than the ones set in `.env`, so the forwarded port can never lead to an admin tool. Caddy proves to Let's Encrypt that it owns the address through DuckDNS with your token, so the certificate needs no open port.
 
 ### DuckDNS
 
@@ -96,13 +96,9 @@ The duckdns service then updates the address every five minutes. Your DuckDNS ad
 
 ### Router port forwards
 
-On your router, forward this single TCP port to the local IP of the NAS, and nothing else:
+Pick the HTTPS port Friends will use and set it in `CADDY_HTTPS_PORT`, or leave it empty for 443. A high port that no service uses by default, such as a random five-digit number, draws fewer automated scans. Friends then add it to the address, for example `https://jellyfin.<subdomain>.duckdns.org:<port>`, which the Jellyfin apps accept.
 
-| Public port | Port of the NAS | Used for |
-| --- | --- | --- |
-| 443 | `CADDY_HTTPS_PORT`, 443 if empty | Certificate challenge and HTTPS for Friends |
-
-Every other port, including the Jellyfin port and the admin tools, stays reachable on the local network only. Give the NAS a fixed local IP in the router so the forwards keep working. Do not forward port 80. If port 443 is already taken on the NAS, set `CADDY_HTTPS_PORT` to a free port and forward the public port 443 to it. The public port stays 443, so Friends still open the address without a port.
+On your router, forward that single TCP port, same number outside and inside, to the local IP of the NAS, and nothing else. Every other port, including the Jellyfin port and the admin tools, stays reachable on the local network only. Give the NAS a fixed local IP in the router so the forward keeps working.
 
 ### Start Caddy and DuckDNS
 
@@ -110,7 +106,7 @@ Every other port, including the Jellyfin port and the admin tools, stays reachab
 docker compose up -d
 ```
 
-Caddy requests the certificate within a minute. Follow it with:
+The first start builds Caddy with its DuckDNS module, which takes a minute or two. After pulling a change to `caddy/Dockerfile`, add `--build` to rebuild it. Caddy then requests the certificate within a few minutes. Follow it with:
 
 ```sh
 docker compose logs -f caddy
