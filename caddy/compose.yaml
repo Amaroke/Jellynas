@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     environment:
       JELLYFIN_HOSTNAME: ${JELLYFIN_HOSTNAME}
+      SEERR_HOSTNAME: ${SEERR_HOSTNAME}
       DUCKDNS_TOKEN: ${DUCKDNS_TOKEN}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
