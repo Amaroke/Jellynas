@@ -1,0 +1,36 @@
+name: Bug
+description: Un service ne démarre pas ou ne se comporte pas comme prévu
+labels:
+  - bug
+  - needs-triage
+body:
+  - type: input
+    id: service
+    attributes:
+      label: Service concerné
+      placeholder: Jellyfin, Sonarr, Caddy...
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: Ce qui se passe
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ce qui devrait se passer
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Retire tout mot de passe, clé, domaine ou adresse IP avant de coller
+      render: text
+  - type: input
+    id: environment
+    attributes:
+      label: Machine
+      placeholder: Windows 11 + Docker Desktop, Debian 13...

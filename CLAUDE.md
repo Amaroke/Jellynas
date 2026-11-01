@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues et specs dans les GitHub Issues de Amaroke/nas. See `docs/agents/issue-tracker.md`.
+Issues et specs dans les GitHub Issues de Amaroke/Jellynas. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
