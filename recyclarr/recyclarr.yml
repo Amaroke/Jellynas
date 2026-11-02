@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://schemas.recyclarr.dev/v8/config-schema.json
+
+radarr:
+  radarr:
+    base_url: http://radarr:7878
+    api_key: !env_var RADARR_API_KEY
+
+    quality_definition:
+      type: movie
+
+    quality_profiles:
+      - trash_id: 2572ce3ea4eef1c19d59e0e20ed1cea7
+        reset_unmatched_scores:
+          enabled: true
+
+    custom_format_groups:
+      skip:
+        - f8bf8eab4617f12dfdbd16303d8da245
+
+    custom_formats:
+      - trash_ids:
+          - 9170d55c319f4fe40da8711ba9d8050d
+        assign_scores_to:
+          - trash_id: 2572ce3ea4eef1c19d59e0e20ed1cea7
+            score: 400
+
+sonarr:
+  sonarr:
+    base_url: http://sonarr:8989
+    api_key: !env_var SONARR_API_KEY
+
+    quality_definition:
+      type: series
+
+    quality_profiles:
+      - trash_id: 4c48f506c1116a3a57ae33f12346bd15
+        reset_unmatched_scores:
+          enabled: true
+
+    custom_format_groups:
+      skip:
+        - 158188097a58d7687dee647e04af0da3
+
+    custom_formats:
+      - trash_ids:
+          - c9eafd50846d299b862ca9bb6ea91950
+        assign_scores_to:
+          - trash_id: 4c48f506c1116a3a57ae33f12346bd15
+            score: 400

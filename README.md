@@ -35,7 +35,7 @@ Create it from the repo folder, in bash (Git Bash on Windows):
 
 ```bash
 set -a && . <(tr -d '\r' < .env) && set +a
-mkdir -p "$DATA_ROOT"/torrents "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$APPDATA_ROOT"/seerr
+mkdir -p "$DATA_ROOT"/torrents "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$APPDATA_ROOT"/seerr "$APPDATA_ROOT"/recyclarr
 ```
 
 On Linux, make sure the user matching `PUID` and `PGID` owns both roots.
@@ -337,6 +337,40 @@ In Seerr, Settings > Services, click "Add Sonarr Server":
 5. Check "Season Folders" to match Sonarr, leave "Enable Automatic Search" checked, and save.
 
 An approved show Request is then searched by Sonarr, downloaded by qBittorrent into `/data/torrents/shows`, and copied into the shows folder, or the anime folder for an anime, where Jellyfin picks it up. New episodes of a monitored show follow on their own.
+
+## Recyclarr
+
+Recyclarr creates one quality profile in Radarr and one in Sonarr, so that most downloads already match the Library format and Tdarr rarely has to re-encode. It sees no media file and only talks to the Radarr and Sonarr APIs. Its config is `recyclarr/recyclarr.yml`, and it syncs again every day at midnight, so a change to the TRaSH Guides or to the config reaches both tools on its own.
+
+Both profiles follow the French MULTi.VO profiles of the [TRaSH Guides](https://trash-guides.info/Radarr/radarr-setup-quality-profiles-french-en/):
+
+- **Quality**: WEB and Bluray 1080p, Bluray 720p as a fallback, nothing above 1080p.
+- **Audio**: a release with both French and the original audio scores higher, a release without the original audio is refused.
+- **Codec**: an H265 release scores 400 more than the same release in H264. The guide penalises H265 at 1080p, so that rule is skipped. The bonus outweighs the gap between release groups but not the French audio bonus of 500, since Tdarr can re-encode a file but cannot add a missing audio track.
+
+### API keys
+
+In `.env`, set `RADARR_API_KEY` and `SONARR_API_KEY` to the keys copied from Settings > General > Security in each tool, then start Recyclarr:
+
+```sh
+docker compose up -d
+```
+
+Sync right away instead of waiting for midnight:
+
+```sh
+docker compose exec recyclarr recyclarr sync
+```
+
+Each tool ends with a `Completed` line and no error. Run the same command after changing `recyclarr/recyclarr.yml`.
+
+### Assign the profiles
+
+Recyclarr creates the profile but never assigns it. In Radarr, the new profile is `[French MULTi.VO] HD Bluray + WEB`. In Sonarr, it is `[French MULTi.VO] HD Bluray + WEB (1080p)`.
+
+1. In Radarr, Movies, click "Select Movies", select all, pick the profile under "Quality Profile" at the bottom, and save. Do the same in Sonarr, Series, for every show and anime.
+2. In Settings > Profiles of each tool, delete the profiles that came with it, so a new movie or show can only get the Recyclarr one.
+3. In Seerr, Settings > Services, edit Radarr and pick the profile as the quality profile. Edit Sonarr and pick it as both the quality profile and the anime quality profile.
 
 ## Verify the NAS
 
