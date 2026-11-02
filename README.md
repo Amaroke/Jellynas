@@ -200,6 +200,21 @@ In qBittorrent, Tools > Options > Connection, set "Port used for incoming connec
 
 In Tools > Options > Downloads, set "Default Save Path" to `/data/torrents`, uncheck "Keep incomplete torrents in", and save. Any other path would land inside the container and be lost.
 
+### Downloads and seeding
+
+Each finished torrent keeps seeding from the torrents tree for a while, to give back to other peers. qBittorrent stops it once it reaches its seeding goal, then the tool that sent it removes it. In Tools > Options, set:
+
+| Screen | Setting | Value |
+| --- | --- | --- |
+| Downloads | Default Torrent Management Mode | Automatic, so each category picks its own save path |
+| Downloads | Append .!qB extension to incomplete files | Checked, so no tool imports a file that is still downloading |
+| BitTorrent | Privacy | DHT and PeX checked, Local Peer Discovery unchecked since the container has no local peers |
+| BitTorrent | Torrent Queueing | 3 active downloads, 10 active uploads, 15 active torrents |
+| BitTorrent | Seeding Limits | Ratio 2 and total seeding time 20160 minutes (14 days), whichever comes first, then "Stop torrent" |
+| Advanced | Network interface | `tun0`, so qBittorrent only ever uses the VPN, on top of the Gluetun kill switch |
+
+Optionally, in Speed, set a global upload limit to about 60% of your internet upload speed, so seeding never slows Jellyfin streams to Friends.
+
 ## Verify the NAS
 
 Run the verification script from the repo folder, in Git Bash on Windows:
