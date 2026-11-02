@@ -5,3 +5,5 @@ include:
   - seerr/compose.yaml
   - caddy/compose.yaml
   - duckdns/compose.yaml
+  - gluetun/compose.yaml
+  - qbittorrent/compose.yaml

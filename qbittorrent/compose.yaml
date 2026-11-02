@@ -1,0 +1,24 @@
+services:
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:5.3.0_v2.1.2-ls486
+    container_name: qbittorrent
+    restart: unless-stopped
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_started
+        restart: true
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+      WEBUI_PORT: 8080
+    volumes:
+      - ${APPDATA_ROOT}/qbittorrent:/config
+      - ${DATA_ROOT}/torrents:/data/torrents
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
