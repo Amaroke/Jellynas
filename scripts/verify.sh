@@ -81,9 +81,16 @@ check_containers_up() {
       sleep 5
       state="$(container_state "$service")"
     done
-    case "$state" in
-      running/healthy | running)
+    case "$service:$state" in
+      *:running/healthy | *:running)
         pass "$service" "container is $state"
+        ;;
+      gluetun:running/unhealthy)
+        if [ -z "$vpn_provider" ]; then
+          pass gluetun "container is $state, expected while the VPN is not configured"
+        else
+          fail gluetun "container is $state, the VPN does not connect"
+        fi
         ;;
       *)
         fail "$service" "container is $state, expected healthy or running"
@@ -161,6 +168,48 @@ check_internet_ports() {
   fi
 }
 
+check_login_required() {
+  local service="$1" url="$2" code
+  case "$(container_state "$service")" in
+    running*) ;;
+    *)
+      fail "$service" "is not running, cannot check that its web UI requires a login"
+      return
+      ;;
+  esac
+  code="$(http_code "$url")"
+  case "$code" in
+    401 | 403)
+      pass "$service" "web UI requires a login (HTTP $code)"
+      ;;
+    *)
+      fail "$service" "web UI does not require a login at $url (HTTP $code)"
+      ;;
+  esac
+}
+
+check_kill_switch() {
+  local service="$1"
+  case "$(container_state gluetun) $(container_state "$service")" in
+    running*" "running*) ;;
+    *)
+      fail "$service" "gluetun or $service is not running, cannot check the kill switch"
+      return
+      ;;
+  esac
+  if ! docker compose exec -T gluetun ip link set tun0 down >/dev/null 2>&1; then
+    fail gluetun "cannot take the VPN interface tun0 down, cannot check the kill switch"
+    return
+  fi
+  docker compose exec -T "$service" curl --silent --output /dev/null --max-time 5 http://1.1.1.1 2>/dev/null
+  case "$?" in
+    0) fail "$service" "reaches the internet with the VPN down" ;;
+    6 | 7 | 28) pass "$service" "has no connectivity with the VPN down" ;;
+    *) fail "$service" "cannot probe its connectivity with curl" ;;
+  esac
+  docker compose restart gluetun "$service" >/dev/null 2>&1
+}
+
 caddy_running() {
   case "$(container_state caddy)" in
     running*) return 0 ;;
@@ -209,6 +258,8 @@ check_unknown_host_refused() {
 
 jellyfin_hostname="$(env_value JELLYFIN_HOSTNAME)"
 seerr_hostname="$(env_value SEERR_HOSTNAME)"
+vpn_provider="$(env_value VPN_SERVICE_PROVIDER)"
+qbittorrent_port="$(env_value QBITTORRENT_PORT)"
 https_port="$(env_value CADDY_HTTPS_PORT)"
 https_port="${https_port:-443}"
 public_port=""
@@ -220,6 +271,8 @@ check_containers_up
 check_read_only jellyfin /data/media
 check_no_media_mount seerr
 check_internet_ports
+check_login_required qbittorrent "http://localhost:${qbittorrent_port:-8080}/api/v2/app/version"
+check_kill_switch qbittorrent
 check_public_hostname "$jellyfin_hostname"
 check_public_hostname "$seerr_hostname"
 check_unknown_host_refused "$jellyfin_hostname"

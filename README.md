@@ -152,6 +152,43 @@ docker compose up -d
 
 A Friend then opens the Seerr address, picks "Sign in with Jellyfin" and enters their Jellyfin Account, with no second login to create.
 
+## qBittorrent
+
+qBittorrent downloads torrents into the torrents tree, the only folder it sees, mounted under `/data/torrents`. It shares the network of Gluetun, whose firewall only lets traffic out through the VPN. When the VPN is down or not configured yet, qBittorrent has no connectivity at all, so your real IP never leaks.
+
+### VPN
+
+Until you choose a provider, leave every VPN value of `.env` empty. Gluetun then starts with a tunnel that leads nowhere and shows as unhealthy, which is expected.
+
+Once you have a provider:
+
+1. Find your provider on the [Gluetun providers page](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers) and note the values it asks for.
+2. In `.env`, set `VPN_SERVICE_PROVIDER` to the provider name and `VPN_TYPE` to `wireguard` or `openvpn`.
+3. For WireGuard, download a WireGuard config file from the provider and copy its `PrivateKey` into `WIREGUARD_PRIVATE_KEY` and its `Address` into `WIREGUARD_ADDRESSES`. For OpenVPN, set `OPENVPN_USER` and `OPENVPN_PASSWORD` to the manual setup credentials of the provider.
+4. Optionally set `SERVER_COUNTRIES` to the countries you want to exit from.
+5. Recreate Gluetun and qBittorrent:
+
+   ```sh
+   docker compose up -d
+   ```
+
+The line `Public IP address is` in `docker compose logs gluetun` shows the VPN address, never your home address. Gluetun then turns healthy.
+
+### Account
+
+1. Read the temporary password qBittorrent printed at its first start:
+
+   ```sh
+   docker compose logs qbittorrent
+   ```
+
+2. Open `http://<NAS address>:<QBITTORRENT_PORT>` from a browser on the local network and sign in with `admin` and that password.
+3. In Tools > Options > WebUI > Authentication, set a new username and a strong password stored in your password manager. Leave both "Bypass authentication" options unchecked.
+
+### Save paths
+
+In Tools > Options > Downloads, set "Default Save Path" to `/data/torrents`, uncheck "Keep incomplete torrents in", and save. Any other path would land inside the container and be lost.
+
 ## Verify the NAS
 
 Run the verification script from the repo folder, in Git Bash on Windows:
@@ -160,7 +197,7 @@ Run the verification script from the repo folder, in Git Bash on Windows:
 ./scripts/verify.sh
 ```
 
-It checks the NAS from the outside and prints one line per promise. A failing line names the service that broke it, and the script exits with an error if any check fails.
+It checks the NAS from the outside and prints one line per promise. To prove the kill switch, it cuts the VPN for a few seconds and then restarts Gluetun and qBittorrent. A failing line names the service that broke it, and the script exits with an error if any check fails.
 
 The script ends with the public addresses to test yourself. Open each one on a phone on 4G with wifi off: it must load over HTTPS without a certificate warning.
 
