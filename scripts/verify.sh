@@ -188,6 +188,29 @@ check_login_required() {
   esac
 }
 
+check_exit_ip() {
+  local service="$1" home vpn
+  [ -n "$vpn_provider" ] || return
+  case "$(container_state "$service")" in
+    running*) ;;
+    *)
+      fail "$service" "is not running, cannot check that it goes through the VPN"
+      return
+      ;;
+  esac
+  home="$(curl --silent --max-time 10 https://api.ipify.org)"
+  vpn="$(docker compose exec -T "$service" curl --silent --max-time 10 https://api.ipify.org 2>/dev/null)"
+  if [ -z "$vpn" ]; then
+    fail "$service" "cannot reach the internet through the VPN"
+  elif [ -z "$home" ]; then
+    fail "$service" "cannot get the home IP to compare with the VPN IP"
+  elif [ "$vpn" = "$home" ]; then
+    fail "$service" "goes out with the home IP, not through the VPN"
+  else
+    pass "$service" "goes out through the VPN, not with the home IP"
+  fi
+}
+
 check_kill_switch() {
   local service="$1"
   case "$(container_state gluetun) $(container_state "$service")" in
@@ -272,6 +295,7 @@ check_read_only jellyfin /data/media
 check_no_media_mount seerr
 check_internet_ports
 check_login_required qbittorrent "http://localhost:${qbittorrent_port:-8080}/api/v2/app/version"
+check_exit_ip qbittorrent
 check_kill_switch qbittorrent
 check_public_hostname "$jellyfin_hostname"
 check_public_hostname "$seerr_hostname"
