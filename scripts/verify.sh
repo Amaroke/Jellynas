@@ -169,7 +169,7 @@ check_internet_ports() {
 }
 
 check_login_required() {
-  local service="$1" url="$2" code
+  local service="$1" url="$2" result
   case "$(container_state "$service")" in
     running*) ;;
     *)
@@ -177,13 +177,16 @@ check_login_required() {
       return
       ;;
   esac
-  code="$(http_code "$url")"
-  case "$code" in
-    401 | 403)
-      pass "$service" "web UI requires a login (HTTP $code)"
+  result="$(curl --silent --output /dev/null --write-out '%{http_code} %{redirect_url}' --max-time 10 "$url")"
+  case "$result" in
+    401" "* | 403" "*)
+      pass "$service" "web UI requires a login (HTTP ${result%% *})"
+      ;;
+    30?" "*/login*)
+      pass "$service" "web UI requires a login (redirects to its login page)"
       ;;
     *)
-      fail "$service" "web UI does not require a login at $url (HTTP $code)"
+      fail "$service" "web UI does not require a login at $url (HTTP ${result%% *})"
       ;;
   esac
 }
@@ -283,6 +286,8 @@ jellyfin_hostname="$(env_value JELLYFIN_HOSTNAME)"
 seerr_hostname="$(env_value SEERR_HOSTNAME)"
 vpn_provider="$(env_value VPN_SERVICE_PROVIDER)"
 qbittorrent_port="$(env_value QBITTORRENT_PORT)"
+prowlarr_port="$(env_value PROWLARR_PORT)"
+radarr_port="$(env_value RADARR_PORT)"
 https_port="$(env_value CADDY_HTTPS_PORT)"
 https_port="${https_port:-443}"
 public_port=""
@@ -293,8 +298,12 @@ check_env_filled
 check_containers_up
 check_read_only jellyfin /data/media
 check_no_media_mount seerr
+check_no_media_mount prowlarr
+check_no_media_mount flaresolverr
 check_internet_ports
 check_login_required qbittorrent "http://localhost:${qbittorrent_port:-8080}/api/v2/app/version"
+check_login_required prowlarr "http://localhost:${prowlarr_port:-9696}/"
+check_login_required radarr "http://localhost:${radarr_port:-7878}/"
 check_exit_ip qbittorrent
 check_kill_switch qbittorrent
 check_public_hostname "$jellyfin_hostname"
