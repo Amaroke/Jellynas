@@ -17,7 +17,7 @@ Open `.env` and fill in every value. Each variable is explained in `.env.example
 
 ## Create the data and appdata roots
 
-Both roots live outside the repo, at the paths set in `DATA_ROOT` and `APPDATA_ROOT`. The data root holds a single tree, so that moving a file from downloads to the Library is instant:
+Both roots live outside the repo, at the paths set in `DATA_ROOT` and `APPDATA_ROOT`. The data root holds a single tree, so that one folder holds every download and the whole Library:
 
 ```text
 <DATA_ROOT>
@@ -214,6 +214,78 @@ Each finished torrent keeps seeding from the torrents tree for a while, to give 
 | Advanced | Network interface | `tun0`, so qBittorrent only ever uses the VPN, on top of the Gluetun kill switch |
 
 Optionally, in Speed, set a global upload limit to about 60% of your internet upload speed, so seeding never slows Jellyfin streams to Friends.
+
+## Radarr
+
+Radarr fulfils movie Requests: it searches the indexers, sends the torrent to qBittorrent, then copies the finished movie into the Library. It sees only the movies folder, under `/data/media/movies`, and the torrents tree, under `/data/torrents`.
+
+### Account
+
+1. Open `http://<NAS address>:<RADARR_PORT>` from a browser on the local network.
+2. Radarr asks for an authentication method at the first visit. Pick "Forms (Login Page)", set "Authentication Required" to "Enabled", never "Disabled for Local Addresses", and enter a username and a strong password, distinct from the other tools, stored in your password manager.
+
+### Media management
+
+In Settings > Media Management, click "Show Advanced" at the top, then:
+
+1. Under Root Folders, add `/data/media/movies`.
+2. Check "Rename Movies".
+3. Under Importing, uncheck "Use Hardlinks instead of Copy". Each import is a copy, so the torrent keeps seeding from the torrents tree while Tdarr normalises the Library file.
+4. Under File Management, set "Recycling Bin" to `/data/media/movies/.recycle` and "Recycling Bin Cleanup" to `30` days. A deleted movie stays there for 30 days and can be moved back. Jellyfin and Radarr skip hidden folders, so it never shows up as a movie.
+
+Create the recycle bin folder first, from the repo folder in bash:
+
+```bash
+set -a && . <(tr -d '\r' < .env) && set +a
+mkdir -p "$DATA_ROOT"/media/movies/.recycle
+```
+
+### Download client
+
+1. In qBittorrent, right-click "Categories" in the left panel, pick "Add category", and enter `radarr` as the category and `/data/torrents/movies` as the save path.
+2. In Radarr, Settings > Download Clients, click "+" and pick qBittorrent.
+3. Enter `gluetun` as the host, since qBittorrent shares its network, `8080` as the port, and the qBittorrent Account.
+4. Set "Category" to `radarr`.
+5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding goal, Radarr removes it and its files from the torrents tree, and the movie stays in the Library.
+6. Click "Test", then "Save".
+
+Copy the API key from Settings > General > Security, Prowlarr and Seerr need it below.
+
+## Prowlarr
+
+Prowlarr holds the indexers once and pushes them to Radarr, and later to the other tools. FlareSolverr opens indexers protected by Cloudflare for it. Neither sees any media file.
+
+### Account
+
+Open `http://<NAS address>:<PROWLARR_PORT>` and set the authentication the same way as Radarr, with its own username and password.
+
+### FlareSolverr
+
+In Settings > Indexers, click "+" and pick FlareSolverr. Enter `flaresolverr` as the tag and `http://flaresolverr:8191/` as the host, then save. FlareSolverr has no web UI and is reachable by the other containers only.
+
+### Indexers
+
+In Indexers, click "Add Indexer", pick a tracker and fill in what it asks for, an Account for a private one. For an indexer behind Cloudflare, add the `flaresolverr` tag so its requests go through FlareSolverr. Click "Test", then "Save".
+
+### Radarr sync
+
+1. In Settings > Apps, click "+" and pick Radarr.
+2. Leave "Sync Level" on "Full Sync".
+3. Set "Prowlarr Server" to `http://prowlarr:9696` and "Radarr Server" to `http://radarr:7878`.
+4. Paste the Radarr API key, click "Test", then "Save".
+
+Every indexer then shows up in Radarr, Settings > Indexers, and follows any change made in Prowlarr.
+
+## Movie Requests
+
+In Seerr, Settings > Services, click "Add Radarr Server":
+
+1. Check "Default Server" and enter `Radarr` as the name.
+2. Enter `radarr` as the hostname, `7878` as the port, leave SSL off, and paste the Radarr API key.
+3. Click "Test", then pick a quality profile, `/data/media/movies` as the root folder, and "Released" as the minimum availability.
+4. Leave "Enable Automatic Search" checked and save.
+
+An approved movie Request is then searched by Radarr, downloaded by qBittorrent into `/data/torrents/movies`, and copied into the movies folder, where Jellyfin picks it up.
 
 ## Verify the NAS
 

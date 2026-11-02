@@ -1,0 +1,21 @@
+services:
+  radarr:
+    image: lscr.io/linuxserver/radarr:6.4.4.10685-ls325
+    container_name: radarr
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+    volumes:
+      - ${APPDATA_ROOT}/radarr:/config
+      - ${DATA_ROOT}/media/movies:/data/media/movies
+      - ${DATA_ROOT}/torrents:/data/torrents
+    ports:
+      - ${RADARR_PORT:-7878}:7878
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:7878/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
