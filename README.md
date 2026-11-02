@@ -269,7 +269,7 @@ In Indexers, click "Add Indexer", pick a tracker and fill in what it asks for, a
 
 ### Radarr sync
 
-1. In Settings > Apps, click "+" and pick Radarr.
+1. In Prowlarr, not Radarr, open Settings > Apps, click "+" and pick Radarr.
 2. Leave "Sync Level" on "Full Sync".
 3. Set "Prowlarr Server" to `http://prowlarr:9696` and "Radarr Server" to `http://radarr:7878`.
 4. Paste the Radarr API key, click "Test", then "Save".
