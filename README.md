@@ -326,18 +326,6 @@ Copy the API key from Settings > General > Security, Prowlarr and Seerr need it 
 
 In Prowlarr, Settings > Apps, click "+" and pick Sonarr. Set "Prowlarr Server" to `http://prowlarr:9696` and "Sonarr Server" to `http://sonarr:8989`, paste the Sonarr API key, click "Test", then "Save". Every indexer with TV categories then shows up in Sonarr, Settings > Indexers. An indexer without TV categories, such as Internet Archive, is never synced to Sonarr.
 
-### Existing Library
-
-Shows already in the Library are unknown to Sonarr until imported:
-
-1. In Series > Library Import, pick `/data/media/anime`.
-2. Select every series and match by hand the ones Sonarr does not recognise.
-3. Set "Monitor" to "Future Episodes", "Series Type" to "Anime" and the quality profile.
-4. Leave "Start search for missing episodes" unchecked, otherwise Sonarr searches every missing episode at once, then import.
-5. Repeat with `/data/media/shows` and "Series Type" on "Standard".
-
-Sonarr then knows which episodes exist and follows new ones. To complete a series, monitor its missing episodes and click "Search Monitored". If the Library keeps every episode directly in the series folder, uncheck "Season Folder" on every series with Series > Edit, and in Seerr below.
-
 ## Show Requests
 
 In Seerr, Settings > Services, click "Add Sonarr Server":
