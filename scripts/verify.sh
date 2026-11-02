@@ -288,6 +288,7 @@ vpn_provider="$(env_value VPN_SERVICE_PROVIDER)"
 qbittorrent_port="$(env_value QBITTORRENT_PORT)"
 prowlarr_port="$(env_value PROWLARR_PORT)"
 radarr_port="$(env_value RADARR_PORT)"
+sonarr_port="$(env_value SONARR_PORT)"
 https_port="$(env_value CADDY_HTTPS_PORT)"
 https_port="${https_port:-443}"
 public_port=""
@@ -304,6 +305,7 @@ check_internet_ports
 check_login_required qbittorrent "http://localhost:${qbittorrent_port:-8080}/api/v2/app/version"
 check_login_required prowlarr "http://localhost:${prowlarr_port:-9696}/"
 check_login_required radarr "http://localhost:${radarr_port:-7878}/"
+check_login_required sonarr "http://localhost:${sonarr_port:-8989}/"
 check_exit_ip qbittorrent
 check_kill_switch qbittorrent
 check_public_hostname "$jellyfin_hostname"

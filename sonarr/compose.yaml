@@ -1,0 +1,22 @@
+services:
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:4.0.20.3014-ls2
+    container_name: sonarr
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+    volumes:
+      - ${APPDATA_ROOT}/sonarr:/config
+      - ${DATA_ROOT}/media/shows:/data/media/shows
+      - ${DATA_ROOT}/media/anime:/data/media/anime
+      - ${DATA_ROOT}/torrents:/data/torrents
+    ports:
+      - ${SONARR_PORT:-8989}:8989
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8989/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
