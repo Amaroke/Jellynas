@@ -324,7 +324,19 @@ Copy the API key from Settings > General > Security, Prowlarr and Seerr need it 
 
 ### Sonarr sync
 
-In Prowlarr, Settings > Apps, click "+" and pick Sonarr. Set "Prowlarr Server" to `http://prowlarr:9696` and "Sonarr Server" to `http://sonarr:8989`, paste the Sonarr API key, click "Test", then "Save". Every indexer then shows up in Sonarr, Settings > Indexers.
+In Prowlarr, Settings > Apps, click "+" and pick Sonarr. Set "Prowlarr Server" to `http://prowlarr:9696` and "Sonarr Server" to `http://sonarr:8989`, paste the Sonarr API key, click "Test", then "Save". Every indexer with TV categories then shows up in Sonarr, Settings > Indexers. An indexer without TV categories, such as Internet Archive, is never synced to Sonarr.
+
+### Existing Library
+
+Shows already in the Library are unknown to Sonarr until imported:
+
+1. In Series > Library Import, pick `/data/media/anime`.
+2. Select every series and match by hand the ones Sonarr does not recognise.
+3. Set "Monitor" to "Future Episodes", "Series Type" to "Anime" and the quality profile.
+4. Leave "Start search for missing episodes" unchecked, otherwise Sonarr searches every missing episode at once, then import.
+5. Repeat with `/data/media/shows` and "Series Type" on "Standard".
+
+Sonarr then knows which episodes exist and follows new ones. To complete a series, monitor its missing episodes and click "Search Monitored". If the Library keeps every episode directly in the series folder, uncheck "Season Folder" on every series with Series > Edit, and in Seerr below.
 
 ## Show Requests
 
@@ -332,9 +344,9 @@ In Seerr, Settings > Services, click "Add Sonarr Server":
 
 1. Check "Default Server" and enter `Sonarr` as the name.
 2. Enter `sonarr` as the hostname, `8989` as the port, leave SSL off, and paste the Sonarr API key.
-3. Click "Test", then pick a quality profile and `/data/media/shows` as the root folder.
-4. Pick the same quality profile for anime and `/data/media/anime` as the anime root folder.
-5. Leave "Season Folders" and "Enable Automatic Search" checked and save.
+3. Click "Test". The quality profiles only load once the test succeeds. Pick one and `/data/media/shows` as the root folder.
+4. Set "Anime Series Type" to "Anime", pick the same quality profile for anime and `/data/media/anime` as the anime root folder.
+5. Check "Season Folders" to match Sonarr, leave "Enable Automatic Search" checked, and save.
 
 An approved show Request is then searched by Sonarr, downloaded by qBittorrent into `/data/torrents/shows`, and copied into the shows folder, or the anime folder for an anime, where Jellyfin picks it up. New episodes of a monitored show follow on their own.
 
