@@ -7,3 +7,6 @@ include:
   - duckdns/compose.yaml
   - gluetun/compose.yaml
   - qbittorrent/compose.yaml
+  - flaresolverr/compose.yaml
+  - prowlarr/compose.yaml
+  - radarr/compose.yaml
