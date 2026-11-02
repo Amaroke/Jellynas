@@ -18,6 +18,7 @@ services:
       WIREGUARD_PRESHARED_KEY: ${WIREGUARD_PRESHARED_KEY:-}
       WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES:-}
       SERVER_COUNTRIES: ${SERVER_COUNTRIES:-}
+      SERVER_REGIONS: ${SERVER_REGIONS:-}
       FIREWALL_VPN_INPUT_PORTS: ${VPN_FORWARDED_PORT:-}
     volumes:
       - ./entrypoint.sh:/jellynas-entrypoint.sh:ro
