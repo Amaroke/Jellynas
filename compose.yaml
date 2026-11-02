@@ -10,3 +10,4 @@ include:
   - flaresolverr/compose.yaml
   - prowlarr/compose.yaml
   - radarr/compose.yaml
+  - sonarr/compose.yaml

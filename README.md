@@ -287,6 +287,57 @@ In Seerr, Settings > Services, click "Add Radarr Server":
 
 An approved movie Request is then searched by Radarr, downloaded by qBittorrent into `/data/torrents/movies`, and copied into the movies folder, where Jellyfin picks it up.
 
+## Sonarr
+
+Sonarr fulfils show Requests and fetches new episodes on its own: it searches the indexers, sends the torrent to qBittorrent, then copies each finished episode into the Library. It sees only the shows and anime folders, under `/data/media/shows` and `/data/media/anime`, and the torrents tree, under `/data/torrents`.
+
+### Account
+
+Open `http://<NAS address>:<SONARR_PORT>` and set the authentication the same way as Radarr, with its own username and password.
+
+### Media management
+
+In Settings > Media Management, click "Show Advanced" at the top, then:
+
+1. Under Root Folders, add `/data/media/shows` and `/data/media/anime`.
+2. Check "Rename Episodes".
+3. Under Importing, uncheck "Use Hardlinks instead of Copy". Each import is a copy, so the torrent keeps seeding from the torrents tree while Tdarr normalises the Library file.
+4. Under File Management, set "Recycling Bin" to `/data/media/shows/.recycle` and "Recycling Bin Cleanup" to `30` days. Deleted episodes of both shows and anime stay there for 30 days and can be moved back.
+
+Create the recycle bin folder first, from the repo folder in bash:
+
+```bash
+set -a && . <(tr -d '\r' < .env) && set +a
+mkdir -p "$DATA_ROOT"/media/shows/.recycle
+```
+
+### Download client
+
+1. In qBittorrent, add a category `tv-sonarr` with `/data/torrents/shows` as the save path.
+2. In Sonarr, Settings > Download Clients, click "+" and pick qBittorrent.
+3. Enter `gluetun` as the host, `8080` as the port, and the qBittorrent Account.
+4. Set "Category" to `tv-sonarr`.
+5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding goal, Sonarr removes it and its files from the torrents tree, and the episodes stay in the Library.
+6. Click "Test", then "Save".
+
+Copy the API key from Settings > General > Security, Prowlarr and Seerr need it below.
+
+### Sonarr sync
+
+In Prowlarr, Settings > Apps, click "+" and pick Sonarr. Set "Prowlarr Server" to `http://prowlarr:9696` and "Sonarr Server" to `http://sonarr:8989`, paste the Sonarr API key, click "Test", then "Save". Every indexer then shows up in Sonarr, Settings > Indexers.
+
+## Show Requests
+
+In Seerr, Settings > Services, click "Add Sonarr Server":
+
+1. Check "Default Server" and enter `Sonarr` as the name.
+2. Enter `sonarr` as the hostname, `8989` as the port, leave SSL off, and paste the Sonarr API key.
+3. Click "Test", then pick a quality profile and `/data/media/shows` as the root folder.
+4. Pick the same quality profile for anime and `/data/media/anime` as the anime root folder.
+5. Leave "Season Folders" and "Enable Automatic Search" checked and save.
+
+An approved show Request is then searched by Sonarr, downloaded by qBittorrent into `/data/torrents/shows`, and copied into the shows folder, or the anime folder for an anime, where Jellyfin picks it up. New episodes of a monitored show follow on their own.
+
 ## Verify the NAS
 
 Run the verification script from the repo folder, in Git Bash on Windows:
