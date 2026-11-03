@@ -38,12 +38,12 @@ class QBittorrent:
         body = urllib.parse.urlencode({"username": self.username, "password": self.password}).encode()
         try:
             with self.opener.open(f"{self.url}/api/v2/auth/login", data=body, timeout=30) as response:
-                answer = response.read().decode().strip()
+                accepted = response.status == 204 or response.read().decode().strip() == "Ok."
         except urllib.error.HTTPError as error:
             if error.code not in (401, 403):
                 raise
-            answer = ""
-        if answer != "Ok.":
+            accepted = False
+        if not accepted:
             self.opener = None
             raise RuntimeError("qBittorrent refused the login, check QBITTORRENT_USER and QBITTORRENT_PASSWORD")
 
