@@ -1,0 +1,25 @@
+{
+  "trash_id": "1e2981d54505e82806b3ed82c816acbe",
+  "name": "MULTi + VOSTFR",
+  "includeCustomFormatWhenRenaming": false,
+  "specifications": [
+    {
+      "name": "MULTi",
+      "implementation": "ReleaseTitleSpecification",
+      "negate": false,
+      "required": true,
+      "fields": {
+        "value": "\\b(Multi)(?![ ._-]?sub(s)?)(\\b|\\d)"
+      }
+    },
+    {
+      "name": "VOSTFR",
+      "implementation": "ReleaseTitleSpecification",
+      "negate": false,
+      "required": true,
+      "fields": {
+        "value": "\\b(VOST.*?FR(E|A)?|SUBFR(A|ENCH)?)\\b"
+      }
+    }
+  ]
+}
