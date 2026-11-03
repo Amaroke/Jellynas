@@ -121,33 +121,45 @@ check_read_only() {
   fi
 }
 
-check_no_media_mount() {
-  local service="$1" data_root id source mounted=""
+check_not_mounted() {
+  local service="$1" subpath="$2" promise="$3" data_root target id source mounted=""
   data_root="$(env_value DATA_ROOT | tr '\\' / | tr '[:upper:]' '[:lower:]')"
   data_root="${data_root%/}"
   if [ -z "$data_root" ]; then
-    fail "$service" "DATA_ROOT is empty, cannot check that it has no media mount"
+    fail "$service" "DATA_ROOT is empty, cannot check that it $promise"
     return
   fi
+  target="$data_root${subpath:+/$subpath}"
   case "$(container_state "$service")" in
     running*) ;;
     *)
-      fail "$service" "is not running, cannot check that it has no media mount"
+      fail "$service" "is not running, cannot check that it $promise"
       return
       ;;
   esac
   id="$(docker compose ps -q "$service" 2>/dev/null | head -n 1)"
   while IFS= read -r source; do
     source="$(printf '%s' "$source" | tr '\\' / | tr '[:upper:]' '[:lower:]')"
+    case "$data_root" in
+      "$source"/*) mounted="$mounted $source" ;;
+    esac
     case "$source" in
-      "$data_root" | "$data_root"/*) mounted="$mounted $source" ;;
+      "$data_root" | "$target" | "$target"/*) mounted="$mounted $source" ;;
     esac
   done < <(docker inspect -f '{{range .Mounts}}{{println .Source}}{{end}}' "$id")
   if [ -n "$mounted" ]; then
-    fail "$service" "mounts the data root:$mounted"
+    fail "$service" "mounts$mounted, expected that it $promise"
   else
-    pass "$service" "has no media mount"
+    pass "$service" "$promise"
   fi
+}
+
+check_no_media_mount() {
+  check_not_mounted "$1" "" "has no media mount"
+}
+
+check_no_torrents_mount() {
+  check_not_mounted "$1" torrents "does not mount the torrents tree"
 }
 
 check_internet_ports() {
@@ -290,6 +302,7 @@ prowlarr_port="$(env_value PROWLARR_PORT)"
 radarr_port="$(env_value RADARR_PORT)"
 sonarr_port="$(env_value SONARR_PORT)"
 bazarr_port="$(env_value BAZARR_PORT)"
+tdarr_port="$(env_value TDARR_PORT)"
 https_port="$(env_value CADDY_HTTPS_PORT)"
 https_port="${https_port:-443}"
 public_port=""
@@ -303,12 +316,15 @@ check_no_media_mount seerr
 check_no_media_mount prowlarr
 check_no_media_mount flaresolverr
 check_no_media_mount recyclarr
+check_no_torrents_mount bazarr
+check_no_torrents_mount tdarr
 check_internet_ports
 check_login_required qbittorrent "http://localhost:${qbittorrent_port:-8080}/api/v2/app/version"
 check_login_required prowlarr "http://localhost:${prowlarr_port:-9696}/"
 check_login_required radarr "http://localhost:${radarr_port:-7878}/"
 check_login_required sonarr "http://localhost:${sonarr_port:-8989}/"
 check_login_required bazarr "http://localhost:${bazarr_port:-6767}/bazarr.log"
+check_login_required tdarr "http://localhost:${tdarr_port:-8265}/api/v2/get-nodes"
 check_exit_ip qbittorrent
 check_kill_switch qbittorrent
 check_public_hostname "$jellyfin_hostname"
