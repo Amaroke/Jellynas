@@ -18,6 +18,8 @@ services:
       auth: "true"
       seededApiKey: ${TDARR_API_KEY}
       apiKey: ${TDARR_API_KEY}
+      RADARR_API_KEY: ${RADARR_API_KEY}
+      SONARR_API_KEY: ${SONARR_API_KEY}
       transcodecpuWorkers: 1
       healthcheckcpuWorkers: 1
     volumes:

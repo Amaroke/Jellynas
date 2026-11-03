@@ -387,7 +387,7 @@ The answer holds `customFormats` and `customFormatScore`. A score below -5000 me
 
 ## Bazarr
 
-Bazarr gives every movie and show French and English subtitles. It learns about each file from Radarr and Sonarr, then saves the subtitles next to it in the Library. It sees only the movies, shows and anime folders, under the same paths as Radarr and Sonarr, so no path mapping is needed.
+Bazarr gives every movie and show French and English subtitles. It learns about each file from Radarr and Sonarr, then saves the subtitles next to it in the Library, where Tdarr embeds them into the video and deletes the subtitle files. It sees only the movies, shows and anime folders, under the same paths as Radarr and Sonarr, so no path mapping is needed.
 
 ### Account
 
@@ -437,6 +437,22 @@ Jimaku.cc needs the AniDB integration first: register an API client on [anidb.ne
 
 Bazarr then lists every show and movie, picks the profile of each from its tags at every sync, and searches subtitles for each new file.
 
+### Subtitles embedded by Tdarr
+
+The Library holds no subtitle file: Tdarr embeds each one into its video, so a Friend who downloads a video gets its subtitles. When Bazarr finds a subtitle after Tdarr has processed the video, it puts the video back in the Tdarr queue with `bazarr/tdarr_requeue.py`, which reads `TDARR_API_KEY` from `.env`. In Settings > Subtitles:
+
+1. Under "Embedded Subtitles", leave "Use Embedded Subtitles" checked, so an embedded track counts as found and is never downloaded again.
+2. Under "Upgrading Subtitles", uncheck "Upgrade Previously Downloaded Subtitles". An upgrade would add a second track of the same language to the video.
+3. Under "Post-Processing", check "Custom Post-Processing", leave the score thresholds unchecked, and enter this command:
+
+   ```sh
+   python3 /scripts/tdarr_requeue.py "{{episode}}"
+   ```
+
+4. Save.
+
+Bazarr writes the outcome of each command in System > Logs.
+
 ## Tdarr
 
 Tdarr normalises every video of the Library to MKV H265 within 1920x1080, as [ADR 0001](docs/adr/0001-tdarr-normalises-to-mkv-h265.md) sets out. It sees only the movies, shows and anime folders, under the same paths as Radarr and Sonarr, and never the torrents tree, so a torrent still seeding is never touched. Its work files go to `<APPDATA_ROOT>/tdarr/cache`.
@@ -446,7 +462,8 @@ The flow, `tdarr/flow.json`, decides from the tracks of each file, as [ADR 0004]
 - It keeps French audio and the original audio, the language of the first audio track that is not French.
 - It keeps French and English subtitles, or French and Japanese ones when the original audio is Japanese, forced subtitles included, inside the MKV.
 - A file already in H265 within 1920x1080 keeps its video as is, only its extra tracks are removed. Any other video is encoded to H265 and scaled down to fit within 1920x1080, keeping its aspect ratio, never scaled up.
-- The new MKV replaces the original file. Radarr and Sonarr pick up the new name at their next refresh of the movie or show.
+- It embeds the subtitle files that Bazarr saved next to the video, such as `.fr.srt` or `.ja.forced.ass`, under the same language rules, and deletes them once the new file is in place.
+- The new MKV replaces the original file. Tdarr then asks Radarr for movies, or Sonarr for shows and anime, to rescan the folder, with the API keys of `.env`, so they and Bazarr know the new file right away.
 
 ### Disk space while seeding
 
