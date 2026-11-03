@@ -1,0 +1,124 @@
+{
+  "_id": "jellynasNormalise",
+  "name": "Jellynas normalise to MKV H265 1080p",
+  "description": "Keeps French and original audio and the subtitles for the original audio, encodes to H265 within 1920x1080 unless already compliant, and replaces the original as MKV. See ADR 0001 and ADR 0004.",
+  "tags": "",
+  "flowPlugins": [
+    {
+      "name": "Input File",
+      "sourceRepo": "Community",
+      "pluginName": "inputFile",
+      "version": "1.0.0",
+      "id": "input",
+      "position": {
+        "x": 400,
+        "y": 0
+      },
+      "fpEnabled": true
+    },
+    {
+      "name": "Begin Command",
+      "sourceRepo": "Community",
+      "pluginName": "ffmpegCommandStart",
+      "version": "1.0.0",
+      "id": "start",
+      "position": {
+        "x": 400,
+        "y": 120
+      },
+      "fpEnabled": true
+    },
+    {
+      "name": "Pick tracks and video encoding",
+      "sourceRepo": "Community",
+      "pluginName": "customFunction",
+      "version": "1.0.0",
+      "id": "pick",
+      "position": {
+        "x": 400,
+        "y": 240
+      },
+      "fpEnabled": true,
+      "inputsDB": {
+        "code": "module.exports = async (args) => {\n  const french = ['fre', 'fra', 'fr', 'french'];\n  const english = ['eng', 'en', 'english'];\n  const japanese = ['jpn', 'ja', 'japanese'];\n  const maxWidth = 1920;\n  const maxHeight = 1080;\n  const command = args.variables.ffmpegCommand;\n  const language = (stream) => String((stream.tags && stream.tags.language) || 'und').toLowerCase().split('-')[0];\n  const isFrench = (stream) => french.includes(language(stream));\n  const remove = (stream, reason) => {\n    stream.removed = true;\n    args.jobLog(`Removing stream ${stream.index}: ${reason}`);\n  };\n\n  const videos = command.streams.filter((stream) => stream.codec_type === 'video');\n  if (videos.length === 0) {\n    throw new Error('No video stream');\n  }\n  const video = videos[0];\n  videos.slice(1).forEach((stream) => remove(stream, 'extra video stream'));\n\n  const audios = command.streams.filter((stream) => stream.codec_type === 'audio');\n  const foreign = audios.find((stream) => !isFrench(stream));\n  const original = foreign ? language(foreign) : 'fre';\n  args.jobLog(`Original audio language: ${original}`);\n  audios\n    .filter((stream) => !isFrench(stream) && language(stream) !== original)\n    .forEach((stream) => remove(stream, `audio in ${language(stream)}`));\n\n  const subtitleLanguages = japanese.includes(original) ? [...french, ...japanese] : [...french, ...english];\n  command.streams\n    .filter((stream) => stream.codec_type === 'subtitle')\n    .forEach((stream) => {\n      if (!subtitleLanguages.includes(language(stream))) {\n        remove(stream, `subtitle in ${language(stream)}`);\n      } else if (['eia_608', 'timed_id3'].includes(stream.codec_name)) {\n        remove(stream, `${stream.codec_name} subtitle not supported by MKV`);\n      } else if (stream.codec_name === 'mov_text') {\n        stream.outputArgs.push('-c:{outputIndex}', 'srt');\n      }\n    });\n\n  command.streams\n    .filter((stream) => stream.codec_type === 'data')\n    .forEach((stream) => remove(stream, 'data stream'));\n  command.streams\n    .filter((stream) => stream.codec_type === 'attachment' && stream.disposition && stream.disposition.attached_pic)\n    .forEach((stream) => remove(stream, 'cover picture'));\n\n  const tooLarge = video.width > maxWidth || video.height > maxHeight;\n  if (video.codec_name === 'hevc' && !tooLarge) {\n    args.jobLog(`Video already H265 ${video.width}x${video.height}, copied as is`);\n  } else {\n    args.jobLog(`Encoding ${video.codec_name} ${video.width}x${video.height} to H265`);\n    video.outputArgs.push('-c:{outputIndex}', 'libx265', '-crf', '22', '-preset', 'medium');\n    if (tooLarge) {\n      video.outputArgs.push(\n        '-filter:{outputIndex}',\n        `scale=${maxWidth}:${maxHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2`,\n      );\n    }\n    command.shouldProcess = true;\n  }\n\n  return {\n    outputFileObj: args.inputFileObj,\n    outputNumber: 1,\n    variables: args.variables,\n  };\n};\n"
+      }
+    },
+    {
+      "name": "Set Container",
+      "sourceRepo": "Community",
+      "pluginName": "ffmpegCommandSetContainer",
+      "version": "1.0.0",
+      "id": "container",
+      "position": {
+        "x": 400,
+        "y": 360
+      },
+      "fpEnabled": true,
+      "inputsDB": {
+        "container": "mkv",
+        "forceConform": "false"
+      }
+    },
+    {
+      "name": "Execute",
+      "sourceRepo": "Community",
+      "pluginName": "ffmpegCommandExecute",
+      "version": "1.0.0",
+      "id": "execute",
+      "position": {
+        "x": 400,
+        "y": 480
+      },
+      "fpEnabled": true
+    },
+    {
+      "name": "Replace Original File",
+      "sourceRepo": "Community",
+      "pluginName": "replaceOriginalFile",
+      "version": "1.0.0",
+      "id": "replace",
+      "position": {
+        "x": 400,
+        "y": 600
+      },
+      "fpEnabled": true
+    }
+  ],
+  "flowEdges": [
+    {
+      "source": "input",
+      "sourceHandle": "1",
+      "target": "start",
+      "targetHandle": null,
+      "id": "input-start"
+    },
+    {
+      "source": "start",
+      "sourceHandle": "1",
+      "target": "pick",
+      "targetHandle": null,
+      "id": "start-pick"
+    },
+    {
+      "source": "pick",
+      "sourceHandle": "1",
+      "target": "container",
+      "targetHandle": null,
+      "id": "pick-container"
+    },
+    {
+      "source": "container",
+      "sourceHandle": "1",
+      "target": "execute",
+      "targetHandle": null,
+      "id": "container-execute"
+    },
+    {
+      "source": "execute",
+      "sourceHandle": "1",
+      "target": "replace",
+      "targetHandle": null,
+      "id": "execute-replace"
+    }
+  ]
+}

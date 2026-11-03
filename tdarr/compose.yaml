@@ -1,0 +1,38 @@
+services:
+  tdarr:
+    image: ghcr.io/haveagitgat/tdarr:3.06.00
+    container_name: tdarr
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+      UMASK: "002"
+      serverIP: 0.0.0.0
+      serverPort: 8266
+      webUIPort: 8265
+      internalNode: "true"
+      inContainer: "true"
+      ffmpegVersion: 7
+      nodeName: InternalNode
+      auth: "true"
+      seededApiKey: ${TDARR_API_KEY}
+      apiKey: ${TDARR_API_KEY}
+      transcodecpuWorkers: 1
+      healthcheckcpuWorkers: 1
+    volumes:
+      - ${APPDATA_ROOT}/tdarr/server:/app/server
+      - ${APPDATA_ROOT}/tdarr/configs:/app/configs
+      - ${APPDATA_ROOT}/tdarr/logs:/app/logs
+      - ${APPDATA_ROOT}/tdarr/cache:/temp
+      - ${DATA_ROOT}/media/movies:/data/media/movies
+      - ${DATA_ROOT}/media/shows:/data/media/shows
+      - ${DATA_ROOT}/media/anime:/data/media/anime
+    ports:
+      - ${TDARR_PORT:-8265}:8265
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8265/api/v2/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

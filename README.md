@@ -437,6 +437,59 @@ Jimaku.cc needs the AniDB integration first: register an API client on [anidb.ne
 
 Bazarr then lists every show and movie, picks the profile of each from its tags at every sync, and searches subtitles for each new file.
 
+## Tdarr
+
+Tdarr normalises every video of the Library to MKV H265 within 1920x1080, as [ADR 0001](docs/adr/0001-tdarr-normalises-to-mkv-h265.md) sets out. It sees only the movies, shows and anime folders, under the same paths as Radarr and Sonarr, and never the torrents tree, so a torrent still seeding is never touched. Its work files go to `<APPDATA_ROOT>/tdarr/cache`.
+
+The flow, `tdarr/flow.json`, decides from the tracks of each file, as [ADR 0004](docs/adr/0004-tdarr-picks-tracks-from-the-file.md) records:
+
+- It keeps French audio and the original audio, the language of the first audio track that is not French.
+- It keeps French and English subtitles, or French and Japanese ones when the original audio is Japanese, forced subtitles included, inside the MKV.
+- A file already in H265 within 1920x1080 keeps its video as is, only its extra tracks are removed. Any other video is encoded to H265 and scaled down to fit within 1920x1080, keeping its aspect ratio, never scaled up.
+- The new MKV replaces the original file. Radarr and Sonarr pick up the new name at their next refresh of the movie or show.
+
+### Disk space while seeding
+
+Each import is a copy, so a downloaded file sits twice on the disk: once in the torrents tree, where it seeds, and once in the Library, where Tdarr rewrites it. The torrents copy goes away once qBittorrent stops the torrent at its seeding goal and Radarr or Sonarr remove it with "Remove Completed". Keep enough free space for every torrent still seeding.
+
+### Account
+
+1. In `.env`, set `TDARR_API_KEY` before the first start of Tdarr, to `tapi_` followed by random letters and digits:
+
+   ```bash
+   echo "tapi_$(openssl rand -hex 16)"
+   ```
+
+2. Start Tdarr with `docker compose up -d`. It creates the `admin` Account with that key as its password, and its internal node connects with the same key.
+3. Open `http://<NAS address>:<TDARR_PORT>` from a browser on the local network and sign in with `admin` and the key.
+4. In Tools > Account, click "Change Password" and set a strong password, distinct from the other tools, stored in your password manager. The key keeps working for the node.
+
+### Flow
+
+1. In Flows, click "Import JSON Flow Template", paste the content of `tdarr/flow.json`, and create the flow.
+2. After pulling a change to `tdarr/flow.json`, import it again and pick "Update Existing Flow".
+
+### Libraries
+
+In Libraries, click "Library +" once per folder:
+
+| Library | Source |
+| --- | --- |
+| Movies | `/data/media/movies` |
+| Shows | `/data/media/shows` |
+| Anime | `/data/media/anime` |
+
+For each library:
+
+1. In Source, enter the folder, check "Folder Watch", and leave "Hold Files After Scanning" checked so a file still being copied by Radarr or Sonarr waits before it is processed.
+2. In Transcode Cache, enter `/temp`.
+3. In Transcode, pick "Flows" and the `Jellynas normalise to MKV H265 1080p` flow.
+4. Leave the output folder empty, so each file is replaced in place.
+
+### Node
+
+On the home page, the internal node starts with one transcode and one health check CPU worker. Raise the transcode workers if the machine has cores to spare, each one encodes a file at a time.
+
 ## Verify the NAS
 
 Run the verification script from the repo folder, in Git Bash on Windows:
