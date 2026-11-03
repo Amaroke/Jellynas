@@ -301,6 +301,7 @@ check_read_only jellyfin /data/media
 check_no_media_mount seerr
 check_no_media_mount prowlarr
 check_no_media_mount flaresolverr
+check_no_media_mount recyclarr
 check_internet_ports
 check_login_required qbittorrent "http://localhost:${qbittorrent_port:-8080}/api/v2/app/version"
 check_login_required prowlarr "http://localhost:${prowlarr_port:-9696}/"

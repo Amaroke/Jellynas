@@ -11,3 +11,4 @@ include:
   - prowlarr/compose.yaml
   - radarr/compose.yaml
   - sonarr/compose.yaml
+  - recyclarr/compose.yaml
