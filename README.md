@@ -209,9 +209,15 @@ Each finished torrent keeps seeding from the torrents tree for a while, to give 
 | Downloads | Default Torrent Management Mode | Automatic, so each category picks its own save path |
 | Downloads | Append .!qB extension to incomplete files | Checked, so no tool imports a file that is still downloading |
 | BitTorrent | Privacy | DHT and PeX checked, Local Peer Discovery unchecked since the container has no local peers |
-| BitTorrent | Torrent Queueing | 3 active downloads, 10 active uploads, 15 active torrents |
+| Connection | Connections Limits | 1000 connections in all and 200 per torrent, upload slots unchecked in all and per torrent, so no swarm waits for a free slot |
+| BitTorrent | Torrent Queueing | 3 active downloads, 30 active uploads, 35 active torrents, "Do not count slow torrents in these limits" checked so a dead torrent never holds a place |
 | BitTorrent | Seeding Limits | Ratio 2 and total seeding time 20160 minutes (14 days), whichever comes first, then "Stop torrent" |
 | Advanced | Network interface | `tun0`, so qBittorrent only ever uses the VPN, on top of the Gluetun kill switch |
+| Advanced | Upload slots behavior | Upload rate based, so qBittorrent opens slots while upload bandwidth is left |
+| Advanced | Upload choking algorithm | Fastest upload, so the peers that take the most are served first |
+| Advanced | Outgoing connections per second | `100`, so a fresh torrent reaches its leechers within seconds |
+| Advanced | Send buffer watermark, low watermark, factor | `5120` KiB, `1024` KiB, `150` %, so upload stays steady at high speed |
+| Advanced | Socket backlog size | `100` |
 
 Optionally, in Speed, set a global upload limit to about 60% of your internet upload speed, so seeding never slows Jellyfin streams to Friends.
 
