@@ -385,6 +385,40 @@ curl -s -G -H "X-Api-Key: $RADARR_API_KEY" --data-urlencode "title=Your.Name.201
 
 The answer holds `customFormats` and `customFormatScore`. A score below -5000 means refused. Sonarr answers the same on its own port with the name of an episode of a show it has.
 
+## Bazarr
+
+Bazarr gives every movie and show French and English subtitles. It learns about each file from Radarr and Sonarr, then saves the subtitles next to it in the Library. It sees only the movies, shows and anime folders, under the same paths as Radarr and Sonarr, so no path mapping is needed.
+
+### Account
+
+1. Open `http://<NAS address>:<BAZARR_PORT>` from a browser on the local network.
+2. In Settings > General > Security, set "Authentication" to "Form", enter a username and a strong password, distinct from the other tools, stored in your password manager, and save.
+
+### Languages
+
+1. In Settings > Languages, add French and English to "Languages Filter".
+2. Under "Languages Profile", click "Add New Profile", name it `French and English`, add French and English, and save the profile.
+3. Under "Default Language Profiles For Newly Added Shows", check "Series" and "Movies" and pick `French and English` for both, then save.
+
+A subtitle track already inside the file counts as found, so a `MULTi` release with French subtitles needs no download.
+
+### Providers
+
+In Settings > Providers, click "+" for each provider, fill in what it asks for, and save:
+
+| Provider | Account | Covers |
+| --- | --- | --- |
+| OpenSubtitles.com | Free Account on [opensubtitles.com](https://www.opensubtitles.com), with a daily download limit | Movies and shows, the widest French catalogue |
+| Podnapisi | None | Movies and shows |
+| Gestdown | None | Shows, from the Addic7ed catalogue |
+
+### Sonarr and Radarr
+
+1. In Settings > Sonarr, check "Enabled", enter `sonarr` as the address and `8989` as the port, paste the Sonarr API key, click "Test", then "Save".
+2. In Settings > Radarr, check "Enabled", enter `radarr` as the address and `7878` as the port, paste the Radarr API key, click "Test", then "Save".
+
+Bazarr then lists every show and movie and searches subtitles for each new file. The default profile only applies to what Radarr and Sonarr add from now on. For what is already in the Library, in Series, click "Mass Edit", select every show, pick `French and English` as the profile and save, then do the same in Movies.
+
 ## Verify the NAS
 
 Run the verification script from the repo folder, in Git Bash on Windows:
