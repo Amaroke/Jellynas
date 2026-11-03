@@ -7,6 +7,11 @@ radarr:
 
     quality_definition:
       type: movie
+      qualities:
+        - name: Bluray-720p
+          min: 12.5
+        - name: Bluray-1080p
+          min: 12.5
 
     quality_profiles:
       - trash_id: 2572ce3ea4eef1c19d59e0e20ed1cea7
@@ -31,6 +36,11 @@ sonarr:
 
     quality_definition:
       type: series
+      qualities:
+        - name: Bluray-720p
+          min: 10
+        - name: Bluray-1080p
+          min: 15
 
     quality_profiles:
       - trash_id: 4c48f506c1116a3a57ae33f12346bd15

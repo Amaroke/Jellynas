@@ -347,6 +347,7 @@ Both profiles follow the French MULTi.VO profiles of the [TRaSH Guides](https://
 - **Quality**: WEB and Bluray 1080p, Bluray 720p as a fallback, nothing above 1080p.
 - **Audio**: a release with both French and the original audio scores higher, a release without the original audio is refused.
 - **Codec**: an H265 release scores 400 more than the same release in H264. The guide penalises H265 at 1080p, so that rule is skipped. The bonus outweighs the gap between release groups but not the French audio bonus of 500, since Tdarr can re-encode a file but cannot add a missing audio track.
+- **Size**: the guide sets a minimum size per quality sized for H264, which would refuse most H265 Bluray encodes. The Bluray minimums are lowered to the WEB ones.
 
 ### API keys
 
@@ -363,6 +364,12 @@ docker compose exec recyclarr recyclarr sync
 ```
 
 Each tool ends with a `Completed` line and no error. Run the same command after changing `recyclarr/recyclarr.yml`.
+
+### Multi Languages
+
+A `MULTi` release holds French and the original audio, but Radarr and Sonarr only know it if each indexer says so. Without this, every `MULTi` release is read as French only and refused for lacking the original audio.
+
+In Radarr, Settings > Indexers, edit each indexer, click "Show Advanced", set "Multi Languages" to "Original" and "French", and save. Do the same in Sonarr. Prowlarr keeps this setting when it syncs, but an indexer added later in Prowlarr needs it too.
 
 ### Assign the profiles
 
