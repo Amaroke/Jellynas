@@ -1,0 +1,25 @@
+{
+  "trash_id": "7510fa4c9efc491c2b8cda723ece2135",
+  "name": "Bluray",
+  "includeCustomFormatWhenRenaming": false,
+  "specifications": [
+    {
+      "name": "Bluray 6",
+      "implementation": "SourceSpecification",
+      "negate": false,
+      "required": false,
+      "fields": {
+        "value": 6
+      }
+    },
+    {
+      "name": "Bluray 7",
+      "implementation": "SourceSpecification",
+      "negate": false,
+      "required": false,
+      "fields": {
+        "value": 7
+      }
+    }
+  ]
+}
