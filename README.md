@@ -625,6 +625,7 @@ ratio-grab, `ratio-limit/ratio_grab.py`, reads the newest movies and shows of ea
 - it is at most 6 hours old, between 1 and 15 GB, and not already in qBittorrent,
 - it has at least one seeder, at least 10 leechers, and at least 5 leechers per seeder,
 - fewer than 2 ratio torrents are downloading, fewer than 3 were grabbed in the last 24 hours, and the ratio folder has room for it under `RATIO_MAX_SIZE_GB`.
+- the ratio torrents have not downloaded more than `RATIO_GRAB_MAX_DEFICIT_GB` beyond what they uploaded. Over it, ratio-grab pauses until their upload pays the difference back, and says so in its logs. It only counts the torrents still in qBittorrent, so check your ratio on the tracker too.
 
 Each download counts against your ratio until it uploads more than it took, so keep these limits until the Account has a buffer. In `.env`, set `RATIO_GRAB_INDEXER_IDS` to the id of each private indexer to watch, then recreate it with `docker compose up -d`. Its logs name each grab with its swarm:
 

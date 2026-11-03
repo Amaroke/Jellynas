@@ -1,6 +1,6 @@
 import unittest
 
-from ratio_grab import grabs_in_last_day, parse_torznab, pick_grabs
+from ratio_grab import deficit, grabs_in_last_day, parse_torznab, pick_grabs
 
 GB = 1024**3
 
@@ -83,6 +83,18 @@ class GrabsInLastDay(unittest.TestCase):
         present = [{"hash": "a", "added_on": now - 90000}]
         remembered = {"b": now - 90000, "c": now - 10}
         self.assertEqual(grabs_in_last_day(present, remembered, now), 1)
+
+
+class Deficit(unittest.TestCase):
+    def test_it_is_what_was_downloaded_minus_what_was_uploaded(self):
+        torrents = [
+            {"downloaded": 10 * GB, "uploaded": 2 * GB},
+            {"downloaded": 5 * GB, "uploaded": 8 * GB},
+        ]
+        self.assertEqual(deficit(torrents), 5 * GB)
+
+    def test_an_upload_surplus_is_a_negative_deficit(self):
+        self.assertEqual(deficit([{"downloaded": 1 * GB, "uploaded": 4 * GB}]), -3 * GB)
 
 
 FEED = b"""<?xml version="1.0"?>
