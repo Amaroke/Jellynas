@@ -396,9 +396,24 @@ Bazarr gives every movie and show French and English subtitles. It learns about 
 
 ### Languages
 
-1. In Settings > Languages, add French and English to "Languages Filter".
+Subtitles are for watching in the original audio. Movies and shows get French and English subtitles, anime get French and Japanese ones, and a French original work gets none. [ADR 0003](docs/adr/0003-bazarr-subtitle-languages.md) records why.
+
+Sonarr and Radarr tag each work so that Bazarr knows which case applies. In Settings > Tags of Sonarr, click "+" under Auto Tagging twice, check "Remove Tags Automatically" each time, and create:
+
+| Name | Tag | Condition |
+| --- | --- | --- |
+| Anime | `anime` | Series Type is Anime |
+| French original | `french-original` | Original Language is French |
+
+Do the same in Radarr, with the condition "Quality Profile is `Anime 1080p`" for the Anime rule, since Radarr cannot tell an anime movie apart. Each work gets its tags at its next refresh, or right away with "Update All" in Series and in Movies.
+
+Then in Bazarr, Settings > Languages:
+
+1. Add French, English and Japanese to "Languages Filter".
 2. Under "Languages Profile", click "Add New Profile", name it `French and English`, add French and English, and save the profile.
-3. Under "Default Language Profiles For Newly Added Shows", check "Series" and "Movies" and pick `French and English` for both, then save.
+3. Add a second profile named `French and Japanese` with French and Japanese, and enter `anime` as its tag.
+4. Check "Series" and "Movies" under "Tag-Based Automatic Language Profile Selection", and enter `french-original` under "Remove Profile Tags".
+5. Under "Default Language Profiles For Newly Added Shows", check "Series" and "Movies" and pick `French and English` for both, then save.
 
 A subtitle track already inside the file counts as found, so a `MULTi` release with French subtitles needs no download.
 
@@ -411,13 +426,16 @@ In Settings > Providers, click "+" for each provider, fill in what it asks for, 
 | OpenSubtitles.com | Free Account on [opensubtitles.com](https://www.opensubtitles.com), with a daily download limit | Movies and shows, the widest French catalogue |
 | Podnapisi | None | Movies and shows |
 | Gestdown | None | Shows, from the Addic7ed catalogue |
+| Jimaku.cc | Free Account on [jimaku.cc](https://jimaku.cc), then an API key from its account page | Anime, the Japanese subtitles |
+
+Jimaku.cc needs the AniDB integration first: register an API client on [anidb.net](https://anidb.net/software/add), then in Settings > Providers, under Integrations, add AniDB with that client name and version.
 
 ### Sonarr and Radarr
 
 1. In Settings > Sonarr, check "Enabled", enter `sonarr` as the address and `8989` as the port, paste the Sonarr API key, click "Test", then "Save".
 2. In Settings > Radarr, check "Enabled", enter `radarr` as the address and `7878` as the port, paste the Radarr API key, click "Test", then "Save".
 
-Bazarr then lists every show and movie and searches subtitles for each new file. The default profile only applies to what Radarr and Sonarr add from now on. For what is already in the Library, in Series, click "Mass Edit", select every show, pick `French and English` as the profile and save, then do the same in Movies.
+Bazarr then lists every show and movie, picks the profile of each from its tags at every sync, and searches subtitles for each new file.
 
 ## Verify the NAS
 
