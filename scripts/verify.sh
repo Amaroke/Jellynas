@@ -329,6 +329,7 @@ check_no_media_mount autobrr
 check_no_media_tree cross-seed
 check_no_media_tree qbit_manage
 check_no_media_mount ratio-limit
+check_no_media_mount ratio-grab
 check_internet_ports
 check_login_required qbittorrent "http://localhost:${qbittorrent_port:-8080}/api/v2/app/version"
 check_login_required prowlarr "http://localhost:${prowlarr_port:-9696}/"

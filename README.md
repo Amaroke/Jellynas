@@ -612,6 +612,20 @@ In `.env`, set `RATIO_MAX_SIZE_GB` to the space you give to ratio torrents, and 
 docker compose logs ratio-limit
 ```
 
+### ratio-grab
+
+ratio-grab, `ratio-limit/ratio_grab.py`, reads the newest movies and shows of each Prowlarr indexer in `RATIO_GRAB_INDEXER_IDS` every 15 minutes, and sends the hungriest swarms to qBittorrent in the `ratio` category. It works without freeleech, since it judges the demand of a release once leechers are waiting, which autobrr cannot do on a release it sees the second it is announced. A release is grabbed when:
+
+- it is at most 6 hours old, between 1 and 15 GB, and not already in qBittorrent,
+- it has at least one seeder, at least 10 leechers, and at least 5 leechers per seeder,
+- fewer than 2 ratio torrents are downloading, fewer than 3 were grabbed in the last 24 hours, and the ratio folder has room for it under `RATIO_MAX_SIZE_GB`.
+
+Each download counts against your ratio until it uploads more than it took, so keep these limits until the Account has a buffer. In `.env`, set `RATIO_GRAB_INDEXER_IDS` to the id of each private indexer to watch, then recreate it with `docker compose up -d`. Its logs name each grab with its swarm:
+
+```sh
+docker compose logs ratio-grab
+```
+
 ## Verify the NAS
 
 Run the verification script from the repo folder, in Git Bash on Windows:

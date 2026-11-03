@@ -62,8 +62,8 @@ class QBittorrent:
             return response.read()
 
     def torrents(self, category):
-        query = urllib.parse.urlencode({"category": category})
-        return json.loads(self.request(f"/api/v2/torrents/info?{query}"))
+        query = "" if category is None else "?" + urllib.parse.urlencode({"category": category})
+        return json.loads(self.request(f"/api/v2/torrents/info{query}"))
 
     def delete(self, hashes):
         self.request("/api/v2/torrents/delete", {"hashes": "|".join(hashes), "deleteFiles": "true"})
