@@ -585,7 +585,7 @@ cross-seed searches each new torrent of qBittorrent, searches it again once a da
 
 ### qbit_manage
 
-qbit_manage runs every 30 minutes. Its config lives in its appdata folder, since it holds the names of your trackers, which stay out of the repo. `qbit_manage/config.yml` is the starting point.
+qbit_manage runs every 10 minutes, so a new ratio torrent gets its own limits before the global seeding limit of qBittorrent can stop it. Its config lives in its appdata folder, since it holds the names of your trackers, which stay out of the repo. `qbit_manage/config.yml` is the starting point.
 
 1. Copy it, replacing the file qbit_manage creates at its first start:
 
@@ -597,7 +597,7 @@ qbit_manage runs every 30 minutes. Its config lives in its appdata folder, since
 
 2. Open `http://<NAS address>:<QBIT_MANAGE_PORT>`. In the Security section, set the authentication method to "Basic Authentication", enter a username and a strong password, distinct from the other tools, leave "Bypass authentication for local" unchecked, and save.
 3. In Tracker Configuration, add one entry per tracker, with a keyword of its announce URL and its name as the tag. A torrent from a tracker not listed gets the `other` tag.
-4. In Share Limits, the `ratio` and `cross-seed` groups stop a torrent at a ratio of 3 or after 30 days, then remove it with its files, never before 7 days of seeding. Keep that minimum equal to `RATIO_MIN_SEEDING_DAYS`. For a tracker with other rules, add a group with a priority number below 10, such as 5, since the smallest number wins, its tag under "Include All Tags", `ratio` and `cross-seed-link` under "Categories", and its own minimum seeding time.
+4. In Share Limits, the `ratio` and `cross-seed` groups never stop a torrent at a ratio or a seeding time, since a torrent that uploads well should keep seeding. They remove a torrent with its files once it has uploaded nothing for 10 days, which can never come before the minimum seeding time of a tracker. ratio-limit frees space when the ratio folder is full. For a tracker with other rules, add a group with a priority number below 10, such as 5, since the smallest number wins, with its tag under "Include All Tags" and `ratio` and `cross-seed-link` under "Categories".
 5. Save, then run the commands from the toolbar to see the result right away.
 
 qbit_manage never touches the share limits of the `radarr` and `tv-sonarr` categories, so Radarr and Sonarr keep removing their own torrents.

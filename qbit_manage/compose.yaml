@@ -12,7 +12,7 @@ services:
       QBT_WEB_SERVER: "true"
       QBT_PORT: 8181
       QBT_RUN: "false"
-      QBT_SCHEDULE: 30
+      QBT_SCHEDULE: 10
       QBT_CONFIG_DIR: /config
       QBT_LOGFILE: qbit_manage.log
     volumes:

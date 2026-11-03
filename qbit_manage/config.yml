@@ -52,18 +52,18 @@ share_limits:
     priority: 10
     categories:
       - ratio
-    max_ratio: 3.0
-    max_seeding_time: 30d
-    min_seeding_time: 7d
+    max_ratio: -1
+    max_seeding_time: -1
+    max_last_active: 10d
     cleanup: true
     share_limit_action: Stop
   cross-seed:
     priority: 20
     categories:
       - cross-seed-link
-    max_ratio: 3.0
-    max_seeding_time: 30d
-    min_seeding_time: 7d
+    max_ratio: -1
+    max_seeding_time: -1
+    max_last_active: 10d
     cleanup: true
     share_limit_action: Stop
 
