@@ -12,3 +12,4 @@ include:
   - radarr/compose.yaml
   - sonarr/compose.yaml
   - recyclarr/compose.yaml
+  - bazarr/compose.yaml
