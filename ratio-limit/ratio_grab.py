@@ -41,6 +41,10 @@ def pick_grabs(releases, known_hashes, slots, free_bytes, rules):
     return picked
 
 
+def deficit(ratio_torrents):
+    return sum(t["downloaded"] - t["uploaded"] for t in ratio_torrents)
+
+
 def grabs_in_last_day(ratio_torrents, remembered, now):
     recent = {h for h, at in remembered.items() if at >= now - DAY}
     recent |= {t["hash"] for t in ratio_torrents if t["added_on"] >= now - DAY}
@@ -122,6 +126,19 @@ def run_once(client, settings, remembered):
     free_bytes = settings["max_size"] - sum(t["size"] for t in ratio)
     if slots <= 0 or free_bytes <= 0:
         return
+    owed = deficit(ratio)
+    if owed > settings["max_deficit"]:
+        if not settings.get("paused"):
+            print(
+                f"Paused: the {settings['category']} torrents downloaded {owed / GB:.1f} GB more than they uploaded, "
+                f"over {settings['max_deficit'] / GB:g} GB",
+                flush=True,
+            )
+        settings["paused"] = True
+        return
+    if settings.get("paused"):
+        print(f"Resumed: the deficit is down to {owed / GB:.1f} GB", flush=True)
+    settings["paused"] = False
     known = {t["hash"].lower() for t in everything}
     for r in pick_grabs(fetch_releases(settings, now), known, slots, free_bytes, settings["rules"]):
         try:
@@ -150,6 +167,7 @@ def main():
         "per_day": int(env_number("RATIO_GRAB_PER_DAY", 3)),
         "max_downloading": int(env_number("RATIO_GRAB_MAX_DOWNLOADING", 2)),
         "max_size": number_from_env("RATIO_MAX_SIZE_GB") * GB,
+        "max_deficit": env_number("RATIO_GRAB_MAX_DEFICIT_GB", 50) * GB,
         "rules": {
             "min_size": env_number("RATIO_GRAB_MIN_SIZE_GB", 1) * GB,
             "max_size": env_number("RATIO_GRAB_MAX_SIZE_GB", 15) * GB,

@@ -27,6 +27,7 @@ services:
       PROWLARR_API_KEY: ${PROWLARR_API_KEY}
       RATIO_GRAB_INDEXER_IDS: ${RATIO_GRAB_INDEXER_IDS}
       RATIO_MAX_SIZE_GB: ${RATIO_MAX_SIZE_GB}
+      RATIO_GRAB_MAX_DEFICIT_GB: ${RATIO_GRAB_MAX_DEFICIT_GB}
       RATIO_GRAB_MINUTES: 15
     volumes:
       - ./ratio_limit.py:/app/ratio_limit.py:ro
