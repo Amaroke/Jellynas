@@ -428,7 +428,7 @@ In Settings > Providers, click "+" for each provider, fill in what it asks for, 
 | Gestdown | None | Shows, from the Addic7ed catalogue |
 | Jimaku.cc | Free Account on [jimaku.cc](https://jimaku.cc), then an API key from its account page | Anime, the Japanese subtitles |
 
-Jimaku.cc needs the AniDB integration first: register an API client on [anidb.net](https://anidb.net/software/add), then in Settings > Providers, under Integrations, add AniDB with that client name and version.
+Jimaku.cc needs the AniDB integration first: register an API client on [anidb.net](https://anidb.net/software/add), with the HTTP API, not UDP, then in Settings > Providers, Metadata tab, click "+" under "Metadata Providers" and add AniDB with that client name and version.
 
 ### Sonarr and Radarr
 
