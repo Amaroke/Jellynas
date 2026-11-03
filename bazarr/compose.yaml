@@ -7,11 +7,13 @@ services:
       PUID: ${PUID}
       PGID: ${PGID}
       TZ: ${TZ}
+      TDARR_API_KEY: ${TDARR_API_KEY}
     volumes:
       - ${APPDATA_ROOT}/bazarr:/config
       - ${DATA_ROOT}/media/movies:/data/media/movies
       - ${DATA_ROOT}/media/shows:/data/media/shows
       - ${DATA_ROOT}/media/anime:/data/media/anime
+      - ./tdarr_requeue.py:/scripts/tdarr_requeue.py:ro
     ports:
       - ${BAZARR_PORT:-6767}:6767
     healthcheck:

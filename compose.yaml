@@ -13,3 +13,4 @@ include:
   - sonarr/compose.yaml
   - recyclarr/compose.yaml
   - bazarr/compose.yaml
+  - tdarr/compose.yaml
