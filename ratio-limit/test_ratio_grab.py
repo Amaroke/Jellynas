@@ -1,6 +1,6 @@
 import unittest
 
-from ratio_grab import pick_grabs
+from ratio_grab import grabs_in_last_day, parse_torznab, pick_grabs
 
 GB = 1024**3
 
@@ -60,8 +60,49 @@ class PickGrabs(unittest.TestCase):
         releases = [release("a", 70, size_gb=8), release("b", 50, size_gb=8), release("c", 30, size_gb=3)]
         self.assertEqual(pick(releases, free_bytes=12 * GB), ["a", "c"])
 
+    def test_the_same_release_twice_is_grabbed_once(self):
+        self.assertEqual(pick([release("a", 70), release("a", 70)]), ["a"])
+
+    def test_the_hungriest_is_measured_per_seeder(self):
+        releases = [release("one", 50, seeders=1), release("two", 90, seeders=2)]
+        self.assertEqual(pick(releases, slots=1), ["one"])
+
     def test_no_slot_means_no_grab(self):
         self.assertEqual(pick([release("a", 70)], slots=0), [])
+
+
+class GrabsInLastDay(unittest.TestCase):
+    def test_a_grab_removed_since_still_counts(self):
+        now = 100000
+        present = [{"hash": "a", "added_on": now - 100}]
+        remembered = {"a": now - 100, "b": now - 200}
+        self.assertEqual(grabs_in_last_day(present, remembered, now), 2)
+
+    def test_grabs_older_than_a_day_do_not_count(self):
+        now = 100000
+        present = [{"hash": "a", "added_on": now - 90000}]
+        remembered = {"b": now - 90000, "c": now - 10}
+        self.assertEqual(grabs_in_last_day(present, remembered, now), 1)
+
+
+FEED = b"""<?xml version="1.0"?>
+<rss xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel>
+<item><title>Good</title><link>http://prowlarr/1</link><size>100</size>
+<pubDate>Tue, 03 Nov 2026 22:00:00 +0100</pubDate>
+<torznab:attr name="infohash" value="ABC"/><torznab:attr name="seeders" value="2"/><torznab:attr name="peers" value="12"/></item>
+<item><title>No date</title><link>http://prowlarr/2</link><size>100</size>
+<torznab:attr name="infohash" value="DEF"/></item>
+<item><title>No hash</title><link>http://prowlarr/3</link><size>100</size>
+<pubDate>Tue, 03 Nov 2026 22:00:00 +0100</pubDate></item>
+</channel></rss>"""
+
+
+class ParseTorznab(unittest.TestCase):
+    def test_items_without_a_date_or_a_hash_are_skipped(self):
+        releases = parse_torznab(FEED, 1793743200)
+        self.assertEqual([r["infohash"] for r in releases], ["abc"])
+        self.assertEqual(releases[0]["leechers"], 10)
+        self.assertAlmostEqual(releases[0]["age_hours"], 1.0)
 
 
 if __name__ == "__main__":
