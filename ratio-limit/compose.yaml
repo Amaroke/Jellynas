@@ -1,0 +1,15 @@
+services:
+  ratio-limit:
+    image: python:3.13.9-alpine3.22
+    container_name: ratio-limit
+    restart: unless-stopped
+    user: ${PUID}:${PGID}
+    command: ["python", "-u", "/app/ratio_limit.py"]
+    environment:
+      TZ: ${TZ}
+      QBITTORRENT_USER: ${QBITTORRENT_USER}
+      QBITTORRENT_PASSWORD: ${QBITTORRENT_PASSWORD}
+      RATIO_MAX_SIZE_GB: ${RATIO_MAX_SIZE_GB}
+      RATIO_MIN_SEEDING_DAYS: ${RATIO_MIN_SEEDING_DAYS}
+    volumes:
+      - ./ratio_limit.py:/app/ratio_limit.py:ro

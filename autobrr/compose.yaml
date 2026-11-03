@@ -1,0 +1,19 @@
+services:
+  autobrr:
+    image: ghcr.io/autobrr/autobrr:v1.89.0
+    container_name: autobrr
+    restart: unless-stopped
+    user: ${PUID}:${PGID}
+    environment:
+      TZ: ${TZ}
+      AUTOBRR__HOST: 0.0.0.0
+    volumes:
+      - ${APPDATA_ROOT}/autobrr:/config
+    ports:
+      - ${AUTOBRR_PORT:-7474}:7474
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:7474/api/healthz/liveness"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

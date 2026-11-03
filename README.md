@@ -276,6 +276,10 @@ In Indexers, click "Add Indexer", pick a tracker and fill in what it asks for, a
 
 Every indexer then shows up in Radarr, Settings > Indexers, and follows any change made in Prowlarr.
 
+### Seeding goals of private trackers
+
+A private tracker bans an Account that removes a torrent before its minimum seeding time or ratio, a hit and run. For each private indexer, in Indexers, edit it, click "Show Advanced", and set "Seed Ratio" and "Seed Time" in minutes to the minimums of its rules page. Prowlarr syncs them to Radarr and Sonarr, which hand them to qBittorrent with each torrent, so "Remove Completed" never removes a private torrent before the tracker allows it. An indexer left empty uses the global seeding limits of qBittorrent.
+
 ## Movie Requests
 
 In Seerr, Settings > Services, click "Add Radarr Server":
@@ -506,6 +510,107 @@ For each library:
 ### Node
 
 On the home page, the internal node starts with one transcode and one health check CPU worker. Raise the transcode workers if the machine has cores to spare, each one encodes a file at a time.
+
+## Private tracker ratio
+
+The Admin keeps a good ratio on private trackers with torrents grabbed only to seed, without touching the Library. [ADR 0005](docs/adr/0005-ratio-torrents-stay-in-the-torrents-tree.md) records the layout:
+
+- autobrr watches the announces of each tracker and sends fresh releases to qBittorrent in the `ratio` category, saved in `/data/torrents/ratio`. Radarr and Sonarr only import their own category, so a ratio torrent never reaches the Library.
+- cross-seed finds the torrents of the torrents tree on other trackers and seeds them too, from hardlinks in `/data/torrents/cross-seed`, without downloading them again.
+- qbit_manage tags every torrent by tracker, and removes ratio and cross-seed torrents once they reach their seeding goal. Radarr and Sonarr still remove their own torrents.
+- ratio-limit keeps the ratio folder under `RATIO_MAX_SIZE_GB`.
+
+None of them sees the media tree. autobrr and ratio-limit see no folder at all, cross-seed and qbit_manage see only the torrents tree.
+
+### Risks
+
+- A private tracker bans an Account for a hit and run, a torrent removed before its minimum seeding time. Set the seeding goals of each tracker in Prowlarr, in qbit_manage and in `RATIO_MIN_SEEDING_DAYS` before grabbing anything.
+- Ratio faking tools, which report uploads that never happened, get Accounts banned and are detected by every private tracker. Never use one.
+- Read the rules page of each tracker before enabling autobrr or cross-seed on it. Some forbid automated grabbing from IRC, or cross-seeding, or limit how many torrents you may download at once.
+
+### Folders
+
+```bash
+set -a && . <(tr -d '\r' < .env) && set +a
+mkdir -p "$DATA_ROOT"/torrents/{ratio,cross-seed} "$APPDATA_ROOT"/{autobrr,cross-seed,qbit_manage}
+```
+
+The `cross-seed` folder holds hardlinks to the data of other torrents, so the torrents tree must stay on a single disk.
+
+### Ratio category
+
+In qBittorrent, add a category `ratio` with `/data/torrents/ratio` as the save path. No other tool uses it.
+
+In `.env`, set `QBITTORRENT_USER` and `QBITTORRENT_PASSWORD` to the qBittorrent Account. cross-seed, qbit_manage and ratio-limit use it.
+
+### autobrr
+
+autobrr joins the IRC announce channel of each tracker and grabs a release the moment it is announced, when the swarm is hungry and a seeder uploads the most.
+
+1. Open `http://<NAS address>:<AUTOBRR_PORT>` and create the Account at the first visit, with its own username and a strong password stored in your password manager.
+2. In Settings > Clients, click "Add new", pick qBittorrent, enter `http://gluetun:8080` as the host and the qBittorrent Account. Under "Rules", check "Enabled" and set "Max active downloads" to `2`, so autobrr never fills the queue of Radarr and Sonarr. Save.
+3. In Settings > Indexers, click "Add new", pick the tracker, and fill in its passkey or API key and your IRC nick. autobrr adds its IRC network in Settings > IRC with the channel and the invite command of the tracker. Wait for the network to show as connected, some trackers need an IRC password or a NickServ registration first.
+4. In Filters, click "Add new" once per tracker, name it after the tracker, and pick the indexer. Set:
+
+   | Tab | Setting | Value |
+   | --- | --- | --- |
+   | General | Size | Min `1 GB`, max `30 GB`, so one grab never takes most of the ratio folder |
+   | General | Max downloads | `5` per day |
+   | Advanced | Freeleech | Checked, so a grab never costs ratio |
+   | Actions | Action | qBittorrent, the client above, with `ratio` as the category |
+
+5. Save, and leave the filter enabled. A matching announce then shows up in qBittorrent in the `ratio` category within seconds, and in the Releases page of autobrr.
+
+Uncheck Freeleech only on a tracker that rewards seeding time more than ratio, after reading its rules.
+
+autobrr reaches IRC and the tracker from the home IP. Only qBittorrent goes through the VPN, as for Radarr and Sonarr.
+
+### cross-seed
+
+cross-seed searches the private indexers of Prowlarr for torrents that hold the same data as one already in qBittorrent, and adds them seeding from a hardlink, without downloading anything. Its config is `cross-seed/config.js`, which reads every value from `.env`.
+
+1. In `.env`, set `CROSS_SEED_API_KEY` to a new key, `PROWLARR_API_KEY` to the key of Prowlarr from Settings > General > Security, and `CROSS_SEED_INDEXER_IDS` to the ids of the private indexers to search. Prowlarr shows the id of an indexer in its Torznab URL, `http://prowlarr:9696/<id>/api`, in Indexers when you edit it.
+
+   ```bash
+   openssl rand -hex 24
+   ```
+
+2. Recreate cross-seed with `docker compose up -d`. Its logs end with `Server is running on port 2468` once it reaches qBittorrent and Prowlarr.
+
+   ```sh
+   docker compose logs cross-seed
+   ```
+
+cross-seed searches each new torrent of qBittorrent, searches it again once a day for two weeks, and adds each match in the `cross-seed-link` category. Leave public indexers out, a public torrent brings no ratio.
+
+### qbit_manage
+
+qbit_manage runs every 30 minutes. Its config lives in its appdata folder, since it holds the names of your trackers, which stay out of the repo. `qbit_manage/config.yml` is the starting point.
+
+1. Copy it, replacing the file qbit_manage creates at its first start:
+
+   ```bash
+   set -a && . <(tr -d '\r' < .env) && set +a
+   cp qbit_manage/config.yml "$APPDATA_ROOT"/qbit_manage/config.yml
+   docker compose restart qbit_manage
+   ```
+
+2. Open `http://<NAS address>:<QBIT_MANAGE_PORT>`. In the Security section, set the authentication method to "Basic Authentication", enter a username and a strong password, distinct from the other tools, leave "Bypass authentication for local" unchecked, and save.
+3. In Tracker Configuration, add one entry per tracker, with a keyword of its announce URL and its name as the tag. A torrent from a tracker not listed gets the `other` tag.
+4. In Share Limits, the `ratio` and `cross-seed` groups stop a torrent at a ratio of 3 or after 30 days, then remove it with its files, never before 7 days of seeding. Keep that minimum equal to `RATIO_MIN_SEEDING_DAYS`. For a tracker with other rules, add a group with a priority number below 10, such as 5, since the smallest number wins, its tag under "Include All Tags", `ratio` and `cross-seed-link` under "Categories", and its own minimum seeding time.
+5. Save, then run the commands from the toolbar to see the result right away.
+
+qbit_manage never touches the share limits of the `radarr` and `tv-sonarr` categories, so Radarr and Sonarr keep removing their own torrents.
+
+### ratio-limit
+
+ratio-limit, `ratio-limit/ratio_limit.py`, checks the ratio folder every 5 minutes. Once its torrents add up to more than `RATIO_MAX_SIZE_GB`, it removes those that upload the least for their seeding time, with their files, until the folder is back under the limit. It never removes a torrent still downloading, nor one that seeded less than `RATIO_MIN_SEEDING_DAYS`.
+
+In `.env`, set `RATIO_MAX_SIZE_GB` to the space you give to ratio torrents, and `RATIO_MIN_SEEDING_DAYS` to the longest minimum seeding time of your trackers, then recreate it with `docker compose up -d`. Its logs name each torrent it removes:
+
+```sh
+docker compose logs ratio-limit
+```
 
 ## Verify the NAS
 
