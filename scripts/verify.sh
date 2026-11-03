@@ -158,6 +158,10 @@ check_no_media_mount() {
   check_not_mounted "$1" "" "has no media mount"
 }
 
+check_no_media_tree() {
+  check_not_mounted "$1" media "does not mount the media tree"
+}
+
 check_no_torrents_mount() {
   check_not_mounted "$1" torrents "does not mount the torrents tree"
 }
@@ -303,6 +307,9 @@ radarr_port="$(env_value RADARR_PORT)"
 sonarr_port="$(env_value SONARR_PORT)"
 bazarr_port="$(env_value BAZARR_PORT)"
 tdarr_port="$(env_value TDARR_PORT)"
+autobrr_port="$(env_value AUTOBRR_PORT)"
+cross_seed_port="$(env_value CROSS_SEED_PORT)"
+qbit_manage_port="$(env_value QBIT_MANAGE_PORT)"
 https_port="$(env_value CADDY_HTTPS_PORT)"
 https_port="${https_port:-443}"
 public_port=""
@@ -318,6 +325,11 @@ check_no_media_mount flaresolverr
 check_no_media_mount recyclarr
 check_no_torrents_mount bazarr
 check_no_torrents_mount tdarr
+check_no_media_mount autobrr
+check_no_media_tree cross-seed
+check_no_media_tree qbit_manage
+check_no_media_mount ratio-limit
+check_no_media_mount ratio-grab
 check_internet_ports
 check_login_required qbittorrent "http://localhost:${qbittorrent_port:-8080}/api/v2/app/version"
 check_login_required prowlarr "http://localhost:${prowlarr_port:-9696}/"
@@ -325,6 +337,9 @@ check_login_required radarr "http://localhost:${radarr_port:-7878}/"
 check_login_required sonarr "http://localhost:${sonarr_port:-8989}/"
 check_login_required bazarr "http://localhost:${bazarr_port:-6767}/bazarr.log"
 check_login_required tdarr "http://localhost:${tdarr_port:-8265}/api/v2/get-nodes"
+check_login_required autobrr "http://localhost:${autobrr_port:-7474}/api/config"
+check_login_required cross-seed "http://localhost:${cross_seed_port:-2468}/api/status"
+check_login_required qbit_manage "http://localhost:${qbit_manage_port:-8181}/"
 check_exit_ip qbittorrent
 check_kill_switch qbittorrent
 check_public_hostname "$jellyfin_hostname"

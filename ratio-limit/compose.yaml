@@ -1,0 +1,33 @@
+services:
+  ratio-limit:
+    image: python:3.13.9-alpine3.22
+    container_name: ratio-limit
+    restart: unless-stopped
+    user: ${PUID}:${PGID}
+    command: ["python", "-u", "/app/ratio_limit.py"]
+    environment:
+      TZ: ${TZ}
+      QBITTORRENT_USER: ${QBITTORRENT_USER}
+      QBITTORRENT_PASSWORD: ${QBITTORRENT_PASSWORD}
+      RATIO_MAX_SIZE_GB: ${RATIO_MAX_SIZE_GB}
+      RATIO_MIN_SEEDING_DAYS: ${RATIO_MIN_SEEDING_DAYS}
+    volumes:
+      - ./ratio_limit.py:/app/ratio_limit.py:ro
+
+  ratio-grab:
+    image: python:3.13.9-alpine3.22
+    container_name: ratio-grab
+    restart: unless-stopped
+    user: ${PUID}:${PGID}
+    command: ["python", "-u", "/app/ratio_grab.py"]
+    environment:
+      TZ: ${TZ}
+      QBITTORRENT_USER: ${QBITTORRENT_USER}
+      QBITTORRENT_PASSWORD: ${QBITTORRENT_PASSWORD}
+      PROWLARR_API_KEY: ${PROWLARR_API_KEY}
+      RATIO_GRAB_INDEXER_IDS: ${RATIO_GRAB_INDEXER_IDS}
+      RATIO_MAX_SIZE_GB: ${RATIO_MAX_SIZE_GB}
+      RATIO_GRAB_MINUTES: 15
+    volumes:
+      - ./ratio_limit.py:/app/ratio_limit.py:ro
+      - ./ratio_grab.py:/app/ratio_grab.py:ro
