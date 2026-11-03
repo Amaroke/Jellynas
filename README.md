@@ -515,12 +515,12 @@ On the home page, the internal node starts with one transcode and one health che
 
 The Admin keeps a good ratio on private trackers with torrents grabbed only to seed, without touching the Library. [ADR 0005](docs/adr/0005-ratio-torrents-stay-in-the-torrents-tree.md) records the layout:
 
-- autobrr watches the announces of each tracker and sends fresh releases to qBittorrent in the `ratio` category, saved in `/data/torrents/ratio`. Radarr and Sonarr only import their own category, so a ratio torrent never reaches the Library.
+- ratio-grab sends the fresh releases with the hungriest swarms of each private indexer to qBittorrent in the `ratio` category, saved in `/data/torrents/ratio`. autobrr does the same from the IRC announces of a tracker, for freeleech filters. Radarr and Sonarr only import their own category, so a ratio torrent never reaches the Library.
 - cross-seed finds the torrents of the torrents tree on other trackers and seeds them too, from hardlinks in `/data/torrents/cross-seed`, without downloading them again.
-- qbit_manage tags every torrent by tracker, and removes ratio and cross-seed torrents once they reach their seeding goal. Radarr and Sonarr still remove their own torrents.
+- qbit_manage tags every torrent by tracker, and removes ratio and cross-seed torrents once they stop uploading. Radarr and Sonarr still remove their own torrents.
 - ratio-limit keeps the ratio folder under `RATIO_MAX_SIZE_GB`.
 
-None of them sees the media tree. autobrr and ratio-limit see no folder at all, cross-seed and qbit_manage see only the torrents tree.
+None of them sees the media tree. autobrr, ratio-grab and ratio-limit see no folder at all, cross-seed and qbit_manage see only the torrents tree.
 
 ### Risks
 
