@@ -54,6 +54,16 @@ jobs:
           persist-credentials: false
       - run: pipx run yamllint==1.38.0 --strict .
 
+  python:
+    name: Python
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s ratio-limit -v
+
   markdown:
     name: Markdown
     runs-on: ubuntu-latest

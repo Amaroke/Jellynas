@@ -1,0 +1,28 @@
+services:
+  cross-seed:
+    image: ghcr.io/cross-seed/cross-seed:6.13.9
+    container_name: cross-seed
+    restart: unless-stopped
+    user: ${PUID}:${PGID}
+    command: daemon
+    environment:
+      TZ: ${TZ}
+      CROSS_SEED_API_KEY: ${CROSS_SEED_API_KEY}
+      CROSS_SEED_INDEXER_IDS: ${CROSS_SEED_INDEXER_IDS}
+      PROWLARR_API_KEY: ${PROWLARR_API_KEY}
+      RADARR_API_KEY: ${RADARR_API_KEY}
+      SONARR_API_KEY: ${SONARR_API_KEY}
+      QBITTORRENT_USER: ${QBITTORRENT_USER}
+      QBITTORRENT_PASSWORD: ${QBITTORRENT_PASSWORD}
+    volumes:
+      - ${APPDATA_ROOT}/cross-seed:/config
+      - ./config.js:/config/config.js:ro
+      - ${DATA_ROOT}/torrents:/data/torrents
+    ports:
+      - ${CROSS_SEED_PORT:-2468}:2468
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:2468/api/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
