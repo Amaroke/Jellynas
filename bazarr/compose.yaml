@@ -1,0 +1,22 @@
+services:
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:v1.6.2-ls370
+    container_name: bazarr
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+    volumes:
+      - ${APPDATA_ROOT}/bazarr:/config
+      - ${DATA_ROOT}/media/movies:/data/media/movies
+      - ${DATA_ROOT}/media/shows:/data/media/shows
+      - ${DATA_ROOT}/media/anime:/data/media/anime
+    ports:
+      - ${BAZARR_PORT:-6767}:6767
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:6767/api/system/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
