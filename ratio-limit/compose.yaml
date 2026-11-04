@@ -32,3 +32,4 @@ services:
     volumes:
       - ./ratio_limit.py:/app/ratio_limit.py:ro
       - ./ratio_grab.py:/app/ratio_grab.py:ro
+      - ${APPDATA_ROOT}/ratio-grab:/state

@@ -1,6 +1,8 @@
+import os
+import tempfile
 import unittest
 
-from ratio_grab import deficit, grabs_in_last_day, parse_torznab, pick_grabs
+from ratio_grab import deficit, grabs_in_last_day, load_state, parse_torznab, pick_grabs, record_transfers, save_state
 
 GB = 1024**3
 
@@ -87,14 +89,41 @@ class GrabsInLastDay(unittest.TestCase):
 
 class Deficit(unittest.TestCase):
     def test_it_is_what_was_downloaded_minus_what_was_uploaded(self):
-        torrents = [
-            {"downloaded": 10 * GB, "uploaded": 2 * GB},
-            {"downloaded": 5 * GB, "uploaded": 8 * GB},
-        ]
-        self.assertEqual(deficit(torrents), 5 * GB)
+        ledger = record_transfers(
+            {},
+            [
+                {"hash": "a", "downloaded": 10 * GB, "uploaded": 2 * GB},
+                {"hash": "b", "downloaded": 5 * GB, "uploaded": 8 * GB},
+            ],
+        )
+        self.assertEqual(deficit(ledger), 5 * GB)
 
     def test_an_upload_surplus_is_a_negative_deficit(self):
-        self.assertEqual(deficit([{"downloaded": 1 * GB, "uploaded": 4 * GB}]), -3 * GB)
+        ledger = record_transfers({}, [{"hash": "a", "downloaded": 1 * GB, "uploaded": 4 * GB}])
+        self.assertEqual(deficit(ledger), -3 * GB)
+
+    def test_a_removed_torrent_still_counts(self):
+        ledger = record_transfers({}, [{"hash": "a", "downloaded": 6 * GB, "uploaded": 1 * GB}])
+        record_transfers(ledger, [{"hash": "b", "downloaded": 2 * GB, "uploaded": 1 * GB}])
+        self.assertEqual(deficit(ledger), 6 * GB)
+
+    def test_a_torrent_counts_its_latest_transfers_once(self):
+        ledger = record_transfers({}, [{"hash": "A", "downloaded": 6 * GB, "uploaded": 1 * GB}])
+        record_transfers(ledger, [{"hash": "a", "downloaded": 6 * GB, "uploaded": 4 * GB}])
+        self.assertEqual(deficit(ledger), 2 * GB)
+
+
+class State(unittest.TestCase):
+    def test_a_missing_file_is_an_empty_state(self):
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertEqual(load_state(os.path.join(folder, "none.json")), {"transfers": {}, "grabbed": {}})
+
+    def test_the_state_survives_a_restart(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "state.json")
+            state = {"transfers": {"a": [6 * GB, 1 * GB]}, "grabbed": {"a": 100}}
+            save_state(path, state)
+            self.assertEqual(load_state(path), state)
 
 
 FEED = b"""<?xml version="1.0"?>
