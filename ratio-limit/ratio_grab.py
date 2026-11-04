@@ -1,4 +1,5 @@
 import email.utils
+import json
 import os
 import time
 import urllib.parse
@@ -41,8 +42,30 @@ def pick_grabs(releases, known_hashes, slots, free_bytes, rules):
     return picked
 
 
-def deficit(ratio_torrents):
-    return sum(t["downloaded"] - t["uploaded"] for t in ratio_torrents)
+def record_transfers(ledger, ratio_torrents):
+    for t in ratio_torrents:
+        ledger[t["hash"].lower()] = [t["downloaded"], t["uploaded"]]
+    return ledger
+
+
+def deficit(ledger):
+    return sum(downloaded - uploaded for downloaded, uploaded in ledger.values())
+
+
+def load_state(path):
+    try:
+        with open(path, encoding="utf-8") as file:
+            state = json.load(file)
+    except FileNotFoundError:
+        state = {}
+    return {"transfers": state.get("transfers", {}), "grabbed": state.get("grabbed", {})}
+
+
+def save_state(path, state):
+    temporary = f"{path}.tmp"
+    with open(temporary, "w", encoding="utf-8") as file:
+        json.dump(state, file)
+    os.replace(temporary, path)
 
 
 def grabs_in_last_day(ratio_torrents, remembered, now):
@@ -114,10 +137,14 @@ def fetch_releases(settings, now):
     return releases
 
 
-def run_once(client, settings, remembered):
+def run_once(client, settings, state):
     now = time.time()
     everything = client.torrents(None)
     ratio = [t for t in everything if t["category"] == settings["category"]]
+    record_transfers(state["transfers"], ratio)
+    remembered = state["grabbed"]
+    for infohash in [h for h, at in remembered.items() if at < now - DAY]:
+        del remembered[infohash]
     downloading = sum(1 for t in ratio if t["progress"] < 1)
     slots = min(
         settings["per_day"] - grabs_in_last_day(ratio, remembered, now),
@@ -126,7 +153,7 @@ def run_once(client, settings, remembered):
     free_bytes = settings["max_size"] - sum(t["size"] for t in ratio)
     if slots <= 0 or free_bytes <= 0:
         return
-    owed = deficit(ratio)
+    owed = deficit(state["transfers"])
     if owed > settings["max_deficit"]:
         if not settings.get("paused"):
             print(
@@ -167,11 +194,11 @@ def main():
         "per_day": int(env_number("RATIO_GRAB_PER_DAY", 3)),
         "max_downloading": int(env_number("RATIO_GRAB_MAX_DOWNLOADING", 2)),
         "max_size": number_from_env("RATIO_MAX_SIZE_GB") * GB,
-        "max_deficit": env_number("RATIO_GRAB_MAX_DEFICIT_GB", 50) * GB,
+        "max_deficit": env_number("RATIO_GRAB_MAX_DEFICIT_GB", 5) * GB,
         "rules": {
             "min_size": env_number("RATIO_GRAB_MIN_SIZE_GB", 1) * GB,
-            "max_size": env_number("RATIO_GRAB_MAX_SIZE_GB", 15) * GB,
-            "max_age_hours": env_number("RATIO_GRAB_MAX_AGE_HOURS", 6),
+            "max_size": env_number("RATIO_GRAB_MAX_SIZE_GB", 5) * GB,
+            "max_age_hours": env_number("RATIO_GRAB_MAX_AGE_HOURS", 1),
             "min_leechers": env_number("RATIO_GRAB_MIN_LEECHERS", 10),
             "min_leechers_per_seeder": env_number("RATIO_GRAB_MIN_LEECHERS_PER_SEEDER", 5),
         },
@@ -184,13 +211,18 @@ def main():
         os.environ.get("QBITTORRENT_USER", ""),
         os.environ.get("QBITTORRENT_PASSWORD", ""),
     )
-    remembered = {}
+    state_path = os.environ.get("RATIO_GRAB_STATE", "/state/ratio-grab.json")
+    state = load_state(state_path)
     while True:
         if settings["indexers"]:
             try:
-                run_once(client, settings, remembered)
+                run_once(client, settings, state)
             except Exception as error:
                 print(f"Cannot grab for the {settings['category']} folder: {error}", flush=True)
+            try:
+                save_state(state_path, state)
+            except OSError as error:
+                print(f"Cannot save {state_path}: {error}", flush=True)
         time.sleep(interval)
 
 
