@@ -637,38 +637,33 @@ ratio-grab reads `RATIO_GRAB_MAX_AGE_HOURS`, `RATIO_GRAB_MIN_SIZE_GB`, `RATIO_GR
 
 ## Automatic deployment
 
-The NAS follows the `main` branch of GitHub: a change merged into `main` reaches the NAS within minutes, and nothing else changes it. The repo folder on the NAS stays on `main`, and its tracked files are never edited there: the deploy script refuses to deploy while one differs from git. `.env` stays on the NAS only, outside git.
+The NAS follows the `main` branch of GitHub: a change merged into `main` reaches the NAS within minutes, and nothing else changes it. The NAS runs from its own clone of the repo, kept on `main` and never edited: the deployer refuses to deploy while a tracked file differs from git. Edit the repo in another folder and go through a pull request. `.env` stays in the NAS clone only, outside git.
 
 The settings made in the web UIs of the services live in the appdata root, not in git, so the deploy never touches them. Back up the appdata root to keep them.
 
-### Deploy script
+### Deployer
 
-Run it once by hand from the repo folder, in Git Bash on Windows:
+The deployer is a container, outside the NAS project, that runs `scripts/deploy.sh` every 5 minutes. Start it once from the NAS clone, in Git Bash on Windows:
 
 ```sh
-./scripts/deploy.sh
+docker compose -f deployer/compose.yaml up -d --build
 ```
 
-It fast-forwards `main` to GitHub, then runs `docker compose up -d --build --remove-orphans`, which recreates the services whose compose file or image changed and removes the services commented out in `compose.yaml`. A service also restarts when another file of its folder changes, such as a script or a config file it mounts, since Docker would keep the old one. The script remembers the last deployed commit in `.git/jellynas-deployed` and does nothing until a new one is merged. A failed deploy is retried at the next run.
+Each run fast-forwards `main` to GitHub, then runs `docker compose up -d --build --remove-orphans`, which recreates the services whose compose file or image changed and removes the services commented out in `compose.yaml`. A service also restarts when another file of its folder changes, such as a script or a config file it mounts, since Docker would keep the old one. The deployer remembers the last deployed commit in `.git/jellynas-deployed` and does nothing until a new one is merged. A failed deploy is retried at the next run. When a change touches `deployer/Dockerfile` or `deployer/compose.yaml`, the deployer recreates itself.
 
-### Schedule it
+The deployer reaches Docker through its socket, which gives it full control of the machine, like any tool that runs Compose. Under Docker Desktop, it sees the clone through the path of the Docker Desktop VM, so its first deploy recreates every service that mounts a file of the repo.
 
-On Windows, open PowerShell as administrator in the repo folder and register a task that runs every 5 minutes in the background, without opening a window. Docker Desktop only runs once you are signed in, so set it to start when you sign in: after a reboot, deploys wait for your session.
+Its logs name each deploy, and the reason of each failed run, repeated every 5 minutes until it is fixed:
 
-```powershell
-$action = New-ScheduledTaskAction -Execute "C:\Program Files\Git\bin\bash.exe" -Argument '-c "./scripts/deploy.sh >> deploy.log 2>&1"' -WorkingDirectory (Get-Location).Path
-$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5)
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U
-Register-ScheduledTask -TaskName "Jellynas deploy" -Action $action -Trigger $trigger -Principal $principal
+```sh
+docker logs jellynas-deployer
 ```
 
-On Linux, add this line with `crontab -e`, as a user of the `docker` group, with the repo folder in place of `/srv/jellynas`:
+To deploy without waiting, restart it, it deploys as soon as it starts. Running `scripts/deploy.sh` or `docker compose up` from Windows instead would recreate every service that mounts a file of the repo, twice, since Windows and the VM name the clone differently.
 
-```text
-*/5 * * * * cd /srv/jellynas && flock -n .git/deploy.lock ./scripts/deploy.sh >> deploy.log 2>&1
+```sh
+docker restart jellynas-deployer
 ```
-
-Each run that deploys or fails writes its steps to `deploy.log` in the repo folder, ignored by git. A run with nothing new writes nothing. A failing run repeats its reason every 5 minutes until it is fixed.
 
 ### Renovate
 

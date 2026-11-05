@@ -43,6 +43,7 @@ jobs:
           fi
           cp .env.example .env
           docker compose config --quiet
+          docker compose -f deployer/compose.yaml config --quiet
 
   yaml:
     name: YAML
