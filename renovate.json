@@ -1,11 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "timezone": "Europe/Paris",
-  "schedule": ["* 0-5 * * 6"],
   "labels": ["dependencies"],
   "commitMessagePrefix": "deps:",
-  "minimumReleaseAge": "3 days",
   "automergeStrategy": "squash",
   "customManagers": [
     {
