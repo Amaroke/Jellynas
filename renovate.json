@@ -3,6 +3,8 @@
   "extends": ["config:recommended"],
   "labels": ["dependencies"],
   "commitMessagePrefix": "deps:",
+  "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "none",
   "automergeStrategy": "squash",
   "customManagers": [
     {
