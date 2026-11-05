@@ -10,9 +10,9 @@ The NAS once every planned service runs (#13, #14, #15, #38, #39, #40). Dark cir
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"fontSize": "15px", "primaryTextColor": "#1f2937", "lineColor": "#78909c", "edgeLabelBackground": "#ffffff", "clusterBkg": "#ffffff", "background": "#ffffff"}}}%%
-flowchart TB
+flowchart LR
     subgraph canvas[" "]
-    direction TB
+    direction LR
     Friend(("Friend"))
     Admin(("Admin"))
     GitHub{{"GitHub"}}
@@ -34,7 +34,7 @@ flowchart TB
     end
 
     subgraph observation["Observation"]
-        direction LR
+        direction TB
         Homepage("Homepage<br/>dashboard")
         Beszel("Beszel<br/>resources")
         UptimeKuma("Uptime Kuma<br/>uptime")
@@ -70,7 +70,7 @@ flowchart TB
     end
 
     subgraph ratio["Ratio"]
-        direction LR
+        direction TB
         autobrr("autobrr<br/>freeleech")
         crossseed("cross-seed")
         qbitmanage("qbit_manage")
@@ -164,9 +164,9 @@ Same layout. Dashed grey boxes and links are planned and not running yet.
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"fontSize": "15px", "primaryTextColor": "#1f2937", "lineColor": "#78909c", "edgeLabelBackground": "#ffffff", "clusterBkg": "#ffffff", "background": "#ffffff"}}}%%
-flowchart TB
+flowchart LR
     subgraph canvas[" "]
-    direction TB
+    direction LR
     Friend(("Friend"))
     Admin(("Admin"))
     GitHub{{"GitHub"}}
@@ -188,7 +188,7 @@ flowchart TB
     end
 
     subgraph observation["Observation"]
-        direction LR
+        direction TB
         Homepage("Homepage<br/>dashboard")
         Beszel("Beszel<br/>resources")
         UptimeKuma("Uptime Kuma<br/>uptime")
@@ -224,7 +224,7 @@ flowchart TB
     end
 
     subgraph ratio["Ratio"]
-        direction LR
+        direction TB
         autobrr("autobrr<br/>freeleech")
         crossseed("cross-seed")
         qbitmanage("qbit_manage")
