@@ -635,6 +635,50 @@ docker compose logs ratio-grab
 
 ratio-grab reads `RATIO_GRAB_MAX_AGE_HOURS`, `RATIO_GRAB_MIN_SIZE_GB`, `RATIO_GRAB_MAX_SIZE_GB`, `RATIO_GRAB_MIN_LEECHERS`, `RATIO_GRAB_MIN_LEECHERS_PER_SEEDER`, `RATIO_GRAB_PER_DAY` and `RATIO_GRAB_MAX_DOWNLOADING` to change the limits above, once added to its `environment` in `ratio-limit/compose.yaml`.
 
+## Automatic deployment
+
+The NAS follows the `main` branch of GitHub: a change merged into `main` reaches the NAS within minutes, and nothing else changes it. The repo folder on the NAS stays on `main`, and its tracked files are never edited there: the deploy script refuses to deploy while one differs from git. `.env` stays on the NAS only, outside git.
+
+The settings made in the web UIs of the services live in the appdata root, not in git, so the deploy never touches them. Back up the appdata root to keep them.
+
+### Deploy script
+
+Run it once by hand from the repo folder, in Git Bash on Windows:
+
+```sh
+./scripts/deploy.sh
+```
+
+It fast-forwards `main` to GitHub, then runs `docker compose up -d --build --remove-orphans`, which recreates the services whose compose file or image changed and removes the services commented out in `compose.yaml`. A service also restarts when another file of its folder changes, such as a script or a config file it mounts, since Docker would keep the old one. The script remembers the last deployed commit in `.git/jellynas-deployed` and does nothing until a new one is merged. A failed deploy is retried at the next run.
+
+### Schedule it
+
+On Windows, open PowerShell as administrator in the repo folder and register a task that runs every 5 minutes in the background, without opening a window. Docker Desktop only runs once you are signed in, so set it to start when you sign in: after a reboot, deploys wait for your session.
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "C:\Program Files\Git\bin\bash.exe" -Argument '-c "./scripts/deploy.sh >> deploy.log 2>&1"' -WorkingDirectory (Get-Location).Path
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5)
+$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U
+Register-ScheduledTask -TaskName "Jellynas deploy" -Action $action -Trigger $trigger -Principal $principal
+```
+
+On Linux, add this line with `crontab -e`, as a user of the `docker` group, with the repo folder in place of `/srv/jellynas`:
+
+```text
+*/5 * * * * cd /srv/jellynas && flock -n .git/deploy.lock ./scripts/deploy.sh >> deploy.log 2>&1
+```
+
+Each run that deploys or fails writes its steps to `deploy.log` in the repo folder, ignored by git. A run with nothing new writes nothing. A failing run repeats its reason every 5 minutes until it is fixed.
+
+### Renovate
+
+[Renovate](https://github.com/apps/renovate) keeps the images and the GitHub Actions up to date. Install the app on the repo only, then merge the onboarding pull request it opens if it still opens one. Its settings are in `renovate.json`:
+
+- It opens its pull requests early on Saturday morning, between midnight and 6 am, for releases at least 3 days old.
+- It merges a minor or patch update by itself once the CI passes, and the NAS deploys it.
+- A major update, and any update of Gluetun or qBittorrent, waits for the Admin to read its release notes and merge it.
+- The Dependency Dashboard issue lists every pending update.
+
 ## Verify the NAS
 
 Run the verification script from the repo folder, in Git Bash on Windows:
