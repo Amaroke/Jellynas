@@ -2,6 +2,317 @@
 
 A personal media server built on Jellyfin, shared with Friends over the internet. Follow these steps in order, running every command from the repo folder.
 
+## Architecture
+
+### Target
+
+The NAS once every planned service runs (#13, #14, #15, #38, #39, #40). Dark circles are people, hexagons are services outside the NAS, rounded boxes are containers, cylinders are storage.
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontSize": "15px", "primaryTextColor": "#1f2937", "lineColor": "#78909c", "edgeLabelBackground": "#ffffff", "clusterBkg": "#ffffff", "background": "#ffffff"}}}%%
+flowchart LR
+    subgraph canvas[" "]
+    direction LR
+    Friend(("Friend"))
+    Admin(("Admin"))
+    GitHub{{"GitHub"}}
+    ntfy{{"ntfy.sh"}}
+    Trackers{{"Trackers and peers"}}
+    Soulseek{{"Soulseek"}}
+    MangaSources{{"Manga sources"}}
+
+    subgraph exposure["Exposure"]
+        direction LR
+        DuckDNS("DuckDNS<br/>dynamic DNS")
+        Caddy("Caddy<br/>HTTPS proxy")
+    end
+
+    subgraph gitops["GitOps"]
+        direction TB
+        Renovate("Renovate<br/>image updates")
+        Deployer("deployer<br/>pulls main")
+    end
+
+    subgraph observation["Observation"]
+        direction TB
+        Homepage("Homepage<br/>dashboard")
+        Beszel("Beszel<br/>resources")
+        UptimeKuma("Uptime Kuma<br/>uptime")
+        Dozzle("Dozzle<br/>logs")
+        Indexarr("Indexarr<br/>file catalog")
+        Backup("Backup<br/>appdata")
+    end
+
+    subgraph watch["Watch and request"]
+        direction TB
+        Jellyfin("Jellyfin<br/>streaming")
+        Seerr("Seerr<br/>Requests")
+    end
+
+    subgraph automation["Automation stack"]
+        direction LR
+        Prowlarr("Prowlarr<br/>indexers")
+        Recyclarr("Recyclarr<br/>quality profiles")
+        FlareSolverr("FlareSolverr<br/>Cloudflare")
+        Radarr("Radarr<br/>movies")
+        Sonarr("Sonarr<br/>shows, anime")
+        Lidarr("Lidarr<br/>music")
+        LazyLibrarian("LazyLibrarian<br/>books")
+        Suwayomi("Suwayomi<br/>manga")
+        Bazarr("Bazarr<br/>subtitles")
+        Tdarr("Tdarr<br/>MKV H265")
+    end
+
+    subgraph vpn["Gluetun VPN, kill switch"]
+        direction TB
+        qBittorrent("qBittorrent<br/>torrents")
+        slskd("slskd<br/>Soulseek")
+    end
+
+    subgraph ratio["Ratio"]
+        direction TB
+        autobrr("autobrr<br/>freeleech")
+        crossseed("cross-seed")
+        qbitmanage("qbit_manage")
+        ratiolimit("ratio-limit")
+        ratiograb("ratio-grab")
+    end
+
+    subgraph data["Data"]
+        direction TB
+        Torrents[("Torrents")]
+        Library[("Library")]
+        Backups[("Backups")]
+    end
+    end
+
+    Friend -->|HTTPS| exposure
+    exposure --> watch
+    watch -->|Requests| automation
+    automation -->|grab| vpn
+    ratio -->|"grab, clean, cross-seed"| vpn
+    automation -->|search| Trackers
+    vpn -->|"tunnel only"| Trackers
+    vpn -->|download| data
+    automation -->|"import, subtitles, MKV H265"| data
+    watch -->|"read-only"| data
+    Admin -->|LAN| automation
+    Admin --> GitHub
+    gitops -->|"update PRs, pulls main"| GitHub
+    DuckDNS -.-|"public IP, DNS challenge"| Caddy
+    Prowlarr --- FlareSolverr
+    Prowlarr -->|indexers| Radarr
+    Prowlarr -->|indexers| Sonarr
+    Recyclarr -->|profiles| Radarr
+    Recyclarr -->|profiles| Sonarr
+    Radarr -->|"new files"| Bazarr
+    Sonarr -->|"new files"| Bazarr
+    Bazarr -->|requeue| Tdarr
+    Prowlarr -->|indexers| Lidarr
+    Prowlarr -->|indexers| LazyLibrarian
+    MangaSources -->|"manga chapters"| automation
+    vpn -->|"tunnel only"| Soulseek
+    Admin -->|LAN| observation
+    observation -.->|"tiles, logs, checks"| automation
+    observation -.->|"tiles, logs, checks"| vpn
+    observation -.->|"tiles, logs, checks"| ratio
+    observation -->|"read-only, nightly backup"| data
+    observation -->|alerts| ntfy
+    ntfy -.->|push| Admin
+    Homepage ~~~ Beszel ~~~ UptimeKuma
+    Dozzle ~~~ Indexarr ~~~ Backup
+    autobrr ~~~ crossseed ~~~ qbitmanage
+    ratiolimit ~~~ ratiograb
+    Prowlarr ~~~ Suwayomi
+
+    style canvas fill:#ffffff,stroke:#e5e7eb,stroke-width:1px
+    linkStyle default stroke:#78909c,color:#374151
+    classDef person fill:#37474f,stroke:#263238,color:#ffffff,stroke-width:2px
+    classDef external fill:#ffffff,stroke:#607d8b,color:#1f2937,stroke-width:1.5px
+    classDef planned fill:#ffffff,stroke:#9e9e9e,stroke-dasharray:4 4,color:#9e9e9e
+    class Friend,Admin person
+    class GitHub,ntfy,Trackers,Soulseek,MangaSources external
+    classDef exposureNode fill:#ffffff,stroke:#1e88e5,color:#1f2937,stroke-width:1.5px
+    class DuckDNS,Caddy exposureNode
+    style exposure fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#1f2937
+    classDef gitopsNode fill:#ffffff,stroke:#7e57c2,color:#1f2937,stroke-width:1.5px
+    class Renovate,Deployer gitopsNode
+    style gitops fill:#ede7f6,stroke:#7e57c2,stroke-width:2px,color:#1f2937
+    classDef observationNode fill:#ffffff,stroke:#00acc1,color:#1f2937,stroke-width:1.5px
+    class Homepage,Beszel,UptimeKuma,Dozzle,Indexarr,Backup observationNode
+    style observation fill:#e0f7fa,stroke:#00acc1,stroke-width:2px,color:#1f2937
+    classDef watchNode fill:#ffffff,stroke:#ab47bc,color:#1f2937,stroke-width:1.5px
+    class Jellyfin,Seerr watchNode
+    style watch fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px,color:#1f2937
+    classDef automationNode fill:#ffffff,stroke:#43a047,color:#1f2937,stroke-width:1.5px
+    class Prowlarr,Recyclarr,FlareSolverr,Radarr,Sonarr,Lidarr,LazyLibrarian,Suwayomi,Bazarr,Tdarr automationNode
+    style automation fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#1f2937
+    classDef vpnNode fill:#ffffff,stroke:#fb8c00,color:#1f2937,stroke-width:1.5px
+    class qBittorrent,slskd vpnNode
+    style vpn fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#1f2937
+    classDef ratioNode fill:#ffffff,stroke:#ec407a,color:#1f2937,stroke-width:1.5px
+    class autobrr,crossseed,qbitmanage,ratiolimit,ratiograb ratioNode
+    style ratio fill:#fce4ec,stroke:#ec407a,stroke-width:2px,color:#1f2937
+    classDef dataNode fill:#ffffff,stroke:#78909c,color:#1f2937,stroke-width:1.5px
+    class Torrents,Library,Backups dataNode
+    style data fill:#eceff1,stroke:#78909c,stroke-width:2px,color:#1f2937
+```
+
+### Current (main)
+
+Same layout. Dashed grey boxes and links are planned and not running yet.
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontSize": "15px", "primaryTextColor": "#1f2937", "lineColor": "#78909c", "edgeLabelBackground": "#ffffff", "clusterBkg": "#ffffff", "background": "#ffffff"}}}%%
+flowchart LR
+    subgraph canvas[" "]
+    direction LR
+    Friend(("Friend"))
+    Admin(("Admin"))
+    GitHub{{"GitHub"}}
+    ntfy{{"ntfy.sh"}}
+    Trackers{{"Trackers and peers"}}
+    Soulseek{{"Soulseek"}}
+    MangaSources{{"Manga sources"}}
+
+    subgraph exposure["Exposure"]
+        direction LR
+        DuckDNS("DuckDNS<br/>dynamic DNS")
+        Caddy("Caddy<br/>HTTPS proxy")
+    end
+
+    subgraph gitops["GitOps"]
+        direction TB
+        Renovate("Renovate<br/>image updates")
+        Deployer("deployer<br/>pulls main")
+    end
+
+    subgraph observation["Observation"]
+        direction TB
+        Homepage("Homepage<br/>dashboard")
+        Beszel("Beszel<br/>resources")
+        UptimeKuma("Uptime Kuma<br/>uptime")
+        Dozzle("Dozzle<br/>logs")
+        Indexarr("Indexarr<br/>file catalog")
+        Backup("Backup<br/>appdata")
+    end
+
+    subgraph watch["Watch and request"]
+        direction TB
+        Jellyfin("Jellyfin<br/>streaming")
+        Seerr("Seerr<br/>Requests")
+    end
+
+    subgraph automation["Automation stack"]
+        direction LR
+        Prowlarr("Prowlarr<br/>indexers")
+        Recyclarr("Recyclarr<br/>quality profiles")
+        FlareSolverr("FlareSolverr<br/>Cloudflare")
+        Radarr("Radarr<br/>movies")
+        Sonarr("Sonarr<br/>shows, anime")
+        Lidarr("Lidarr<br/>music")
+        LazyLibrarian("LazyLibrarian<br/>books")
+        Suwayomi("Suwayomi<br/>manga")
+        Bazarr("Bazarr<br/>subtitles")
+        Tdarr("Tdarr<br/>MKV H265")
+    end
+
+    subgraph vpn["Gluetun VPN, kill switch"]
+        direction TB
+        qBittorrent("qBittorrent<br/>torrents")
+        slskd("slskd<br/>Soulseek")
+    end
+
+    subgraph ratio["Ratio"]
+        direction TB
+        autobrr("autobrr<br/>freeleech")
+        crossseed("cross-seed")
+        qbitmanage("qbit_manage")
+        ratiolimit("ratio-limit")
+        ratiograb("ratio-grab")
+    end
+
+    subgraph data["Data"]
+        direction TB
+        Torrents[("Torrents")]
+        Library[("Library")]
+        Backups[("Backups")]
+    end
+    end
+
+    Friend -->|HTTPS| exposure
+    exposure --> watch
+    watch -->|Requests| automation
+    automation -->|grab| vpn
+    ratio -->|"grab, clean, cross-seed"| vpn
+    automation -->|search| Trackers
+    vpn -->|"tunnel only"| Trackers
+    vpn -->|download| data
+    automation -->|"import, subtitles, MKV H265"| data
+    watch -->|"read-only"| data
+    Admin -->|LAN| automation
+    Admin --> GitHub
+    gitops -->|"update PRs, pulls main"| GitHub
+    DuckDNS -.-|"public IP, DNS challenge"| Caddy
+    Prowlarr --- FlareSolverr
+    Prowlarr -->|indexers| Radarr
+    Prowlarr -->|indexers| Sonarr
+    Recyclarr -->|profiles| Radarr
+    Recyclarr -->|profiles| Sonarr
+    Radarr -->|"new files"| Bazarr
+    Sonarr -->|"new files"| Bazarr
+    Bazarr -->|requeue| Tdarr
+    Prowlarr -->|indexers| Lidarr
+    Prowlarr -->|indexers| LazyLibrarian
+    MangaSources -->|"manga chapters"| automation
+    vpn -->|"tunnel only"| Soulseek
+    Admin -->|LAN| observation
+    observation -.->|"tiles, logs, checks"| automation
+    observation -.->|"tiles, logs, checks"| vpn
+    observation -.->|"tiles, logs, checks"| ratio
+    observation -->|"read-only, nightly backup"| data
+    observation -->|alerts| ntfy
+    ntfy -.->|push| Admin
+    Homepage ~~~ Beszel ~~~ UptimeKuma
+    Dozzle ~~~ Indexarr ~~~ Backup
+    autobrr ~~~ crossseed ~~~ qbitmanage
+    ratiolimit ~~~ ratiograb
+    Prowlarr ~~~ Suwayomi
+
+    style canvas fill:#ffffff,stroke:#e5e7eb,stroke-width:1px
+    linkStyle default stroke:#78909c,color:#374151
+    classDef person fill:#37474f,stroke:#263238,color:#ffffff,stroke-width:2px
+    classDef external fill:#ffffff,stroke:#607d8b,color:#1f2937,stroke-width:1.5px
+    classDef planned fill:#ffffff,stroke:#9e9e9e,stroke-dasharray:4 4,color:#9e9e9e
+    class Friend,Admin person
+    class GitHub,Trackers external
+    classDef exposureNode fill:#ffffff,stroke:#1e88e5,color:#1f2937,stroke-width:1.5px
+    class DuckDNS,Caddy exposureNode
+    style exposure fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#1f2937
+    classDef gitopsNode fill:#ffffff,stroke:#7e57c2,color:#1f2937,stroke-width:1.5px
+    class Renovate,Deployer gitopsNode
+    style gitops fill:#ede7f6,stroke:#7e57c2,stroke-width:2px,color:#1f2937
+    classDef observationNode fill:#ffffff,stroke:#00acc1,color:#1f2937,stroke-width:1.5px
+    style observation fill:#fafafa,stroke:#9e9e9e,stroke-dasharray:4 4,color:#9e9e9e
+    classDef watchNode fill:#ffffff,stroke:#ab47bc,color:#1f2937,stroke-width:1.5px
+    class Jellyfin,Seerr watchNode
+    style watch fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px,color:#1f2937
+    classDef automationNode fill:#ffffff,stroke:#43a047,color:#1f2937,stroke-width:1.5px
+    class Prowlarr,Recyclarr,FlareSolverr,Radarr,Sonarr,Bazarr,Tdarr automationNode
+    style automation fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#1f2937
+    classDef vpnNode fill:#ffffff,stroke:#fb8c00,color:#1f2937,stroke-width:1.5px
+    class qBittorrent vpnNode
+    style vpn fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#1f2937
+    classDef ratioNode fill:#ffffff,stroke:#ec407a,color:#1f2937,stroke-width:1.5px
+    class autobrr,crossseed,qbitmanage,ratiolimit,ratiograb ratioNode
+    style ratio fill:#fce4ec,stroke:#ec407a,stroke-width:2px,color:#1f2937
+    classDef dataNode fill:#ffffff,stroke:#78909c,color:#1f2937,stroke-width:1.5px
+    class Torrents,Library dataNode
+    style data fill:#eceff1,stroke:#78909c,stroke-width:2px,color:#1f2937
+    class Backup,Backups,Beszel,Dozzle,Homepage,Indexarr,LazyLibrarian,Lidarr,MangaSources,Soulseek,Suwayomi,UptimeKuma,ntfy,slskd planned
+    linkStyle 22,23,24,25,26,27,28,29,30,31,32 stroke:#9e9e9e,stroke-width:1px,stroke-dasharray:4 4,color:#9e9e9e
+```
+
 ## Prerequisites
 
 - Docker: Docker Desktop on Windows, Docker Engine with the Compose plugin on Linux.
