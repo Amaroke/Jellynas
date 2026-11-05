@@ -2,6 +2,241 @@
 
 A personal media server built on Jellyfin, shared with Friends over the internet. Follow these steps in order, running every command from the repo folder.
 
+## Architecture
+
+### Target
+
+The NAS once every planned service runs (#13, #14, #15, #38, #39, #40).
+
+```mermaid
+flowchart TB
+    Friend(["Friend"])
+    Admin(["Admin"])
+    GitHub(["GitHub"])
+    ntfy(["ntfy.sh"])
+    Trackers(["Trackers and peers"])
+    Soulseek(["Soulseek"])
+
+    subgraph exposure["Exposure"]
+        direction LR
+        DuckDNS["DuckDNS"]
+        Caddy["Caddy"]
+    end
+
+    subgraph gitops["GitOps"]
+        direction TB
+        Renovate["Renovate"]
+        Deployer["deployer"]
+    end
+
+    subgraph observation["Observation"]
+        direction LR
+        Homepage["Homepage"]
+        Beszel["Beszel"]
+        UptimeKuma["Uptime Kuma"]
+        Dozzle["Dozzle"]
+        Indexarr["Indexarr"]
+        Backup["Appdata backup"]
+    end
+
+    subgraph watch["Watch and request"]
+        direction TB
+        Jellyfin["Jellyfin"]
+        Seerr["Seerr"]
+    end
+
+    subgraph automation["Automation stack"]
+        direction LR
+        Prowlarr["Prowlarr"]
+        Recyclarr["Recyclarr"]
+        FlareSolverr["FlareSolverr"]
+        Radarr["Radarr"]
+        Sonarr["Sonarr"]
+        Lidarr["Lidarr"]
+        LazyLibrarian["LazyLibrarian"]
+        Suwayomi["Suwayomi"]
+        Bazarr["Bazarr"]
+        Tdarr["Tdarr"]
+    end
+
+    subgraph vpn["Gluetun VPN with kill switch"]
+        direction TB
+        qBittorrent["qBittorrent"]
+        slskd["slskd"]
+    end
+
+    subgraph ratio["Ratio"]
+        direction LR
+        autobrr["autobrr"]
+        crossseed["cross-seed"]
+        qbitmanage["qbit_manage"]
+        ratiolimit["ratio-limit"]
+        ratiograb["ratio-grab"]
+    end
+
+    subgraph data["Data"]
+        direction TB
+        Torrents[("Torrents")]
+        Library[("Library")]
+        Backups[("Backups")]
+    end
+
+    Friend -->|HTTPS| exposure
+    exposure --> watch
+    watch -->|Requests| automation
+    automation -->|grab| vpn
+    ratio -->|"grab, clean, cross-seed"| vpn
+    automation -->|search| Trackers
+    vpn -->|"tunnel only"| Trackers
+    vpn -->|download| data
+    automation -->|"import, subtitles, MKV H265"| data
+    watch -->|"read-only"| data
+    Admin -->|LAN| automation
+    Admin -->|PRs| GitHub
+    gitops -->|"update PRs, pulls main"| GitHub
+    DuckDNS -.-|"public IP, DNS challenge"| Caddy
+    Prowlarr --- FlareSolverr
+    Prowlarr -->|indexers| Radarr
+    Prowlarr -->|indexers| Sonarr
+    Recyclarr -->|profiles| Radarr
+    Recyclarr -->|profiles| Sonarr
+    Prowlarr -->|indexers| Lidarr
+    Prowlarr -->|indexers| LazyLibrarian
+    vpn -->|"tunnel only"| Soulseek
+    Admin -->|LAN| observation
+    observation -.->|"tiles, logs, checks"| automation
+    observation -.->|"tiles, logs, checks"| vpn
+    observation -.->|"tiles, logs, checks"| ratio
+    observation -->|"read-only, nightly backup"| data
+    observation -->|alerts| ntfy
+    ntfy -.->|push| Admin
+    Radarr ~~~ Bazarr
+    Sonarr ~~~ Tdarr
+    Homepage ~~~ Beszel ~~~ UptimeKuma
+    Dozzle ~~~ Indexarr ~~~ Backup
+    autobrr ~~~ crossseed ~~~ qbitmanage
+    ratiolimit ~~~ ratiograb
+```
+
+### Current (main)
+
+Same layout. Dashed grey boxes and links are planned and not running yet.
+
+```mermaid
+flowchart TB
+    Friend(["Friend"])
+    Admin(["Admin"])
+    GitHub(["GitHub"])
+    ntfy(["ntfy.sh"])
+    Trackers(["Trackers and peers"])
+    Soulseek(["Soulseek"])
+
+    subgraph exposure["Exposure"]
+        direction LR
+        DuckDNS["DuckDNS"]
+        Caddy["Caddy"]
+    end
+
+    subgraph gitops["GitOps"]
+        direction TB
+        Renovate["Renovate"]
+        Deployer["deployer"]
+    end
+
+    subgraph observation["Observation"]
+        direction LR
+        Homepage["Homepage"]
+        Beszel["Beszel"]
+        UptimeKuma["Uptime Kuma"]
+        Dozzle["Dozzle"]
+        Indexarr["Indexarr"]
+        Backup["Appdata backup"]
+    end
+
+    subgraph watch["Watch and request"]
+        direction TB
+        Jellyfin["Jellyfin"]
+        Seerr["Seerr"]
+    end
+
+    subgraph automation["Automation stack"]
+        direction LR
+        Prowlarr["Prowlarr"]
+        Recyclarr["Recyclarr"]
+        FlareSolverr["FlareSolverr"]
+        Radarr["Radarr"]
+        Sonarr["Sonarr"]
+        Lidarr["Lidarr"]
+        LazyLibrarian["LazyLibrarian"]
+        Suwayomi["Suwayomi"]
+        Bazarr["Bazarr"]
+        Tdarr["Tdarr"]
+    end
+
+    subgraph vpn["Gluetun VPN with kill switch"]
+        direction TB
+        qBittorrent["qBittorrent"]
+        slskd["slskd"]
+    end
+
+    subgraph ratio["Ratio"]
+        direction LR
+        autobrr["autobrr"]
+        crossseed["cross-seed"]
+        qbitmanage["qbit_manage"]
+        ratiolimit["ratio-limit"]
+        ratiograb["ratio-grab"]
+    end
+
+    subgraph data["Data"]
+        direction TB
+        Torrents[("Torrents")]
+        Library[("Library")]
+        Backups[("Backups")]
+    end
+
+    Friend -->|HTTPS| exposure
+    exposure --> watch
+    watch -->|Requests| automation
+    automation -->|grab| vpn
+    ratio -->|"grab, clean, cross-seed"| vpn
+    automation -->|search| Trackers
+    vpn -->|"tunnel only"| Trackers
+    vpn -->|download| data
+    automation -->|"import, subtitles, MKV H265"| data
+    watch -->|"read-only"| data
+    Admin -->|LAN| automation
+    Admin -->|PRs| GitHub
+    gitops -->|"update PRs, pulls main"| GitHub
+    DuckDNS -.-|"public IP, DNS challenge"| Caddy
+    Prowlarr --- FlareSolverr
+    Prowlarr -->|indexers| Radarr
+    Prowlarr -->|indexers| Sonarr
+    Recyclarr -->|profiles| Radarr
+    Recyclarr -->|profiles| Sonarr
+    Prowlarr -->|indexers| Lidarr
+    Prowlarr -->|indexers| LazyLibrarian
+    vpn -->|"tunnel only"| Soulseek
+    Admin -->|LAN| observation
+    observation -.->|"tiles, logs, checks"| automation
+    observation -.->|"tiles, logs, checks"| vpn
+    observation -.->|"tiles, logs, checks"| ratio
+    observation -->|"read-only, nightly backup"| data
+    observation -->|alerts| ntfy
+    ntfy -.->|push| Admin
+    Radarr ~~~ Bazarr
+    Sonarr ~~~ Tdarr
+    Homepage ~~~ Beszel ~~~ UptimeKuma
+    Dozzle ~~~ Indexarr ~~~ Backup
+    autobrr ~~~ crossseed ~~~ qbitmanage
+    ratiolimit ~~~ ratiograb
+
+    classDef planned fill:none,stroke:#9e9e9e,stroke-dasharray:4 4,color:#9e9e9e
+    class Lidarr,LazyLibrarian,Suwayomi,slskd,Soulseek,Backups,Homepage,Beszel,UptimeKuma,Dozzle,Indexarr,Backup,ntfy planned
+    style observation fill:none,stroke:#9e9e9e,stroke-dasharray:4 4,color:#9e9e9e
+    linkStyle 19,20,21,22,23,24,25,26,27,28 stroke:#9e9e9e,stroke-width:1px,stroke-dasharray:4 4,color:#9e9e9e
+```
+
 ## Prerequisites
 
 - Docker: Docker Desktop on Windows, Docker Engine with the Compose plugin on Linux.
