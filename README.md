@@ -635,6 +635,45 @@ docker compose logs ratio-grab
 
 ratio-grab reads `RATIO_GRAB_MAX_AGE_HOURS`, `RATIO_GRAB_MIN_SIZE_GB`, `RATIO_GRAB_MAX_SIZE_GB`, `RATIO_GRAB_MIN_LEECHERS`, `RATIO_GRAB_MIN_LEECHERS_PER_SEEDER`, `RATIO_GRAB_PER_DAY` and `RATIO_GRAB_MAX_DOWNLOADING` to change the limits above, once added to its `environment` in `ratio-limit/compose.yaml`.
 
+## Automatic deployment
+
+The NAS follows the `main` branch of GitHub: a change merged into `main` reaches the NAS within minutes, and nothing else changes it. The NAS runs from its own clone of the repo, kept on `main` and never edited: the deployer refuses to deploy while a tracked file differs from git. Edit the repo in another folder and go through a pull request. `.env` stays in the NAS clone only, outside git.
+
+The settings made in the web UIs of the services live in the appdata root, not in git, so the deploy never touches them. Back up the appdata root to keep them.
+
+### Deployer
+
+The deployer is a container, outside the NAS project, that runs `scripts/deploy.sh` every 5 minutes. Start it once from the NAS clone, in Git Bash on Windows:
+
+```sh
+docker compose -f deployer/compose.yaml up -d --build
+```
+
+Each run fast-forwards `main` to GitHub, then runs `docker compose up -d --build --remove-orphans`, which recreates the services whose compose file or image changed and removes the services commented out in `compose.yaml`. A service also restarts when another file of its folder changes, such as a script or a config file it mounts, since Docker would keep the old one. The deployer remembers the last deployed commit in `.git/jellynas-deployed` and does nothing until a new one is merged. A failed deploy is retried at the next run. When a change touches `deployer/Dockerfile` or `deployer/compose.yaml`, the deployer recreates itself.
+
+The deployer reaches Docker through its socket, which gives it full control of the machine, like any tool that runs Compose. Under Docker Desktop, it sees the clone through the path of the Docker Desktop VM, so its first deploy recreates every service that mounts a file of the repo.
+
+Its logs name each deploy, and the reason of each failed run, repeated every 5 minutes until it is fixed:
+
+```sh
+docker logs jellynas-deployer
+```
+
+To deploy without waiting, restart it, it deploys as soon as it starts. Running `scripts/deploy.sh` or `docker compose up` from Windows instead would recreate every service that mounts a file of the repo, twice, since Windows and the VM name the clone differently.
+
+```sh
+docker restart jellynas-deployer
+```
+
+### Renovate
+
+[Renovate](https://github.com/apps/renovate) keeps the images and the GitHub Actions up to date. Install the app on the repo only, then merge the onboarding pull request it opens if it still opens one. Its settings are in `renovate.json`:
+
+- It opens its pull requests early on Saturday morning, between midnight and 6 am, for releases at least 3 days old.
+- It merges a minor or patch update by itself once the CI passes, and the NAS deploys it.
+- A major update, and any update of Gluetun or qBittorrent, waits for the Admin to read its release notes and merge it.
+- The Dependency Dashboard issue lists every pending update.
+
 ## Verify the NAS
 
 Run the verification script from the repo folder, in Git Bash on Windows:
