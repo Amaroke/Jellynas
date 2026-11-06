@@ -647,8 +647,19 @@ In qBittorrent, Tools > Options > Connection, set "Port used for incoming connec
    docker compose logs qbittorrent
    ```
 
-2. Open `https://qbittorrent.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the local network and sign in with `admin` and that password.
-3. In Tools > Options > WebUI > Authentication, set a new username and a strong password stored in your password manager. Leave both "Bypass authentication" options unchecked.
+2. qBittorrent refuses its web UI behind Caddy until it trusts it as a reverse proxy, so turn on its reverse proxy support for the Docker networks, `172.16.0.0/12` on TrueNAS, while it is stopped:
+
+   ```sh
+   set -a && . ./.env && set +a
+   docker compose stop qbittorrent
+   sed -i '/^\[Preferences\]/a WebUI\\ReverseProxySupportEnabled=true\nWebUI\\TrustedReverseProxiesList=172.16.0.0/12' "$APPDATA_ROOT"/qbittorrent/qBittorrent/qBittorrent.conf
+   docker compose start qbittorrent
+   ```
+
+   Caddy sends qBittorrent its own address as the host and the lan name in `X-Forwarded-Host`, which qBittorrent then checks against the origin of each request, so its CSRF protection stays on.
+
+3. Open `https://qbittorrent.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the local network and sign in with `admin` and that password.
+4. In Tools > Options > WebUI > Authentication, set a new username and a strong password stored in your password manager. Leave both "Bypass authentication" options unchecked.
 
 ### Save paths
 
