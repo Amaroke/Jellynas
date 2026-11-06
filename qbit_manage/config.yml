@@ -7,7 +7,7 @@ commands:
   tag_tracker_error: true
   rem_orphaned: false
   tag_nohardlinks: false
-  share_limits: true
+  share_limits: false
   skip_qb_version_check: true
   skip_cleanup: false
 
@@ -41,31 +41,12 @@ cat:
   radarr: /data/torrents/movies
   tv-sonarr: /data/torrents/shows
   ratio: /data/torrents/ratio
+  zen: /data/torrents/zen
   cross-seed-link: /data/torrents/cross-seed/*
 
 tracker:
   other:
     tag: other
-
-share_limits:
-  ratio:
-    priority: 10
-    categories:
-      - ratio
-    max_ratio: -1
-    max_seeding_time: -1
-    max_last_active: 10d
-    cleanup: true
-    share_limit_action: Stop
-  cross-seed:
-    priority: 20
-    categories:
-      - cross-seed-link
-    max_ratio: -1
-    max_seeding_time: -1
-    max_last_active: 10d
-    cleanup: true
-    share_limit_action: Stop
 
 recyclebin:
   enabled: false

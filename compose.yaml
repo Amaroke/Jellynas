@@ -16,4 +16,4 @@ include:
   - autobrr/compose.yaml
   - cross-seed/compose.yaml
   - qbit_manage/compose.yaml
-  - ratio-limit/compose.yaml
+  - ratio/compose.yaml

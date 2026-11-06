@@ -35,3 +35,15 @@ _Avoid_: login, profile
 **Request**:
 A movie or show asked for by a Friend or the Admin, waiting to be added to the Library.
 _Avoid_: demand, ticket
+
+**Farm**:
+The torrents the NAS seeds only to earn upload on a private tracker, in the `ratio` and `cross-seed-link` categories of qBittorrent, kept while they upload.
+_Avoid_: ratio folder, ratio torrents
+
+**Zen reserve**:
+The rare torrents of C411 the NAS keeps seeding for the Zen they pay, whatever they upload, in the `zen` category of qBittorrent.
+_Avoid_: rare pool, bonus torrents
+
+**Twin**:
+The same release, byte for byte, on a public tracker, downloaded there so that its private copy costs no download on the private tracker.
+_Avoid_: mirror, duplicate

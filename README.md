@@ -95,8 +95,7 @@ flowchart LR
         autobrr("autobrr<br/>freeleech")
         crossseed("cross-seed")
         qbitmanage("qbit_manage")
-        ratiolimit("ratio-limit")
-        ratiograb("ratio-grab")
+        ratioscript("ratio<br/>farm, Zen reserve")
     end
 
     subgraph data["Data"]
@@ -143,7 +142,7 @@ flowchart LR
     Homepage ~~~ Beszel ~~~ UptimeKuma
     Dozzle ~~~ Indexarr ~~~ Backup
     autobrr ~~~ crossseed ~~~ qbitmanage
-    ratiolimit ~~~ ratiograb
+    qbitmanage ~~~ ratioscript
     Prowlarr ~~~ Suwayomi
 
     style canvas fill:#ffffff,stroke:#e5e7eb,stroke-width:1px
@@ -172,7 +171,7 @@ flowchart LR
     class qBittorrent,slskd vpnNode
     style vpn fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#1f2937
     classDef ratioNode fill:#ffffff,stroke:#ec407a,color:#1f2937,stroke-width:1.5px
-    class autobrr,crossseed,qbitmanage,ratiolimit,ratiograb ratioNode
+    class autobrr,crossseed,qbitmanage,ratioscript ratioNode
     style ratio fill:#fce4ec,stroke:#ec407a,stroke-width:2px,color:#1f2937
     classDef dataNode fill:#ffffff,stroke:#78909c,color:#1f2937,stroke-width:1.5px
     class Torrents,Library,Backups dataNode
@@ -249,8 +248,7 @@ flowchart LR
         autobrr("autobrr<br/>freeleech")
         crossseed("cross-seed")
         qbitmanage("qbit_manage")
-        ratiolimit("ratio-limit")
-        ratiograb("ratio-grab")
+        ratioscript("ratio<br/>farm, Zen reserve")
     end
 
     subgraph data["Data"]
@@ -297,7 +295,7 @@ flowchart LR
     Homepage ~~~ Beszel ~~~ UptimeKuma
     Dozzle ~~~ Indexarr ~~~ Backup
     autobrr ~~~ crossseed ~~~ qbitmanage
-    ratiolimit ~~~ ratiograb
+    qbitmanage ~~~ ratioscript
     Prowlarr ~~~ Suwayomi
 
     style canvas fill:#ffffff,stroke:#e5e7eb,stroke-width:1px
@@ -325,7 +323,7 @@ flowchart LR
     class qBittorrent vpnNode
     style vpn fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#1f2937
     classDef ratioNode fill:#ffffff,stroke:#ec407a,color:#1f2937,stroke-width:1.5px
-    class autobrr,crossseed,qbitmanage,ratiolimit,ratiograb ratioNode
+    class autobrr,crossseed,qbitmanage,ratioscript ratioNode
     style ratio fill:#fce4ec,stroke:#ec407a,stroke-width:2px,color:#1f2937
     classDef dataNode fill:#ffffff,stroke:#78909c,color:#1f2937,stroke-width:1.5px
     class Torrents,Library dataNode
@@ -1004,40 +1002,48 @@ Bazarr writes the outcome of each command in System > Logs.
 
 Requires [qBittorrent](#qbittorrent), [Prowlarr](#prowlarr), [Radarr](#radarr) and [Sonarr](#sonarr).
 
-The Admin keeps a good ratio on private trackers with torrents grabbed only to seed, without touching the Library. [ADR 0005](docs/adr/0005-ratio-torrents-stay-in-the-torrents-tree.md) records the layout:
+The Admin keeps a good ratio on a private tracker, C411, with torrents grabbed only to seed, without touching the Library. [ADR 0005](docs/adr/0005-ratio-torrents-stay-in-the-torrents-tree.md) records the layout:
 
-- ratio-grab sends the fresh releases with the hungriest swarms of each private indexer to qBittorrent in the `ratio` category, saved in `/data/torrents/ratio`. autobrr does the same from the IRC announces of a tracker, for freeleech filters. Radarr and Sonarr only import their own category, so a ratio torrent never reaches the Library.
-- cross-seed finds the torrents of the torrents tree on other trackers and seeds them too, from hardlinks in `/data/torrents/cross-seed`, without downloading them again.
-- qbit_manage tags every torrent by tracker, and removes ratio and cross-seed torrents once they stop uploading. Radarr and Sonarr still remove their own torrents.
-- ratio-limit keeps the ratio folder under `RATIO_MAX_SIZE_GB`.
+- ratio, `ratio/ratio.py`, runs the Farm and the Zen reserve. It grabs fresh releases with hungry swarms for the Farm, rare releases for the Zen reserve, downloads each from its Twin on Nyaa when one exists, and cleans both.
+- cross-seed finds the torrents of qBittorrent on C411 and seeds them there too, from hardlinks in `/data/torrents/cross-seed`, without downloading them again. qBittorrent tells it about every finished torrent.
+- qbit_manage tags every torrent by tracker. It removes nothing.
+- autobrr stays available for a tracker that announces on IRC. C411 does not.
 
-None of them sees the media tree. autobrr, ratio-grab and ratio-limit see no folder at all, cross-seed and qbit_manage see only the torrents tree.
+Radarr and Sonarr only import their own category, so a torrent of the Farm or the Zen reserve never reaches the Library. None of these tools sees the media tree. autobrr and ratio see no folder at all, cross-seed and qbit_manage see only the torrents tree.
 
 ### Risks
 
-- A private tracker bans an Account for a hit and run, a torrent removed before its minimum seeding time. Set the seeding goals of each tracker in Prowlarr, in qbit_manage and in `RATIO_MIN_SEEDING_DAYS` before grabbing anything.
+- A private tracker bans an Account for a hit and run, a torrent removed before its minimum seeding time. Set the seeding goals of each tracker in Prowlarr and in `RATIO_MIN_SEEDING_DAYS` before grabbing anything.
 - Ratio faking tools, which report uploads that never happened, get Accounts banned and are detected by every private tracker. Never use one.
-- Read the rules page of each tracker before enabling autobrr or cross-seed on it. Some forbid automated grabbing from IRC, or cross-seeding, or limit how many torrents you may download at once.
+- Read the rules page of each tracker before enabling autobrr, cross-seed or Twins on it. Some forbid automated grabbing, or cross-seeding from a public tracker, or limit how many torrents you may download at once.
 
 ### Folders
 
 ```bash
 set -a && . ./.env && set +a
-mkdir -p "$DATA_ROOT"/torrents/{ratio,cross-seed} "$APPDATA_ROOT"/{autobrr,cross-seed,qbit_manage}
+mkdir -p "$DATA_ROOT"/torrents/{ratio,zen,cross-seed} "$APPDATA_ROOT"/{autobrr,cross-seed,qbit_manage,ratio-grab}
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
-The `cross-seed` folder holds hardlinks to the data of other torrents, so the torrents tree must stay on a single disk.
+The `cross-seed` folder holds hardlinks to the data of other torrents, so the torrents tree must stay on a single disk. The state of ratio keeps the folder name `ratio-grab` of the script it replaced.
 
-### Ratio category
+### Account
 
-In qBittorrent, add a category `ratio` with `/data/torrents/ratio` as the save path. No other tool uses it.
+In `.env`, set `QBITTORRENT_USER` and `QBITTORRENT_PASSWORD` to the qBittorrent Account. cross-seed, qbit_manage and ratio use it. ratio creates the `ratio` and `zen` categories in qBittorrent by itself.
 
-In `.env`, set `QBITTORRENT_USER` and `QBITTORRENT_PASSWORD` to the qBittorrent Account. cross-seed, qbit_manage and ratio-limit use it.
+### Nyaa
+
+Nyaa is a public anime tracker. A download there costs nothing on C411, so Radarr and Sonarr prefer it, and ratio looks there for Twins.
+
+1. In Prowlarr, Indexers, click "Add Indexer", pick Nyaa.si, set "Indexer Priority" to `10`, click "Test", then "Save".
+2. Edit the C411 indexer, click "Show Advanced", and set "Indexer Priority" to `25`. At equal quality and score, Radarr and Sonarr then take Nyaa. A better release on C411 still wins, as [ADR 0002](docs/adr/0002-recyclarr-prefers-french-h265-1080p.md) ranks them.
+3. Note the id of Nyaa, the number in its Torznab URL `http://prowlarr:9696/<id>/api`, for `RATIO_TWIN_INDEXER_IDS`.
+
+Prowlarr syncs Nyaa to Radarr and Sonarr like any indexer. It returns almost only anime, so it costs nothing to search it for the other works.
 
 ### autobrr
 
-autobrr joins the IRC announce channel of each tracker and grabs a release the moment it is announced, when the swarm is hungry and a seeder uploads the most.
+autobrr joins the IRC announce channel of each tracker and grabs a release the moment it is announced. C411 announces on no channel autobrr knows, so it grabs nothing until another tracker joins.
 
 1. Open `https://autobrr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and create the Account at the first visit, with its own username and a strong password stored in your password manager.
 2. In Settings > Clients, click "Add new", pick qBittorrent, enter `http://gluetun:8080` as the host and the qBittorrent Account. Under "Rules", check "Enabled" and set "Max active downloads" to `2`, so autobrr never fills the queue of Radarr and Sonarr. Save.
@@ -1046,14 +1052,12 @@ autobrr joins the IRC announce channel of each tracker and grabs a release the m
 
    | Tab | Setting | Value |
    | --- | --- | --- |
-   | General | Size | Min `1 GB`, max `30 GB`, so one grab never takes most of the ratio folder |
+   | General | Size | Min `1 GB`, max `30 GB`, so one grab never takes most of the Farm |
    | General | Max downloads | `5` per day |
    | Advanced | Freeleech | Checked, so a grab never costs ratio |
    | Actions | Action | qBittorrent, the client above, with `ratio` as the category |
 
 5. Save, and leave the filter enabled. A matching announce then shows up in qBittorrent in the `ratio` category within seconds, and in the Releases page of autobrr.
-
-Uncheck Freeleech only on a tracker that rewards seeding time more than ratio, after reading its rules.
 
 autobrr reaches IRC and the tracker from the home IP. Only qBittorrent goes through the VPN, as for Radarr and Sonarr.
 
@@ -1061,7 +1065,7 @@ autobrr reaches IRC and the tracker from the home IP. Only qBittorrent goes thro
 
 cross-seed searches the private indexers of Prowlarr for torrents that hold the same data as one already in qBittorrent, and adds them seeding from a hardlink, without downloading anything. Its config is `cross-seed/config.js`, which reads every value from `.env`.
 
-1. In `.env`, set `CROSS_SEED_API_KEY` to a new key, `PROWLARR_API_KEY` to the key of Prowlarr from Settings > General > Security, and `CROSS_SEED_INDEXER_IDS` to the ids of the private indexers to search. Prowlarr shows the id of an indexer in its Torznab URL, `http://prowlarr:9696/<id>/api`, in Indexers when you edit it.
+1. In `.env`, set `CROSS_SEED_API_KEY` to a new key, `PROWLARR_API_KEY` to the key of Prowlarr from Settings > General > Security, and `CROSS_SEED_INDEXER_IDS` to the ids of the private indexers to search, C411 only. Prowlarr shows the id of an indexer in its Torznab URL, `http://prowlarr:9696/<id>/api`, in Indexers when you edit it.
 
    ```bash
    openssl rand -hex 24
@@ -1073,13 +1077,15 @@ cross-seed searches the private indexers of Prowlarr for torrents that hold the 
    docker compose logs cross-seed
    ```
 
-cross-seed searches each new torrent of qBittorrent, searches it again once a day for two weeks, and adds each match in the `cross-seed-link` category. Leave public indexers out, a public torrent brings no ratio.
+ratio sets "Run external program on torrent finished" in qBittorrent, Tools > Options > Downloads, to a `curl` that sends the hash of each finished torrent to cross-seed, single episodes included. cross-seed then searches C411 at once, while its swarm is still hungry, and adds each match in the `cross-seed-link` category. It also searches each new torrent again once a day for two weeks. Leave public indexers out of `CROSS_SEED_INDEXER_IDS`, a public torrent brings no ratio.
+
+To check the hook, open View > Log in qBittorrent once a torrent finishes: it shows the `curl` command it ran. cross-seed then names the torrent in its logs.
 
 ### qbit_manage
 
-qbit_manage runs every 10 minutes, so a new ratio torrent gets its own limits before the global seeding limit of qBittorrent can stop it. Its config lives in its appdata folder, since it holds the names of your trackers, which stay out of the repo. `qbit_manage/config.yml` is the starting point.
+qbit_manage tags every torrent by tracker every 10 minutes. ratio is the only tool that removes a torrent of the Farm or the Zen reserve, and Radarr and Sonarr still remove their own. Its config lives in its appdata folder, since it holds the names of your trackers. `qbit_manage/config.yml` is the starting point.
 
-1. Copy it, replacing the file qbit_manage creates at its first start:
+1. Copy it, replacing the file qbit_manage uses:
 
    ```bash
    set -a && . ./.env && set +a
@@ -1089,37 +1095,31 @@ qbit_manage runs every 10 minutes, so a new ratio torrent gets its own limits be
 
 2. Open `https://qbit-manage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. In the Security section, set the authentication method to "Basic Authentication", enter a username and a strong password, distinct from the other tools, leave "Bypass authentication for local" unchecked, and save.
 3. In Tracker Configuration, add one entry per tracker, with a keyword of its announce URL and its name as the tag. A torrent from a tracker not listed gets the `other` tag.
-4. In Share Limits, the `ratio` and `cross-seed` groups never stop a torrent at a ratio or a seeding time, since a torrent that uploads well should keep seeding. They remove a torrent with its files once it has uploaded nothing for 10 days, which comes after the minimum seeding time of any tracker that asks for 10 days or less. For a tracker that asks for more, raise "Max Last Active" in its group above its minimum. ratio-limit frees space when the ratio folder is full. For a tracker with other rules, add a group with a priority number below 10, such as 5, since the smallest number wins, with its tag under "Include All Tags" and `ratio` and `cross-seed-link` under "Categories".
-5. Save, then run the commands from the toolbar to see the result right away.
+4. Check that "Share Limits" is off in the commands, so qbit_manage never removes a torrent behind ratio.
 
-qbit_manage never touches the share limits of the `radarr` and `tv-sonarr` categories, so Radarr and Sonarr keep removing their own torrents.
+### ratio
 
-### ratio-limit
+ratio, `ratio/ratio.py`, runs every 10 minutes. It reads qBittorrent and Prowlarr, then:
 
-ratio-limit, `ratio-limit/ratio_limit.py`, checks the ratio folder every 5 minutes. Once its torrents add up to more than `RATIO_MAX_SIZE_GB`, it removes those that upload the least for their seeding time, with their files, until the folder is back under the limit. It never removes a torrent still downloading, nor one that seeded less than `RATIO_MIN_SEEDING_DAYS`.
+1. **Counts.** It keeps what each C411 torrent downloaded and uploaded in `${APPDATA_ROOT}/ratio-grab/ratio-grab.json`, removed torrents included, which gives the deficit or the surplus of the Account on its torrents. A torrent belongs to C411 when its announce URL holds `RATIO_TRACKER`.
+2. **Drops Twins.** Once cross-seed seeds the C411 copy of a Twin, it removes the Nyaa copy. The hardlink of cross-seed keeps the data.
+3. **Cleans the Farm.** The Farm is the `ratio` and `cross-seed-link` categories. A torrent that uploaded less than 0.2 times its size in the last 7 days leaves it. So do the torrents that upload the least for their seeding time once the Farm holds more than `RATIO_MAX_SIZE_GB`. A C411 torrent that leaves and is still rare moves to the Zen reserve when it has room, any other is removed with its files. No torrent leaves before `RATIO_MIN_SEEDING_DAYS`.
+4. **Cleans the Zen reserve.** The Zen reserve is the `zen` category, up to `RATIO_ZEN_MAX_SIZE_GB`. A torrent leaves once it is no longer rare, and the least rare leave first when it is full.
+5. **Grabs.** It reads the newest movies and shows of each indexer in `RATIO_GRAB_INDEXER_IDS`, while fewer than 2 torrents of the Farm and the Zen reserve are downloading:
+   - for the Farm, a release at most 1 hour old, between 1 and 5 GB, with at least 10 leechers and 5 leechers per seeder,
+   - for the Zen reserve, a rare release between 1 and 5 GB with at least one seeder, the fewest seeders first. The Zen reserve comes first while it holds fewer than 15 torrents, the count that gives the Swarm Keeper class its best bonus.
 
-In `.env`, set `RATIO_MAX_SIZE_GB` to the space you give to ratio torrents, and `RATIO_MIN_SEEDING_DAYS` to the longest minimum seeding time of your trackers, then recreate it with `docker compose up -d`. Its logs name each torrent it removes:
+   For each release, it looks in `RATIO_TWIN_INDEXER_IDS` for a Twin, the same size to the byte. With a Twin, it downloads it from Nyaa, for free. Without one, it pays C411 at most 3 times a day: for the Farm while the deficit stays under `RATIO_GRAB_MAX_DEFICIT_GB`, for the Zen reserve only once the surplus reaches `RATIO_ZEN_HUNT_MIN_SURPLUS_GB`.
 
-```sh
-docker compose logs ratio-limit
-```
+A torrent is rare when C411 counts at most 24 seeders for it under 1 GB, 50 up to 100 GB, and 199 beyond, the thresholds of the Swarm Keeper class. Each Zen is worth 1 GB of upload in the shop of C411, so the Zen reserve also builds the ratio.
 
-### ratio-grab
-
-ratio-grab, `ratio-limit/ratio_grab.py`, reads the newest movies and shows of each Prowlarr indexer in `RATIO_GRAB_INDEXER_IDS` every 15 minutes, and sends the hungriest swarms to qBittorrent in the `ratio` category. It works without freeleech, since it judges the demand of a release once leechers are waiting, which autobrr cannot do on a release it sees the second it is announced. A release is grabbed when:
-
-- it is at most 1 hour old, between 1 and 5 GB, and not already in qBittorrent, so it finishes while the swarm still has leechers,
-- it has at least one seeder, at least 10 leechers, and at least 5 leechers per seeder,
-- fewer than 2 ratio torrents are downloading, fewer than 3 were grabbed in the last 24 hours, and the ratio folder has room for it under `RATIO_MAX_SIZE_GB`.
-- the ratio torrents have not downloaded more than `RATIO_GRAB_MAX_DEFICIT_GB` beyond what they uploaded. Over it, ratio-grab pauses until their upload pays the difference back, and says so in its logs. It keeps what each ratio torrent downloaded and uploaded in `${APPDATA_ROOT}/ratio-grab/ratio-grab.json`, so a torrent removed by ratio-limit or qbit_manage still counts. To start over, for example once the ratio on the tracker has a buffer, stop ratio-grab, delete that file and start it again.
-
-Each download counts against your ratio until it uploads more than it took, so keep these limits until the Account has a buffer. In `.env`, set `RATIO_GRAB_INDEXER_IDS` to the id of each private indexer to watch, then recreate it with `docker compose up -d`. Its logs name each grab with its swarm:
+In `.env`, set the `RATIO_*` values, then recreate it with `docker compose up -d`. Its logs name each grab, move and removal:
 
 ```sh
-docker compose logs ratio-grab
+docker compose logs ratio
 ```
 
-ratio-grab reads `RATIO_GRAB_MAX_AGE_HOURS`, `RATIO_GRAB_MIN_SIZE_GB`, `RATIO_GRAB_MAX_SIZE_GB`, `RATIO_GRAB_MIN_LEECHERS`, `RATIO_GRAB_MIN_LEECHERS_PER_SEEDER`, `RATIO_GRAB_PER_DAY` and `RATIO_GRAB_MAX_DOWNLOADING` to change the limits above, once added to its `environment` in `ratio-limit/compose.yaml`.
+To start the deficit over, for example once the ratio on the tracker has a buffer, stop ratio, delete its state file and start it again. ratio also reads `RATIO_MINUTES`, `RATIO_STALE_DAYS`, `RATIO_STALE_MIN_UPLOAD`, `RATIO_ZEN_MIN_TORRENTS`, `RATIO_TWIN_LOOKUPS`, `RATIO_GRAB_MAX_AGE_HOURS`, `RATIO_GRAB_MIN_SIZE_GB`, `RATIO_GRAB_MAX_SIZE_GB`, `RATIO_GRAB_MIN_LEECHERS`, `RATIO_GRAB_MIN_LEECHERS_PER_SEEDER`, `RATIO_GRAB_PER_DAY` and `RATIO_GRAB_MAX_DOWNLOADING` to change the limits above, once added to its `environment` in `ratio/compose.yaml`.
 
 ## Verify the NAS
 
