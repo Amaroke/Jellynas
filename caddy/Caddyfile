@@ -54,7 +54,15 @@
 	import lan truenas host.docker.internal:80
 	import lan jellyfin jellyfin:8096
 	import lan seerr seerr:5055
-	import lan qbittorrent gluetun:8080
+	@qbittorrent {
+		host qbittorrent.lan.{$DOMAIN}
+		remote_ip {$LAN_SUBNET}
+	}
+	handle @qbittorrent {
+		reverse_proxy gluetun:8080 {
+			header_up Host {upstream_hostport}
+		}
+	}
 	import lan prowlarr prowlarr:9696
 	import lan radarr radarr:7878
 	import lan sonarr sonarr:8989
