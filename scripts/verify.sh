@@ -197,6 +197,9 @@ check_login_required() {
   host="${host%%[:/]*}"
   result="$(curl --silent --output /dev/null --write-out '%{http_code} %{redirect_url}' --max-time 10 --resolve "$host:$https_port:$host_ip" "$url")"
   case "$result" in
+    30?" http://"*)
+      fail "$service" "web UI redirects to plain HTTP at $url (${result#* })"
+      ;;
     401" "* | 403" "*)
       pass "$service" "web UI requires a login (HTTP ${result%% *})"
       ;;
@@ -279,7 +282,7 @@ caddy_running() {
 }
 
 check_public_hostname() {
-  local host="$1" target="${2:-127.0.0.1}" code deadline
+  local host="$1" target="${2:-127.0.0.1}" code deadline redirect
   [ -n "$host" ] || return
   caddy_running "https://$host" || return
   deadline=$((SECONDS + health_timeout))
@@ -288,8 +291,12 @@ check_public_hostname() {
     sleep 5
     code="$(http_code --resolve "$host:$https_port:$target" "https://$host:$https_port/")"
   done
-  case "$code" in
-    2?? | 3??)
+  redirect="$(curl --silent --output /dev/null --write-out '%{redirect_url}' --max-time 10 --resolve "$host:$https_port:$target" "https://$host:$https_port/")"
+  case "$code:$redirect" in
+    3??:http://*)
+      fail caddy "https://$host redirects to plain HTTP ($redirect)"
+      ;;
+    2??:* | 3??:*)
       pass caddy "https://$host answers $code with a valid certificate"
       ;;
     *)
