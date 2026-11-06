@@ -9,16 +9,7 @@ log() {
 }
 
 host_path() {
-  local source drive
-  source="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/repo"}}{{.Source}}{{end}}{{end}}' "$(hostname)")"
-  source="$(printf '%s' "$source" | tr '\\' /)"
-  case "$source" in
-    [A-Za-z]:/*)
-      drive="$(printf '%s' "${source%%:*}" | tr '[:upper:]' '[:lower:]')"
-      source="/run/desktop/mnt/host/$drive${source#?:}"
-      ;;
-  esac
-  printf '%s' "$source"
+  docker inspect -f '{{range .Mounts}}{{if eq .Destination "/repo"}}{{.Source}}{{end}}{{end}}' "$(hostname)"
 }
 
 enter_repo() {

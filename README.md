@@ -313,10 +313,63 @@ flowchart LR
     linkStyle 22,23,24,25,26,27,28,29,30,31,32 stroke:#9e9e9e,stroke-width:1px,stroke-dasharray:4 4,color:#9e9e9e
 ```
 
-## Prerequisites
+## Host
 
-- Docker: Docker Desktop on Windows, Docker Engine with the Compose plugin on Linux.
-- Git, with Git Bash on Windows to run the verification script.
+The NAS runs on TrueNAS SCALE, in a Hyper-V virtual machine on the PC until the UGREEN NAS replaces it. [ADR 0007](docs/adr/0007-the-nas-runs-on-the-docker-of-truenas-scale.md) records why. Every command of this README runs on TrueNAS, in System > Shell or over SSH, as root and from the clone:
+
+```sh
+sudo -i
+cd /mnt/tank/jellynas
+```
+
+### Virtual machine
+
+Download the TrueNAS SCALE ISO from [truenas.com](https://www.truenas.com/download-truenas-community-edition/). In PowerShell run as administrator, create an external switch on the Ethernet adapter, which cuts the network of the PC for a few seconds, then the virtual machine with its boot and pool disks:
+
+```powershell
+New-VMSwitch -Name External -NetAdapterName Ethernet -AllowManagementOS $true
+New-VM -Name truenas -Generation 2 -MemoryStartupBytes 8GB -SwitchName External -NewVHDPath C:\Hyper-V\truenas\boot.vhdx -NewVHDSizeBytes 32GB
+Set-VM -Name truenas -ProcessorCount 3 -StaticMemory -CheckpointType Disabled -AutomaticStartAction Start -AutomaticStopAction ShutDown
+Set-VMFirmware -VMName truenas -EnableSecureBoot Off
+New-VHD -Path C:\Hyper-V\truenas\pool.vhdx -SizeBytes 200GB -Dynamic
+Add-VMHardDiskDrive -VMName truenas -Path C:\Hyper-V\truenas\pool.vhdx
+Add-VMDvdDrive -VMName truenas -Path <path of the ISO>
+Set-VMFirmware -VMName truenas -FirstBootDevice (Get-VMDvdDrive -VMName truenas)
+Start-VM -Name truenas
+```
+
+Checkpoints stay disabled, the snapshots of ZFS replace them. The virtual machine starts and stops with the PC.
+
+Open it in Hyper-V Manager and install TrueNAS on the 32 GB disk, with `truenas_admin` as the administrative user. Leave the installer on its final menu, and pin the MAC address of the virtual machine, so that the router always gives it the same address:
+
+```powershell
+$mac = (Get-VMNetworkAdapter -VMName truenas).MacAddress
+Stop-VM -Name truenas -TurnOff -Force
+Set-VMNetworkAdapter -VMName truenas -StaticMacAddress $mac
+Get-VMDvdDrive -VMName truenas | Remove-VMDvdDrive
+Set-VMFirmware -VMName truenas -FirstBootDevice (Get-VMHardDiskDrive -VMName truenas -ControllerLocation 0)
+Start-VM -Name truenas
+```
+
+In the router, give that MAC address a fixed local IP. It is the address of the NAS.
+
+### Pool and datasets
+
+Open `http://<NAS address>` and sign in with `truenas_admin`.
+
+1. In Storage, create a pool named `tank` on the 200 GB disk, as a stripe. The redundancy comes with the UGREEN.
+2. In Datasets, add three datasets to `tank` with the "Apps" preset, so the `apps` user, 568, owns them: `data`, `appdata` and `jellynas`. Never add a child dataset under `data`: `torrents` and `media` are plain folders, so that the hardlinks of cross-seed stay on one file system.
+3. In Apps, click "Configure", pick `tank` as the pool, and save. TrueNAS starts its Docker.
+
+### Clone
+
+In System > Shell, clone the repo into its dataset. Git refuses a clone that root does not own until it is marked as safe:
+
+```sh
+sudo -i
+git clone https://github.com/Amaroke/Jellynas.git /mnt/tank/jellynas
+git config --global --add safe.directory /mnt/tank/jellynas
+```
 
 ## Fill in the settings
 
@@ -342,14 +395,15 @@ Both roots live outside the repo, at the paths set in `DATA_ROOT` and `APPDATA_R
     └── manga
 ```
 
-Create it from the repo folder, in bash (Git Bash on Windows):
+Create it from the clone:
 
 ```bash
-set -a && . <(tr -d '\r' < .env) && set +a
+set -a && . ./.env && set +a
 mkdir -p "$DATA_ROOT"/torrents "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$APPDATA_ROOT"/seerr "$APPDATA_ROOT"/recyclarr
+chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
-On Linux, make sure the user matching `PUID` and `PGID` owns both roots.
+The services run as `PUID` and `PGID`, so the last command gives them the folders that root just created.
 
 ## Start the NAS
 
@@ -407,7 +461,7 @@ The duckdns service then updates the address every five minutes. Your DuckDNS ad
 
 ### Router port forwards
 
-Pick the HTTPS port Friends will use and set it in `CADDY_HTTPS_PORT`, or leave it empty for 443. A high port that no service uses by default, such as a random five-digit number, draws fewer automated scans. Stay below 49152: Windows reserves blocks of ports above it for Hyper-V and Docker, and `netsh interface ipv4 show excludedportrange protocol=tcp` lists them. Friends then add it to the address, for example `https://jellyfin.<subdomain>.duckdns.org:<port>`, which the Jellyfin apps accept.
+Pick the HTTPS port Friends will use and set it in `CADDY_HTTPS_PORT`, or leave it empty for 443. A high port that no service uses by default, such as a random five-digit number, draws fewer automated scans. Friends then add it to the address, for example `https://jellyfin.<subdomain>.duckdns.org:<port>`, which the Jellyfin apps accept.
 
 On your router, forward that single TCP port to the local IP of the NAS, and nothing else. Set both the external and the internal port of the rule to `CADDY_HTTPS_PORT`, never the internal port to 443: Caddy listens on `CADDY_HTTPS_PORT` on the NAS. Every other port, including the Jellyfin port and the admin tools, stays reachable on the local network only. Give the NAS a fixed local IP in the router so the forward keeps working.
 
@@ -553,8 +607,9 @@ In Settings > Media Management, click "Show Advanced" at the top, then:
 Create the recycle bin folder first, from the repo folder in bash:
 
 ```bash
-set -a && . <(tr -d '\r' < .env) && set +a
+set -a && . ./.env && set +a
 mkdir -p "$DATA_ROOT"/media/movies/.recycle
+chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
 ### Download client
@@ -628,8 +683,9 @@ In Settings > Media Management, click "Show Advanced" at the top, then:
 Create the recycle bin folder first, from the repo folder in bash:
 
 ```bash
-set -a && . <(tr -d '\r' < .env) && set +a
+set -a && . ./.env && set +a
 mkdir -p "$DATA_ROOT"/media/shows/.recycle
+chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
 ### Download client
@@ -700,7 +756,7 @@ Recyclarr creates the profiles but never assigns them.
 Interactive Search, in a movie or an episode, shows the score of each release and why any is refused. To score a release name without searching, use the parse endpoint of Radarr. The name must match a movie already in Radarr, here Your Name, otherwise no profile applies and the score stays at 0:
 
 ```bash
-set -a && . <(tr -d '\r' < .env) && set +a
+set -a && . ./.env && set +a
 curl -s -G -H "X-Api-Key: $RADARR_API_KEY" --data-urlencode "title=Your.Name.2016.MULTi.1080p.WEB.x265-GROUP" "http://localhost:${RADARR_PORT:-7878}/api/v3/parse"
 ```
 
@@ -848,8 +904,9 @@ None of them sees the media tree. autobrr, ratio-grab and ratio-limit see no fol
 ### Folders
 
 ```bash
-set -a && . <(tr -d '\r' < .env) && set +a
+set -a && . ./.env && set +a
 mkdir -p "$DATA_ROOT"/torrents/{ratio,cross-seed} "$APPDATA_ROOT"/{autobrr,cross-seed,qbit_manage}
+chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
 The `cross-seed` folder holds hardlinks to the data of other torrents, so the torrents tree must stay on a single disk.
@@ -907,7 +964,7 @@ qbit_manage runs every 10 minutes, so a new ratio torrent gets its own limits be
 1. Copy it, replacing the file qbit_manage creates at its first start:
 
    ```bash
-   set -a && . <(tr -d '\r' < .env) && set +a
+   set -a && . ./.env && set +a
    cp qbit_manage/config.yml "$APPDATA_ROOT"/qbit_manage/config.yml
    docker compose restart qbit_manage
    ```
@@ -954,7 +1011,7 @@ The settings made in the web UIs of the services live in the appdata root, not i
 
 ### Deployer
 
-The deployer is a container, outside the NAS project, that runs `scripts/deploy.sh` every 5 minutes. Start it once from the NAS clone, in Git Bash on Windows:
+The deployer is a container, outside the NAS project, that runs `scripts/deploy.sh` every 5 minutes. Start it once from the clone:
 
 ```sh
 docker compose -f deployer/compose.yaml up -d --build
@@ -962,7 +1019,7 @@ docker compose -f deployer/compose.yaml up -d --build
 
 Each run fast-forwards `main` to GitHub, then runs `docker compose up -d --build --remove-orphans`, which recreates the services whose compose file or image changed and removes the services commented out in `compose.yaml`. A service also restarts when another file of its folder changes, such as a script or a config file it mounts, since Docker would keep the old one. The deployer remembers the last deployed commit in `.git/jellynas-deployed` and does nothing until a new one is merged. A failed deploy is retried at the next run. When a change touches `deployer/Dockerfile` or `deployer/compose.yaml`, the deployer recreates itself.
 
-The deployer reaches Docker through its socket, which gives it full control of the machine, like any tool that runs Compose. Under Docker Desktop, it sees the clone through the path of the Docker Desktop VM, so its first deploy recreates every service that mounts a file of the repo.
+The deployer reaches Docker through its socket, which gives it full control of the machine, like any tool that runs Compose.
 
 Its logs name each deploy, and the reason of each failed run, repeated every 5 minutes until it is fixed:
 
@@ -970,7 +1027,7 @@ Its logs name each deploy, and the reason of each failed run, repeated every 5 m
 docker logs jellynas-deployer
 ```
 
-To deploy without waiting, restart it, it deploys as soon as it starts. Running `scripts/deploy.sh` or `docker compose up` from Windows instead would recreate every service that mounts a file of the repo, twice, since Windows and the VM name the clone differently.
+To deploy without waiting, restart it, it deploys as soon as it starts:
 
 ```sh
 docker restart jellynas-deployer
@@ -985,121 +1042,9 @@ docker restart jellynas-deployer
 - A major update, and any update of Gluetun or qBittorrent, waits for the Admin to read its release notes and merge it.
 - The Dependency Dashboard issue lists every pending update.
 
-## TrueNAS host
-
-The NAS moves from Docker Desktop on the PC to TrueNAS SCALE, first in a Hyper-V virtual machine on the PC, later on a UGREEN NAS. [ADR 0007](docs/adr/0007-the-nas-runs-on-the-docker-of-truenas-scale.md) records why. The services keep the same paths inside their containers, so nothing changes in their web UIs.
-
-### Virtual machine
-
-Download the TrueNAS SCALE ISO from [truenas.com](https://www.truenas.com/download-truenas-scale/). In PowerShell run as administrator, create an external switch on the Ethernet adapter, which cuts the network of the PC for a few seconds, then the virtual machine with its boot and pool disks:
-
-```powershell
-New-VMSwitch -Name External -NetAdapterName Ethernet -AllowManagementOS $true
-New-VM -Name truenas -Generation 2 -MemoryStartupBytes 8GB -SwitchName External -NewVHDPath C:\Hyper-V\truenas\boot.vhdx -NewVHDSizeBytes 32GB
-Set-VM -Name truenas -ProcessorCount 3 -StaticMemory -CheckpointType Disabled -AutomaticStartAction Start -AutomaticStopAction ShutDown
-Set-VMFirmware -VMName truenas -EnableSecureBoot Off
-New-VHD -Path C:\Hyper-V\truenas\pool.vhdx -SizeBytes 200GB -Dynamic
-Add-VMHardDiskDrive -VMName truenas -Path C:\Hyper-V\truenas\pool.vhdx
-Add-VMDvdDrive -VMName truenas -Path <path of the ISO>
-Set-VMFirmware -VMName truenas -FirstBootDevice (Get-VMDvdDrive -VMName truenas)
-Start-VM -Name truenas
-```
-
-Checkpoints stay disabled, the snapshots of ZFS replace them. The virtual machine starts and stops with Windows.
-
-Open it in Hyper-V Manager and install TrueNAS on the 32 GB disk. Once it runs, pin its MAC address, so that the router always gives it the same address:
-
-```powershell
-$mac = (Get-VMNetworkAdapter -VMName truenas).MacAddress
-Stop-VM -Name truenas
-Set-VMNetworkAdapter -VMName truenas -StaticMacAddress $mac
-Get-VMDvdDrive -VMName truenas | Remove-VMDvdDrive
-Start-VM -Name truenas
-```
-
-In the router, give that MAC address a fixed local IP. It is the address of the NAS from now on.
-
-### Pool and datasets
-
-Open `http://<NAS address>` and sign in with the admin Account set during the install.
-
-1. In Storage, create a pool named `tank` on the 200 GB disk, as a stripe. The redundancy comes with the UGREEN.
-2. In Datasets, add three datasets to `tank` with the "Apps" preset, so the `apps` user, 568, owns them: `data`, `appdata` and `jellynas`. Never add a child dataset under `data`: `torrents` and `media` are plain folders, so that the hardlinks of cross-seed stay on one file system.
-3. In Apps, click "Configure", pick `tank` as the pool, and save. TrueNAS starts its Docker.
-4. In System > Shell, check that Gluetun can open its tunnel and that Compose is there:
-
-   ```sh
-   ls -l /dev/net/tun
-   sudo docker compose version
-   ```
-
-### Clone and settings
-
-In System > Shell, clone the repo into its dataset, with the image the deployer is built from, since TrueNAS may have no git:
-
-```sh
-sudo docker run --rm -v /mnt/tank/jellynas:/repo docker:29.9.1-cli sh -c "apk add --no-cache git && git clone https://github.com/Amaroke/Jellynas.git /repo"
-```
-
-Create `.env` from the one of the PC and paste its content:
-
-```sh
-sudo nano /mnt/tank/jellynas/.env
-```
-
-Then change only these four values:
-
-```sh
-PUID=568
-PGID=568
-DATA_ROOT=/mnt/tank/data
-APPDATA_ROOT=/mnt/tank/appdata
-```
-
-### Move the NAS
-
-1. In Credentials > Users, edit the admin Account, check "Allow all sudo commands with no password" and enable the SSH service in System > Services, for the copy only.
-2. On the PC, stop the deployer first, so it does not start the NAS again, then the NAS, from the NAS clone in Git Bash:
-
-   ```sh
-   docker stop jellynas-deployer
-   docker compose down
-   ```
-
-3. Copy the data and appdata roots into their datasets, in Git Bash, with the roots of the PC:
-
-   ```bash
-   tar -C /c/NAS -cf - data appdata | ssh truenas_admin@<NAS address> "sudo tar -C /mnt/tank -xf -"
-   ```
-
-4. In System > Shell, give them to the `apps` user:
-
-   ```sh
-   sudo chown -R 568:568 /mnt/tank/data /mnt/tank/appdata
-   ```
-
-5. Uncheck "Allow all sudo commands with no password" and disable the SSH service.
-6. Start the deployer from the clone. Its first run starts the whole NAS:
-
-   ```sh
-   cd /mnt/tank/jellynas
-   sudo docker compose -f deployer/compose.yaml up -d --build
-   sudo docker logs -f jellynas-deployer
-   ```
-
-7. In the router, point the forward of `CADDY_HTTPS_PORT` to the address of the NAS.
-8. Run the verification script in System > Shell, then open the public addresses on a phone on 4G:
-
-   ```sh
-   cd /mnt/tank/jellynas
-   sudo bash scripts/verify.sh
-   ```
-
-Once every check passes, uninstall Docker Desktop from the PC. Keep `C:\NAS` until the Library and the history of each Friend show up as before.
-
 ## Verify the NAS
 
-Run the verification script from the repo folder, in Git Bash on Windows:
+Run the verification script from the clone:
 
 ```sh
 ./scripts/verify.sh
