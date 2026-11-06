@@ -12,8 +12,6 @@ services:
       - ${DATA_ROOT}/media/shows:/data/media/shows
       - ${DATA_ROOT}/media/anime:/data/media/anime
       - ${DATA_ROOT}/torrents:/data/torrents
-    ports:
-      - ${SONARR_PORT:-8989}:8989
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8989/ping"]
       interval: 30s

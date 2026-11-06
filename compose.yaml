@@ -4,7 +4,6 @@ include:
   - jellyfin/compose.yaml
   - seerr/compose.yaml
   - caddy/compose.yaml
-  - duckdns/compose.yaml
   - gluetun/compose.yaml
   - qbittorrent/compose.yaml
   - flaresolverr/compose.yaml

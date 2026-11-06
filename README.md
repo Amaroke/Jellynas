@@ -7,9 +7,9 @@ Follow the sections in order. Each one starts with the sections it requires, whi
 1. [Host](#host)
 2. [Fill in the settings](#fill-in-the-settings)
 3. [Create the data and appdata roots](#create-the-data-and-appdata-roots)
-4. [Start the NAS](#start-the-nas)
-5. [Jellyfin](#jellyfin)
-6. [Public access](#public-access)
+4. [Domain](#domain)
+5. [Start the NAS](#start-the-nas)
+6. [Jellyfin](#jellyfin)
 7. [Seerr](#seerr)
 8. [qBittorrent](#qbittorrent)
 9. [Radarr](#radarr)
@@ -44,7 +44,7 @@ flowchart LR
 
     subgraph exposure["Exposure"]
         direction LR
-        DuckDNS("DuckDNS<br/>dynamic DNS")
+        OVH("OVH<br/>DNS zone")
         Caddy("Caddy<br/>HTTPS proxy")
     end
 
@@ -120,7 +120,7 @@ flowchart LR
     Admin -->|LAN| automation
     Admin --> GitHub
     gitops -->|"update PRs, pulls main"| GitHub
-    DuckDNS -.-|"public IP, DNS challenge"| Caddy
+    OVH -.-|"public IP, DNS challenge"| Caddy
     Prowlarr --- FlareSolverr
     Prowlarr -->|indexers| Radarr
     Prowlarr -->|indexers| Sonarr
@@ -154,7 +154,7 @@ flowchart LR
     class Friend,Admin person
     class GitHub,ntfy,Trackers,Soulseek,MangaSources external
     classDef exposureNode fill:#ffffff,stroke:#1e88e5,color:#1f2937,stroke-width:1.5px
-    class DuckDNS,Caddy exposureNode
+    class OVH,Caddy exposureNode
     style exposure fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#1f2937
     classDef gitopsNode fill:#ffffff,stroke:#7e57c2,color:#1f2937,stroke-width:1.5px
     class Renovate,Deployer gitopsNode
@@ -198,7 +198,7 @@ flowchart LR
 
     subgraph exposure["Exposure"]
         direction LR
-        DuckDNS("DuckDNS<br/>dynamic DNS")
+        OVH("OVH<br/>DNS zone")
         Caddy("Caddy<br/>HTTPS proxy")
     end
 
@@ -274,7 +274,7 @@ flowchart LR
     Admin -->|LAN| automation
     Admin --> GitHub
     gitops -->|"update PRs, pulls main"| GitHub
-    DuckDNS -.-|"public IP, DNS challenge"| Caddy
+    OVH -.-|"public IP, DNS challenge"| Caddy
     Prowlarr --- FlareSolverr
     Prowlarr -->|indexers| Radarr
     Prowlarr -->|indexers| Sonarr
@@ -308,7 +308,7 @@ flowchart LR
     class Friend,Admin person
     class GitHub,Trackers external
     classDef exposureNode fill:#ffffff,stroke:#1e88e5,color:#1f2937,stroke-width:1.5px
-    class DuckDNS,Caddy exposureNode
+    class OVH,Caddy exposureNode
     style exposure fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#1f2937
     classDef gitopsNode fill:#ffffff,stroke:#7e57c2,color:#1f2937,stroke-width:1.5px
     class Renovate,Deployer gitopsNode
@@ -376,7 +376,7 @@ In the router, give that MAC address a fixed local IP. It is the address of the 
 
 ### Pool and datasets
 
-Open `http://<NAS address>` and sign in with `truenas_admin`.
+Open `http://<NAS address>` and sign in with `truenas_admin`. Once [Domain](#domain) is done, TrueNAS also answers at `https://truenas.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`.
 
 1. In Storage, create a pool named `tank` on the 200 GB disk, as a stripe. The redundancy comes with the UGREEN.
 2. In Datasets, add three datasets to `tank` with the "Apps" preset, so the `apps` user, 568, owns them: `data`, `appdata` and `jellynas`. Never add a child dataset under `data`: `torrents` and `media` are plain folders, so that the hardlinks of cross-seed stay on one file system.
@@ -430,9 +430,72 @@ chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 
 The services run as `PUID` and `PGID`, so the last command gives them the folders that root just created.
 
+## Domain
+
+Requires [Host](#host) and [Fill in the settings](#fill-in-the-settings).
+
+Caddy is the only service the NAS publishes, on `CADDY_HTTPS_PORT`. Friends reach `jellyfin.<DOMAIN>` and `seerr.<DOMAIN>` from the internet. The Admin reaches every tool at `<tool>.lan.<DOMAIN>`, from the local network only: Caddy refuses a lan name to any address outside `LAN_SUBNET`, and refuses any name it does not know. Through the OVH API, Caddy obtains a wildcard certificate for `*.<DOMAIN>` and one for `*.lan.<DOMAIN>`, so no port opens for the certificates and the certificate logs never list the tools, and it keeps `jellyfin` and `seerr` on the public IP of the home. [ADR 0008](docs/adr/0008-the-nas-answers-on-its-own-domain.md) records why.
+
+### DNS zone
+
+In the [OVH Control Panel](https://www.ovh.com/manager/), open Web Cloud > Domain names > `<DOMAIN>` > DNS zone, click "Add an entry", pick `A`, enter `*.lan` as the subdomain and the fixed local IP of the NAS as the target. Leave every other entry as it is, such as the ones of the OVH email. Caddy creates the `jellyfin` and `seerr` entries itself at its first start.
+
+### API keys
+
+1. Open [eu.api.ovh.com/createToken](https://eu.api.ovh.com/createToken/) and sign in with the OVH Account that holds the domain.
+2. Enter `Jellynas Caddy` as the name and description, and pick "Unlimited" as the validity.
+3. Add these rights, with `<DOMAIN>` written out, so the keys can only change the records of the zone:
+
+   | Method | Path |
+   | --- | --- |
+   | GET | `/domain/zone/<DOMAIN>/record` |
+   | POST | `/domain/zone/<DOMAIN>/record` |
+   | GET | `/domain/zone/<DOMAIN>/record/*` |
+   | PUT | `/domain/zone/<DOMAIN>/record/*` |
+   | DELETE | `/domain/zone/<DOMAIN>/record/*` |
+   | GET | `/domain/zone/<DOMAIN>/soa` |
+   | POST | `/domain/zone/<DOMAIN>/refresh` |
+
+4. Create the keys, then copy the application key, the application secret and the consumer key into `OVH_APPLICATION_KEY`, `OVH_APPLICATION_SECRET` and `OVH_CONSUMER_KEY` in `.env`.
+5. In `.env`, set `DOMAIN` to the domain and `LAN_SUBNET` to the local network, for example `192.168.1.0/24` when the router is `192.168.1.254`.
+
+### Router port forward
+
+Pick the HTTPS port and set it in `CADDY_HTTPS_PORT`, or leave it empty for 443. A high port that no service uses by default, such as a random five-digit number, draws fewer automated scans. Friends then add it to the address, for example `https://jellyfin.<DOMAIN>:<port>`, which the Jellyfin apps accept.
+
+On your router, forward that single TCP port to the local IP of the NAS, and nothing else. Set both the external and the internal port of the rule to `CADDY_HTTPS_PORT`, never the internal port to 443: Caddy listens on `CADDY_HTTPS_PORT` on the NAS.
+
+### Addresses
+
+Once [Start the NAS](#start-the-nas) is done, each tool answers at its own address, with `:<CADDY_HTTPS_PORT>` after the name unless it is 443:
+
+| Service | Address | Reached from |
+| --- | --- | --- |
+| Jellyfin | `https://jellyfin.<DOMAIN>` | Anywhere |
+| Seerr | `https://seerr.<DOMAIN>` | Anywhere |
+| TrueNAS | `https://truenas.lan.<DOMAIN>` | Local network |
+| Jellyfin | `https://jellyfin.lan.<DOMAIN>` | Local network |
+| Seerr | `https://seerr.lan.<DOMAIN>` | Local network |
+| qBittorrent | `https://qbittorrent.lan.<DOMAIN>` | Local network |
+| Prowlarr | `https://prowlarr.lan.<DOMAIN>` | Local network |
+| Radarr | `https://radarr.lan.<DOMAIN>` | Local network |
+| Sonarr | `https://sonarr.lan.<DOMAIN>` | Local network |
+| Bazarr | `https://bazarr.lan.<DOMAIN>` | Local network |
+| Tdarr | `https://tdarr.lan.<DOMAIN>` | Local network |
+| autobrr | `https://autobrr.lan.<DOMAIN>` | Local network |
+| qbit_manage | `https://qbit-manage.lan.<DOMAIN>` | Local network |
+
+cross-seed has an API only, which the other containers reach at `http://cross-seed:2468`. The first certificates take a few minutes, follow them with:
+
+```sh
+docker compose logs -f caddy
+```
+
+The line `certificate obtained successfully` shows up once for `*.<DOMAIN>` and once for `*.lan.<DOMAIN>`.
+
 ## Start the NAS
 
-Requires [Fill in the settings](#fill-in-the-settings) and [Create the data and appdata roots](#create-the-data-and-appdata-roots).
+Requires [Fill in the settings](#fill-in-the-settings), [Create the data and appdata roots](#create-the-data-and-appdata-roots) and [Domain](#domain).
 
 The NAS follows the `main` branch of GitHub: a change merged into `main` reaches the NAS within minutes, and nothing else changes it. The NAS runs from its own clone of the repo, kept on `main` and never edited: the deployer refuses to deploy while a tracked file differs from git. Edit the repo in another folder and go through a pull request. `.env` stays in the NAS clone only, outside git.
 
@@ -479,11 +542,11 @@ Requires [Start the NAS](#start-the-nas).
 
 ### First-run wizard
 
-1. Open `http://<NAS address>:<JELLYFIN_PORT>` from a browser on the local network.
+1. Open `https://jellyfin.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the local network.
 2. Pick the display language and create the Admin Account with a strong password stored in your password manager.
 3. Skip the library step, [Libraries](#libraries) does it.
 4. Keep the metadata language and country you prefer.
-5. Leave "Allow remote connections to this server" checked, Friends will reach Jellyfin from the internet through [Public access](#public-access).
+5. Leave "Allow remote connections to this server" checked, Friends will reach Jellyfin from the internet through [Domain](#domain).
 
 ### Libraries
 
@@ -509,40 +572,6 @@ Each Friend gets their own Account, so their watch history and progress are thei
 3. Leave "Allow this user to manage the server" unchecked.
 4. Check "Allow media downloading" so the Friend can download videos, books and manga to their phone.
 
-## Public access
-
-Requires [Jellyfin](#jellyfin).
-
-Friends reach Jellyfin from the internet over HTTPS. DuckDNS gives the NAS a free address that follows your home IP, and Caddy is the only service the router lets in. Caddy obtains the certificate on its own and refuses any hostname other than the ones set in `.env`, so the forwarded port can never lead to an admin tool. Caddy proves to Let's Encrypt that it owns the address through DuckDNS with your token, so the certificate needs no open port.
-
-### DuckDNS
-
-1. Sign in on [duckdns.org](https://www.duckdns.org) and add a subdomain. It must point to your home public IP, which DuckDNS fills in for you.
-2. Copy the token shown at the top of the page.
-3. In `.env`, set `DUCKDNS_SUBDOMAIN` to the subdomain without `.duckdns.org`, `DUCKDNS_TOKEN` to the token, and `JELLYFIN_HOSTNAME` to a name under your subdomain. `jellyfin.${DUCKDNS_SUBDOMAIN}.duckdns.org` reuses the subdomain set just above. DuckDNS resolves every name under your subdomain to the same IP.
-
-The duckdns service then updates the address every five minutes. Your DuckDNS address and token stay in `.env` only.
-
-### Router port forwards
-
-Pick the HTTPS port Friends will use and set it in `CADDY_HTTPS_PORT`, or leave it empty for 443. A high port that no service uses by default, such as a random five-digit number, draws fewer automated scans. Friends then add it to the address, for example `https://jellyfin.<subdomain>.duckdns.org:<port>`, which the Jellyfin apps accept.
-
-On your router, forward that single TCP port to the local IP of the NAS, and nothing else. Set both the external and the internal port of the rule to `CADDY_HTTPS_PORT`, never the internal port to 443: Caddy listens on `CADDY_HTTPS_PORT` on the NAS. Every other port, including the Jellyfin port and the admin tools, stays reachable on the local network only. Give the NAS a fixed local IP in the router so the forward keeps working.
-
-### Start Caddy and DuckDNS
-
-```sh
-docker compose up -d
-```
-
-The first start builds Caddy with its DuckDNS module, which takes a minute or two. After pulling a change to `caddy/Dockerfile`, add `--build` to rebuild it. Caddy then requests the certificate within a few minutes. Follow it with:
-
-```sh
-docker compose logs -f caddy
-```
-
-The line `certificate obtained successfully` means it worked.
-
 ### Jellyfin behind Caddy
 
 In Dashboard > Networking, add `caddy` to "Known proxies" and save. Jellyfin then sees the real address of each Friend instead of the address of Caddy. Jellyfin looks up the address of Caddy when it starts, so restart it now and whenever Caddy is recreated:
@@ -553,21 +582,13 @@ docker compose restart jellyfin
 
 ## Seerr
 
-Requires [Jellyfin](#jellyfin) and [Public access](#public-access).
+Requires [Jellyfin](#jellyfin).
 
 Friends make Requests in Seerr, on its own public hostname, and log in with their Jellyfin Account. Seerr has no access to the Library files.
 
-### Hostname
-
-In `.env`, set `SEERR_HOSTNAME` to another name under your subdomain, for example `seerr.${DUCKDNS_SUBDOMAIN}.duckdns.org`. It uses the same HTTPS port, so the router needs no new rule. Recreate Caddy so it picks up the new name and obtains its certificate:
-
-```sh
-docker compose up -d
-```
-
 ### Setup wizard
 
-1. Open `http://<NAS address>:<SEERR_PORT>` from a browser on the local network.
+1. Open `https://seerr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the local network.
 2. Choose Jellyfin as the media server.
 3. Enter `jellyfin` as the hostname, `8096` as the port, leave SSL off and the URL base empty.
 4. Enter an email address and the username and password of the Jellyfin Admin Account. This Account becomes the Seerr Admin.
@@ -576,9 +597,9 @@ docker compose up -d
 
 ### Settings
 
-1. In Settings > General, set "Application URL" to `https://<SEERR_HOSTNAME>:<CADDY_HTTPS_PORT>`, without the port if it is 443.
+1. In Settings > General, set "Application URL" to `https://seerr.<DOMAIN>:<CADDY_HTTPS_PORT>`, without the port if it is 443.
 2. In Settings > Network, check "Enable Proxy Support" so Seerr sees the real address of each Friend.
-3. In Settings > Jellyfin, set "External URL" to `https://<JELLYFIN_HOSTNAME>:<CADDY_HTTPS_PORT>` so links to a movie open the public Jellyfin.
+3. In Settings > Jellyfin, set "External URL" to `https://jellyfin.<DOMAIN>:<CADDY_HTTPS_PORT>` so links to a movie open the public Jellyfin.
 4. In Settings > Users, check "Enable Jellyfin Sign-In" and "Enable New Jellyfin Sign-In", uncheck "Enable Local Sign-In", and leave the default permissions on "Request".
 
 A Friend then opens the Seerr address, picks "Sign in with Jellyfin" and enters their Jellyfin Account, with no second login to create.
@@ -626,7 +647,7 @@ In qBittorrent, Tools > Options > Connection, set "Port used for incoming connec
    docker compose logs qbittorrent
    ```
 
-2. Open `http://<NAS address>:<QBITTORRENT_PORT>` from a browser on the local network and sign in with `admin` and that password.
+2. Open `https://qbittorrent.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the local network and sign in with `admin` and that password.
 3. In Tools > Options > WebUI > Authentication, set a new username and a strong password stored in your password manager. Leave both "Bypass authentication" options unchecked.
 
 ### Save paths
@@ -662,7 +683,7 @@ Radarr fulfils movie Requests: it searches the indexers, sends the torrent to qB
 
 ### Account
 
-1. Open `http://<NAS address>:<RADARR_PORT>` from a browser on the local network.
+1. Open `https://radarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the local network.
 2. Radarr asks for an authentication method at the first visit. Pick "Forms (Login Page)", set "Authentication Required" to "Enabled", never "Disabled for Local Addresses", and enter a username and a strong password, distinct from the other tools, stored in your password manager.
 
 ### Media management
@@ -701,7 +722,7 @@ Prowlarr holds the indexers once and pushes them to Radarr, and later to the oth
 
 ### Account
 
-Open `http://<NAS address>:<PROWLARR_PORT>` and set the authentication the same way as Radarr, with its own username and password.
+Open `https://prowlarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication the same way as Radarr, with its own username and password.
 
 ### FlareSolverr
 
@@ -745,7 +766,7 @@ Sonarr fulfils show Requests and fetches new episodes on its own: it searches th
 
 ### Account
 
-Open `http://<NAS address>:<SONARR_PORT>` and set the authentication the same way as Radarr, with its own username and password.
+Open `https://sonarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication the same way as Radarr, with its own username and password.
 
 ### Media management
 
@@ -837,7 +858,7 @@ Interactive Search, in a movie or an episode, shows the score of each release an
 
 ```bash
 set -a && . ./.env && set +a
-curl -s -G -H "X-Api-Key: $RADARR_API_KEY" --data-urlencode "title=Your.Name.2016.MULTi.1080p.WEB.x265-GROUP" "http://localhost:${RADARR_PORT:-7878}/api/v3/parse"
+curl -s -G -H "X-Api-Key: $RADARR_API_KEY" --data-urlencode "title=Your.Name.2016.MULTi.1080p.WEB.x265-GROUP" "https://radarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/v3/parse"
 ```
 
 The answer holds `customFormats` and `customFormatScore`. A score below -5000 means refused. Sonarr answers the same on its own port with the name of an episode of a show it has.
@@ -869,7 +890,7 @@ Each import is a copy, so a downloaded file sits twice on the disk: once in the 
    ```
 
 2. Start Tdarr with `docker compose up -d`. It creates the `admin` Account with that key as its password, and its internal node connects with the same key.
-3. Open `http://<NAS address>:<TDARR_PORT>` from a browser on the local network and sign in with `admin` and the key.
+3. Open `https://tdarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the local network and sign in with `admin` and the key.
 4. In Tools > Account, click "Change Password" and set a strong password, distinct from the other tools, stored in your password manager. The key keeps working for the node.
 
 ### Flow
@@ -906,7 +927,7 @@ Bazarr gives every movie and show French and English subtitles. It learns about 
 
 ### Account
 
-1. Open `http://<NAS address>:<BAZARR_PORT>` from a browser on the local network.
+1. Open `https://bazarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the local network.
 2. In Settings > General > Security, set "Authentication" to "Form", enter a username and a strong password, distinct from the other tools, stored in your password manager, and save.
 
 ### Languages
@@ -1007,7 +1028,7 @@ In `.env`, set `QBITTORRENT_USER` and `QBITTORRENT_PASSWORD` to the qBittorrent 
 
 autobrr joins the IRC announce channel of each tracker and grabs a release the moment it is announced, when the swarm is hungry and a seeder uploads the most.
 
-1. Open `http://<NAS address>:<AUTOBRR_PORT>` and create the Account at the first visit, with its own username and a strong password stored in your password manager.
+1. Open `https://autobrr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and create the Account at the first visit, with its own username and a strong password stored in your password manager.
 2. In Settings > Clients, click "Add new", pick qBittorrent, enter `http://gluetun:8080` as the host and the qBittorrent Account. Under "Rules", check "Enabled" and set "Max active downloads" to `2`, so autobrr never fills the queue of Radarr and Sonarr. Save.
 3. In Settings > Indexers, click "Add new", pick the tracker, and fill in its passkey or API key and your IRC nick. autobrr adds its IRC network in Settings > IRC with the channel and the invite command of the tracker. Wait for the network to show as connected, some trackers need an IRC password or a NickServ registration first.
 4. In Filters, click "Add new" once per tracker, name it after the tracker, and pick the indexer. Set:
@@ -1055,7 +1076,7 @@ qbit_manage runs every 10 minutes, so a new ratio torrent gets its own limits be
    docker compose restart qbit_manage
    ```
 
-2. Open `http://<NAS address>:<QBIT_MANAGE_PORT>`. In the Security section, set the authentication method to "Basic Authentication", enter a username and a strong password, distinct from the other tools, leave "Bypass authentication for local" unchecked, and save.
+2. Open `https://qbit-manage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. In the Security section, set the authentication method to "Basic Authentication", enter a username and a strong password, distinct from the other tools, leave "Bypass authentication for local" unchecked, and save.
 3. In Tracker Configuration, add one entry per tracker, with a keyword of its announce URL and its name as the tag. A torrent from a tracker not listed gets the `other` tag.
 4. In Share Limits, the `ratio` and `cross-seed` groups never stop a torrent at a ratio or a seeding time, since a torrent that uploads well should keep seeding. They remove a torrent with its files once it has uploaded nothing for 10 days, which comes after the minimum seeding time of any tracker that asks for 10 days or less. For a tracker that asks for more, raise "Max Last Active" in its group above its minimum. ratio-limit frees space when the ratio folder is full. For a tracker with other rules, add a group with a priority number below 10, such as 5, since the smallest number wins, with its tag under "Include All Tags" and `ratio` and `cross-seed-link` under "Categories".
 5. Save, then run the commands from the toolbar to see the result right away.
@@ -1091,7 +1112,7 @@ ratio-grab reads `RATIO_GRAB_MAX_AGE_HOURS`, `RATIO_GRAB_MIN_SIZE_GB`, `RATIO_GR
 
 ## Verify the NAS
 
-Requires [Public access](#public-access) and [qBittorrent](#qbittorrent).
+Requires [Domain](#domain) and [qBittorrent](#qbittorrent).
 
 Run the verification script from the clone:
 
