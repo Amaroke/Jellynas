@@ -1,0 +1,24 @@
+services:
+  ratio:
+    image: python:3.13.9-alpine3.22
+    container_name: ratio
+    restart: unless-stopped
+    user: ${PUID}:${PGID}
+    command: ["python", "-u", "/app/ratio.py"]
+    environment:
+      TZ: ${TZ}
+      QBITTORRENT_USER: ${QBITTORRENT_USER}
+      QBITTORRENT_PASSWORD: ${QBITTORRENT_PASSWORD}
+      PROWLARR_API_KEY: ${PROWLARR_API_KEY}
+      CROSS_SEED_API_KEY: ${CROSS_SEED_API_KEY}
+      RATIO_TRACKER: ${RATIO_TRACKER:-c411}
+      RATIO_GRAB_INDEXER_IDS: ${RATIO_GRAB_INDEXER_IDS}
+      RATIO_TWIN_INDEXER_IDS: ${RATIO_TWIN_INDEXER_IDS:-}
+      RATIO_MAX_SIZE_GB: ${RATIO_MAX_SIZE_GB}
+      RATIO_MIN_SEEDING_DAYS: ${RATIO_MIN_SEEDING_DAYS}
+      RATIO_GRAB_MAX_DEFICIT_GB: ${RATIO_GRAB_MAX_DEFICIT_GB}
+      RATIO_ZEN_MAX_SIZE_GB: ${RATIO_ZEN_MAX_SIZE_GB:-50}
+      RATIO_ZEN_HUNT_MIN_SURPLUS_GB: ${RATIO_ZEN_HUNT_MIN_SURPLUS_GB:-20}
+    volumes:
+      - ./:/app:ro
+      - ${APPDATA_ROOT}/ratio-grab:/state

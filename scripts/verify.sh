@@ -359,8 +359,7 @@ check_no_torrents_mount tdarr
 check_no_media_mount autobrr
 check_no_media_tree cross-seed
 check_no_media_tree qbit_manage
-check_no_media_mount ratio-limit
-check_no_media_mount ratio-grab
+check_no_media_mount ratio
 check_published_ports
 check_login_required qbittorrent "https://qbittorrent.$lan:$https_port/api/v2/app/version"
 check_login_required prowlarr "https://prowlarr.$lan:$https_port/"
