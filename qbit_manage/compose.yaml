@@ -18,5 +18,3 @@ services:
     volumes:
       - ${APPDATA_ROOT}/qbit_manage:/config
       - ${DATA_ROOT}/torrents:/data/torrents
-    ports:
-      - ${QBIT_MANAGE_PORT:-8181}:8181

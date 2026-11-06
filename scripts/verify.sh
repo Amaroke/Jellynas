@@ -164,26 +164,28 @@ check_no_torrents_mount() {
   check_not_mounted "$1" torrents "does not mount the torrents tree"
 }
 
-check_internet_ports() {
-  local service id ports exposed=""
+check_published_ports() {
+  local service id ports bindings exposed=""
   for service in $(docker compose config --services 2>/dev/null); do
-    [ "$service" = caddy ] && continue
     id="$(docker compose ps -q "$service" 2>/dev/null | head -n 1)"
     [ -n "$id" ] || continue
     ports="$(docker inspect -f '{{range $p, $b := .HostConfig.PortBindings}}{{range $b}} {{.HostPort}}{{end}}{{end}}' "$id")"
-    case "$ports " in
-      *" $https_port "*) exposed="$exposed $service" ;;
-    esac
+    if [ "$service" = caddy ]; then
+      bindings="$(docker inspect -f '{{range $p, $b := .HostConfig.PortBindings}}{{range $b}} {{.HostIp}}:{{.HostPort}}{{end}}{{end}}' "$id")"
+      [ "$bindings" = " 0.0.0.0:$https_port" ] || exposed="$exposed caddy($bindings )"
+    elif [ -n "$ports" ]; then
+      exposed="$exposed $service($ports )"
+    fi
   done
   if [ -n "$exposed" ]; then
-    fail compose "only caddy may publish port $https_port, also published by:$exposed"
+    fail compose "only caddy may publish a port, $https_port on IPv4, found:$exposed"
   else
-    pass compose "only caddy publishes port $https_port"
+    pass compose "only caddy publishes a port, $https_port on IPv4"
   fi
 }
 
 check_login_required() {
-  local service="$1" url="$2" result
+  local service="$1" url="$2" host result
   case "$(container_state "$service")" in
     running*) ;;
     *)
@@ -191,7 +193,9 @@ check_login_required() {
       return
       ;;
   esac
-  result="$(curl --silent --output /dev/null --write-out '%{http_code} %{redirect_url}' --max-time 10 "$url")"
+  host="${url#https://}"
+  host="${host%%[:/]*}"
+  result="$(curl --silent --output /dev/null --write-out '%{http_code} %{redirect_url}' --max-time 10 --resolve "$host:$https_port:$host_ip" "$url")"
   case "$result" in
     401" "* | 403" "*)
       pass "$service" "web UI requires a login (HTTP ${result%% *})"
@@ -202,6 +206,22 @@ check_login_required() {
     *)
       fail "$service" "web UI does not require a login at $url (HTTP ${result%% *})"
       ;;
+  esac
+}
+
+check_api_key_required() {
+  local service="$1" url="$2" status
+  case "$(container_state "$service")" in
+    running*) ;;
+    *)
+      fail "$service" "is not running, cannot check that its API requires a key"
+      return
+      ;;
+  esac
+  status="$(docker compose exec -T caddy wget --server-response --spider "$url" 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]{3}' | tail -n 1 | cut -d' ' -f2)"
+  case "$status" in
+    401 | 403) pass "$service" "API requires a key (HTTP $status)" ;;
+    *) fail "$service" "API answers ${status:-nothing} without a key at $url" ;;
   esac
 }
 
@@ -259,14 +279,14 @@ caddy_running() {
 }
 
 check_public_hostname() {
-  local host="$1" code deadline
+  local host="$1" target="${2:-127.0.0.1}" code deadline
   [ -n "$host" ] || return
   caddy_running "https://$host" || return
   deadline=$((SECONDS + health_timeout))
-  code="$(http_code --resolve "$host:$https_port:127.0.0.1" "https://$host:$https_port/")"
+  code="$(http_code --resolve "$host:$https_port:$target" "https://$host:$https_port/")"
   while { [ "$code" = 000 ] || [ "${code#5}" != "$code" ]; } && [ "$SECONDS" -lt "$deadline" ]; do
     sleep 5
-    code="$(http_code --resolve "$host:$https_port:127.0.0.1" "https://$host:$https_port/")"
+    code="$(http_code --resolve "$host:$https_port:$target" "https://$host:$https_port/")"
   done
   case "$code" in
     2?? | 3??)
@@ -276,6 +296,17 @@ check_public_hostname() {
       fail caddy "https://$host does not answer with a valid certificate (HTTP $code)"
       ;;
   esac
+}
+
+check_lan_refused_outside() {
+  local host="$1" code
+  caddy_running "that $host is refused outside the local network" || return
+  code="$(http_code --insecure --resolve "$host:$https_port:127.0.0.1" "https://$host:$https_port/")"
+  if [ "$code" = 000 ]; then
+    pass caddy "refuses https://$host from outside $lan_subnet"
+  else
+    fail caddy "answers $code to https://$host from outside $lan_subnet"
+  fi
 }
 
 check_unknown_host_refused() {
@@ -296,18 +327,13 @@ check_unknown_host_refused() {
   fi
 }
 
-jellyfin_hostname="$(env_value JELLYFIN_HOSTNAME)"
-seerr_hostname="$(env_value SEERR_HOSTNAME)"
+domain="$(env_value DOMAIN)"
+lan_subnet="$(env_value LAN_SUBNET)"
+lan="lan.$domain"
+jellyfin_hostname="jellyfin.$domain"
+seerr_hostname="seerr.$domain"
 vpn_provider="$(env_value VPN_SERVICE_PROVIDER)"
-qbittorrent_port="$(env_value QBITTORRENT_PORT)"
-prowlarr_port="$(env_value PROWLARR_PORT)"
-radarr_port="$(env_value RADARR_PORT)"
-sonarr_port="$(env_value SONARR_PORT)"
-bazarr_port="$(env_value BAZARR_PORT)"
-tdarr_port="$(env_value TDARR_PORT)"
-autobrr_port="$(env_value AUTOBRR_PORT)"
-cross_seed_port="$(env_value CROSS_SEED_PORT)"
-qbit_manage_port="$(env_value QBIT_MANAGE_PORT)"
+host_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
 https_port="$(env_value CADDY_HTTPS_PORT)"
 https_port="${https_port:-443}"
 public_port=""
@@ -328,20 +354,25 @@ check_no_media_tree cross-seed
 check_no_media_tree qbit_manage
 check_no_media_mount ratio-limit
 check_no_media_mount ratio-grab
-check_internet_ports
-check_login_required qbittorrent "http://localhost:${qbittorrent_port:-8080}/api/v2/app/version"
-check_login_required prowlarr "http://localhost:${prowlarr_port:-9696}/"
-check_login_required radarr "http://localhost:${radarr_port:-7878}/"
-check_login_required sonarr "http://localhost:${sonarr_port:-8989}/"
-check_login_required bazarr "http://localhost:${bazarr_port:-6767}/bazarr.log"
-check_login_required tdarr "http://localhost:${tdarr_port:-8265}/api/v2/get-nodes"
-check_login_required autobrr "http://localhost:${autobrr_port:-7474}/api/config"
-check_login_required cross-seed "http://localhost:${cross_seed_port:-2468}/api/status"
-check_login_required qbit_manage "http://localhost:${qbit_manage_port:-8181}/"
+check_published_ports
+check_login_required qbittorrent "https://qbittorrent.$lan:$https_port/api/v2/app/version"
+check_login_required prowlarr "https://prowlarr.$lan:$https_port/"
+check_login_required radarr "https://radarr.$lan:$https_port/"
+check_login_required sonarr "https://sonarr.$lan:$https_port/"
+check_login_required bazarr "https://bazarr.$lan:$https_port/bazarr.log"
+check_login_required tdarr "https://tdarr.$lan:$https_port/api/v2/get-nodes"
+check_login_required autobrr "https://autobrr.$lan:$https_port/api/config"
+check_login_required qbit_manage "https://qbit-manage.$lan:$https_port/"
+check_api_key_required cross-seed "http://cross-seed:2468/api/status"
 check_exit_ip qbittorrent
 check_kill_switch qbittorrent
 check_public_hostname "$jellyfin_hostname"
 check_public_hostname "$seerr_hostname"
+check_public_hostname "truenas.$lan" "$host_ip"
+check_public_hostname "jellyfin.$lan" "$host_ip"
+check_public_hostname "seerr.$lan" "$host_ip"
+check_lan_refused_outside "radarr.$lan"
+check_lan_refused_outside "truenas.$lan"
 check_unknown_host_refused "$jellyfin_hostname"
 
 if [ -n "$jellyfin_hostname$seerr_hostname" ]; then

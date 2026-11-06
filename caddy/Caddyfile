@@ -1,17 +1,68 @@
 {
 	auto_https disable_redirects
-	acme_dns duckdns {env.DUCKDNS_TOKEN}
+	acme_dns ovh {
+		endpoint {env.OVH_ENDPOINT}
+		application_key {env.OVH_APPLICATION_KEY}
+		application_secret {env.OVH_APPLICATION_SECRET}
+		consumer_key {env.OVH_CONSUMER_KEY}
+	}
+	dynamic_dns {
+		provider ovh {
+			endpoint {env.OVH_ENDPOINT}
+			application_key {env.OVH_APPLICATION_KEY}
+			application_secret {env.OVH_APPLICATION_SECRET}
+			consumer_key {env.OVH_CONSUMER_KEY}
+		}
+		domains {
+			{$DOMAIN} jellyfin seerr
+		}
+		versions ipv4
+		check_interval 5m
+	}
 	servers {
 		protocols h1 h2
 	}
 }
 
-{$JELLYFIN_HOSTNAME} {
-	reverse_proxy jellyfin:8096
+(lan) {
+	@{args[0]} {
+		host {args[0]}.lan.{$DOMAIN}
+		remote_ip {$LAN_SUBNET}
+	}
+	handle @{args[0]} {
+		reverse_proxy {args[1]}
+	}
 }
 
-{$SEERR_HOSTNAME} {
-	reverse_proxy seerr:5055
+*.{$DOMAIN} {
+	@jellyfin host jellyfin.{$DOMAIN}
+	handle @jellyfin {
+		reverse_proxy jellyfin:8096
+	}
+	@seerr host seerr.{$DOMAIN}
+	handle @seerr {
+		reverse_proxy seerr:5055
+	}
+	handle {
+		abort
+	}
+}
+
+*.lan.{$DOMAIN} {
+	import lan truenas host.docker.internal:80
+	import lan jellyfin jellyfin:8096
+	import lan seerr seerr:5055
+	import lan qbittorrent gluetun:8080
+	import lan prowlarr prowlarr:9696
+	import lan radarr radarr:7878
+	import lan sonarr sonarr:8989
+	import lan bazarr bazarr:6767
+	import lan tdarr tdarr:8265
+	import lan autobrr autobrr:7474
+	import lan qbit-manage qbit_manage:8181
+	handle {
+		abort
+	}
 }
 
 :443 {

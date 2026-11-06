@@ -11,8 +11,6 @@ services:
       - ${APPDATA_ROOT}/radarr:/config
       - ${DATA_ROOT}/media/movies:/data/media/movies
       - ${DATA_ROOT}/torrents:/data/torrents
-    ports:
-      - ${RADARR_PORT:-7878}:7878
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:7878/ping"]
       interval: 30s

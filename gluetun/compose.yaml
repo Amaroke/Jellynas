@@ -23,5 +23,3 @@ services:
     volumes:
       - ./entrypoint.sh:/jellynas-entrypoint.sh:ro
       - ${APPDATA_ROOT}/gluetun:/gluetun
-    ports:
-      - ${QBITTORRENT_PORT:-8080}:8080
