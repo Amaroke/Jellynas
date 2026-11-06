@@ -8,6 +8,7 @@ from ratio import (
     DAY,
     GB,
     QBittorrent,
+    bdecode,
     is_rare,
     load_state,
     parse_torznab,
@@ -44,6 +45,7 @@ def release(infohash, leechers=40, seeders=1, size_gb=3, age_hours=0.5, title=No
         "infohash": infohash,
         "title": title or f"Release.{infohash}.1080p",
         "link": f"http://prowlarr/{infohash}.torrent",
+        "page": "",
         "size": int(size_gb * GB),
         "seeders": seeders,
         "leechers": leechers,
@@ -65,7 +67,7 @@ class FakeQBittorrent:
         return [dict(t) for t in self.list]
 
     def add(self, torrent, category):
-        self.added.append((torrent.decode(), category))
+        self.added.append((bdecode(torrent)[0][b"info"][b"name"].decode(), category))
 
     def delete(self, hashes):
         self.deleted += hashes
@@ -90,21 +92,27 @@ class FakeQBittorrent:
         self.prefs.update(preferences)
 
 
+def torrent_file(name, lengths):
+    files = b"".join(b"d6:lengthi%de4:pathl1:xee" % length for length in lengths)
+    return b"d4:infod5:filesl" + files + b"e4:name%d:" % len(name) + name.encode() + b"ee"
+
+
 class FakeProwlarr:
-    def __init__(self, newest=(), twins=()):
+    def __init__(self, newest=(), twins=(), files=None):
         self.feed = list(newest)
         self.twins = list(twins)
-        self.searches = 0
+        self.files = files or {}
+        self.queries = []
 
     def newest(self, indexer, now):
         return list(self.feed)
 
     def search(self, indexer, title, now):
-        self.searches += 1
+        self.queries.append(title)
         return list(self.twins)
 
-    def download(self, link):
-        return link.encode()
+    def torrent(self, release):
+        return torrent_file(release["infohash"], self.files.get(release["infohash"], [7]))
 
 
 SETTINGS = {
@@ -126,6 +134,9 @@ SETTINGS = {
     "library_categories": ("radarr", "tv-sonarr"),
     "adopt_after": 6 * 3600,
     "tracker_seeders_in_peers": 2,
+    "twin_max_age_hours": 24,
+    "twin_min_leechers": 1,
+    "twin_recheck": 2 * 3600,
     "rules": {
         "min_size": 1 * GB,
         "max_size": 5 * GB,
@@ -141,7 +152,7 @@ def settings(**changes):
 
 
 def empty_state(**changes):
-    return {"transfers": {}, "grabbed": {}, "twins": {}, "uploads": {}, "free": {}, "paused": False, **changes}
+    return {"transfers": {}, "grabbed": {}, "twins": {}, "uploads": {}, "free": {}, "checked": {}, "paused": False, **changes}
 
 
 def run(qbt, prowlarr=None, state=None, now=NOW, **changes):
@@ -150,31 +161,82 @@ def run(qbt, prowlarr=None, state=None, now=NOW, **changes):
     return state
 
 
-class Farm(unittest.TestCase):
-    def test_a_hungry_release_with_a_public_twin_downloads_the_twin(self):
+EPISODE = "Les.Carnets.de.l.apothicaire.S03E06.VOSTFR.1080p.WEBRip.x265-KAF"
+NYAA = "The.Apothecary.Diaries.S03E06.VOSTFR.1080p.WEBRiP.x265-KAF"
+
+
+def episode(leechers=3):
+    return release("episode", title=EPISODE, leechers=leechers, seeders=60, size_gb=0.27)
+
+
+def twin(title=NYAA, size_gb=0.28):
+    return release("public", title=title, seeders=200, leechers=5, size_gb=size_gb)
+
+
+class Twins(unittest.TestCase):
+    def test_a_fresh_episode_with_a_twin_downloads_the_twin(self):
         qbt = FakeQBittorrent()
-        prowlarr = FakeProwlarr([release("hungry")], twins=[release("public", seeders=200)])
+        prowlarr = FakeProwlarr([episode()], twins=[twin()])
         state = run(qbt, prowlarr)
-        self.assertEqual(qbt.added, [("http://prowlarr/public.torrent", "ratio")])
-        self.assertEqual(state["twins"], {"public": ["hungry", "ratio"]})
+        self.assertEqual(prowlarr.queries, ["S03E06 VOSTFR"])
+        self.assertEqual(qbt.added, [("public", "ratio")])
+        self.assertEqual(state["twins"], {"public": ["episode", "ratio"]})
         self.assertEqual(state["grabbed"], {})
 
     def test_a_twin_is_grabbed_even_while_paused(self):
-        qbt = FakeQBittorrent([torrent("old", downloaded_gb=20, progress=1)])
-        prowlarr = FakeProwlarr([release("hungry")], twins=[release("public")])
-        run(qbt, prowlarr)
-        self.assertEqual(qbt.added, [("http://prowlarr/public.torrent", "ratio")])
+        qbt = FakeQBittorrent([torrent("old", category="radarr", downloaded_gb=20)])
+        run(qbt, FakeProwlarr([episode()], twins=[twin()]))
+        self.assertEqual(qbt.added, [("public", "ratio")])
 
-    def test_a_twin_must_have_the_exact_same_size(self):
+    def test_a_twin_must_hold_the_same_files(self):
         qbt = FakeQBittorrent()
-        prowlarr = FakeProwlarr([release("hungry", size_gb=3)], twins=[release("public", size_gb=3.01)])
-        run(qbt, prowlarr)
-        self.assertEqual(qbt.added, [("http://prowlarr/hungry.torrent", "ratio")])
+        prowlarr = FakeProwlarr([episode()], twins=[twin()], files={"public": [8]})
+        state = run(qbt, prowlarr)
+        self.assertEqual(qbt.added, [])
+        self.assertEqual(state["twins"], {})
 
+    def test_a_twin_must_come_from_the_same_group(self):
+        qbt = FakeQBittorrent()
+        run(qbt, FakeProwlarr([episode()], twins=[twin(title="Show.S03E06.VOSTFR.1080p-OTHER")]))
+        self.assertEqual(qbt.added, [])
+
+    def test_a_twin_size_may_be_rounded_but_not_far_off(self):
+        qbt = FakeQBittorrent()
+        run(qbt, FakeProwlarr([episode()], twins=[twin(size_gb=0.4)]))
+        self.assertEqual(qbt.added, [])
+
+    def test_a_release_without_an_episode_or_a_leecher_is_not_searched(self):
+        prowlarr = FakeProwlarr([release("movie", leechers=0), episode(leechers=0)], twins=[twin()])
+        run(FakeQBittorrent(), prowlarr)
+        self.assertEqual(prowlarr.queries, [])
+
+    def test_a_release_checked_recently_is_not_searched_again(self):
+        prowlarr = FakeProwlarr([episode()], twins=[twin()])
+        run(FakeQBittorrent(), prowlarr, empty_state(checked={"episode": NOW - 3600}))
+        self.assertEqual(prowlarr.queries, [])
+
+    def test_once_the_tracker_copy_seeds_the_twin_is_removed(self):
+        qbt = FakeQBittorrent([
+            torrent("public", tracker="http://nyaa.tracker.wf/announce"),
+            torrent("hungry", category="cross-seed-link"),
+        ])
+        state = run(qbt, state=empty_state(twins={"public": ["hungry", "ratio"]}))
+        self.assertEqual(qbt.deleted, ["public"])
+        self.assertEqual(qbt.moved, [])
+        self.assertEqual(state["twins"], {})
+
+    def test_the_twin_stays_until_cross_seed_adds_the_tracker_copy(self):
+        qbt = FakeQBittorrent([torrent("public", tracker="http://nyaa.tracker.wf/announce")])
+        state = run(qbt, state=empty_state(twins={"public": ["hungry", "ratio"]}))
+        self.assertEqual(qbt.deleted, [])
+        self.assertEqual(state["twins"], {"public": ["hungry", "ratio"]})
+
+
+class Farm(unittest.TestCase):
     def test_without_a_twin_the_tracker_is_paid_and_remembered(self):
         qbt = FakeQBittorrent()
         state = run(qbt, FakeProwlarr([release("hungry")]))
-        self.assertEqual(qbt.added, [("http://prowlarr/hungry.torrent", "ratio")])
+        self.assertEqual(qbt.added, [("hungry", "ratio")])
         self.assertEqual(state["grabbed"], {"hungry": NOW})
 
     def test_a_deficit_over_the_limit_pauses_paid_grabs(self):
@@ -186,7 +248,7 @@ class Farm(unittest.TestCase):
     def test_a_freeleech_release_is_grabbed_even_while_paused(self):
         qbt = FakeQBittorrent([torrent("old", category="radarr", downloaded_gb=20)])
         state = run(qbt, FakeProwlarr([release("free", free=True)]))
-        self.assertEqual(qbt.added, [("http://prowlarr/free.torrent", "ratio")])
+        self.assertEqual(qbt.added, [("free", "ratio")])
         self.assertEqual(state["free"], {"free": NOW})
         self.assertEqual(state["grabbed"], {})
 
@@ -203,7 +265,7 @@ class Farm(unittest.TestCase):
 
     def test_two_downloads_at_once_at_most(self):
         qbt = FakeQBittorrent([torrent("a", progress=0.5), torrent("b", category="zen", progress=0.1)])
-        run(qbt, FakeProwlarr([release("hungry")], twins=[release("public")]))
+        run(qbt, FakeProwlarr([release("hungry"), episode()], twins=[twin()]))
         self.assertEqual(qbt.added, [])
 
     def test_a_cold_or_old_release_is_left_alone(self):
@@ -214,32 +276,6 @@ class Farm(unittest.TestCase):
         releases = [release("a", leechers=20, seeders=2), release("b", leechers=70), release("c", leechers=30)]
         self.assertEqual([r["infohash"] for r in pick_hungry(releases, set(), SETTINGS["rules"])], ["b", "c", "a"])
 
-
-class Twins(unittest.TestCase):
-    def test_once_the_tracker_copy_seeds_the_twin_is_removed(self):
-        qbt = FakeQBittorrent([
-            torrent("public", tracker="http://nyaa.tracker.wf/announce"),
-            torrent("hungry", category="cross-seed-link"),
-        ])
-        state = run(qbt, state=empty_state(twins={"public": ["hungry", "ratio"]}))
-        self.assertEqual(qbt.deleted, ["public"])
-        self.assertEqual(qbt.moved, [])
-        self.assertEqual(state["twins"], {})
-
-    def test_a_zen_twin_moves_its_tracker_copy_to_the_reserve(self):
-        qbt = FakeQBittorrent([
-            torrent("public", category="zen", tracker="http://nyaa.tracker.wf/announce"),
-            torrent("rare", category="cross-seed-link", seeders=3),
-        ])
-        run(qbt, state=empty_state(twins={"public": ["rare", "zen"]}))
-        self.assertEqual(qbt.moved, [("rare", "zen")])
-        self.assertEqual(qbt.deleted, ["public"])
-
-    def test_the_twin_stays_until_cross_seed_adds_the_tracker_copy(self):
-        qbt = FakeQBittorrent([torrent("public", tracker="http://nyaa.tracker.wf/announce")])
-        state = run(qbt, state=empty_state(twins={"public": ["hungry", "ratio"]}))
-        self.assertEqual(qbt.deleted, [])
-        self.assertEqual(state["twins"], {"public": ["hungry", "ratio"]})
 
 
 class Cleaning(unittest.TestCase):
@@ -307,13 +343,6 @@ class Cleaning(unittest.TestCase):
 
 
 class ZenReserve(unittest.TestCase):
-    def test_a_rare_release_with_a_twin_fills_the_reserve(self):
-        qbt = FakeQBittorrent()
-        prowlarr = FakeProwlarr([release("rare", leechers=0, seeders=3)], twins=[release("public")])
-        state = run(qbt, prowlarr, zen_min_torrents=15)
-        self.assertEqual(qbt.added, [("http://prowlarr/public.torrent", "zen")])
-        self.assertEqual(state["twins"], {"public": ["rare", "zen"]})
-
     def test_without_a_twin_the_hunt_waits_for_a_surplus(self):
         qbt = FakeQBittorrent([torrent("old", category="radarr", downloaded_gb=10, uploaded_gb=25)])
         run(qbt, FakeProwlarr([release("rare", leechers=0, seeders=3)]), zen_min_torrents=15)
@@ -322,14 +351,13 @@ class ZenReserve(unittest.TestCase):
     def test_a_surplus_over_the_threshold_opens_the_hunt(self):
         qbt = FakeQBittorrent([torrent("old", category="radarr", downloaded_gb=10, uploaded_gb=35)])
         run(qbt, FakeProwlarr([release("rare", leechers=0, seeders=3)]), zen_min_torrents=15)
-        self.assertEqual(qbt.added, [("http://prowlarr/rare.torrent", "zen")])
+        self.assertEqual(qbt.added, [("rare", "zen")])
 
     def test_the_reserve_comes_first_until_it_holds_enough_torrents(self):
-        qbt = FakeQBittorrent()
-        prowlarr = FakeProwlarr([release("hungry", leechers=80), release("rare", leechers=0, seeders=3)],
-                                twins=[release("public")])
-        state = run(qbt, prowlarr, zen_min_torrents=15, max_downloading=1)
-        self.assertEqual(state["twins"], {"public": ["rare", "zen"]})
+        qbt = FakeQBittorrent([torrent("old", category="radarr", downloaded_gb=10, uploaded_gb=35)])
+        prowlarr = FakeProwlarr([release("hungry", leechers=80), release("rare", leechers=0, seeders=3)])
+        run(qbt, prowlarr, zen_min_torrents=15, max_downloading=1)
+        self.assertEqual(qbt.added, [("rare", "zen")])
 
     def test_rare_depends_on_the_size(self):
         self.assertTrue(is_rare(GB // 2, 24))
