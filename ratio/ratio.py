@@ -98,27 +98,29 @@ class QBittorrent:
 
 
 class Prowlarr:
-    def __init__(self, url, api_key):
+    def __init__(self, url, api_key, tracker_seeders_in_peers):
         self.url = url.rstrip("/")
         self.api_key = api_key
+        self.tracker_seeders_in_peers = tracker_seeders_in_peers
 
     def newest(self, indexer, now):
-        return self.query(indexer, {"t": "search", "cat": "2000,5000", "limit": 100}, now)
+        fields = {"t": "search", "cat": "2000,5000", "limit": 100}
+        return self.query(indexer, fields, now, self.tracker_seeders_in_peers)
 
     def search(self, indexer, title, now):
-        return self.query(indexer, {"t": "search", "q": re.sub(r"[._]+", " ", title), "limit": 100}, now)
+        return self.query(indexer, {"t": "search", "q": re.sub(r"[._]+", " ", title), "limit": 100}, now, 1)
 
     def download(self, link):
         with urllib.request.urlopen(link, timeout=60) as response:
             return response.read()
 
-    def query(self, indexer, fields, now):
+    def query(self, indexer, fields, now, seeders_in_peers):
         query = urllib.parse.urlencode({**fields, "apikey": self.api_key})
         with urllib.request.urlopen(f"{self.url}/{indexer}/api?{query}", timeout=60) as response:
-            return parse_torznab(response.read(), now)
+            return parse_torznab(response.read(), now, seeders_in_peers)
 
 
-def parse_torznab(xml_bytes, now):
+def parse_torznab(xml_bytes, now, seeders_in_peers=1):
     releases = []
     for item in ET.fromstring(xml_bytes).iter("item"):
         attrs = {a.get("name"): a.get("value") for a in item.iter(TORZNAB)}
@@ -137,8 +139,9 @@ def parse_torznab(xml_bytes, now):
                 "link": item.findtext("link"),
                 "size": int(item.findtext("size") or 0),
                 "seeders": seeders,
-                "leechers": max(peers - seeders, 0),
+                "leechers": max(peers - seeders_in_peers * seeders, 0),
                 "age_hours": (now - published) / 3600,
+                "free": attrs.get("downloadvolumefactor") == "0",
             }
         )
     return releases
@@ -232,6 +235,7 @@ def load_state(path):
         "grabbed": state.get("grabbed", {}),
         "twins": state.get("twins", {}),
         "uploads": state.get("uploads", {}),
+        "free": state.get("free", {}),
         "paused": state.get("paused", False),
     }
 
@@ -263,7 +267,8 @@ def prepare(qbt, settings):
 def record(state, torrents, settings, now):
     for t in torrents.values():
         if t["hash"] in state["transfers"] or settings["tracker"] in t["tracker"].lower():
-            state["transfers"][t["hash"]] = [t["downloaded"], t["uploaded"]]
+            downloaded = 0 if t["hash"] in state["free"] else t["downloaded"]
+            state["transfers"][t["hash"]] = [downloaded, t["uploaded"]]
         if t["category"] in FARM:
             samples = state["uploads"].setdefault(t["hash"], [])
             if not samples or now - samples[-1][0] >= DAY:
@@ -276,6 +281,8 @@ def record(state, torrents, settings, now):
         state["uploads"][infohash] = [s for s in state["uploads"][infohash] if s[0] >= keep_after]
     for infohash in [h for h, at in state["grabbed"].items() if at < now - DAY]:
         del state["grabbed"][infohash]
+    for infohash in [h for h in state["free"] if h not in torrents and h in state["transfers"]]:
+        del state["free"][infohash]
 
 
 def drop_twins(qbt, state, torrents):
@@ -317,6 +324,23 @@ def clean_farm(qbt, settings, state, torrents, now):
     used = size_of(torrents, FARM)
     if used > settings["farm_size"]:
         print(f"The farm holds {used / GB:.1f} GB, over {settings['farm_size'] / GB:g} GB, the rest is still downloading or too young")
+
+
+def adopt(qbt, settings, state, torrents):
+    room = settings["zen_size"] - size_of(torrents, (ZEN,))
+    for t in torrents.values():
+        if (
+            t["category"] in settings["library_categories"]
+            and t["hash"] in state["transfers"]
+            and t["progress"] >= 1
+            and t["seeding_time"] >= settings["adopt_after"]
+            and is_rare(t["size"], t["num_complete"])
+            and t["size"] <= room
+        ):
+            qbt.set_category([t["hash"]], ZEN)
+            t["category"] = ZEN
+            room -= t["size"]
+            print(f"Moved {t['name']} from {settings['library_categories']} to the Zen reserve, {t['num_complete']} seeders")
 
 
 def clean_zen(qbt, settings, torrents):
@@ -412,6 +436,10 @@ def grab(qbt, prowlarr, settings, state, torrents, now):
                 qbt.add(prowlarr.download(twin["link"]), category)
                 state["twins"][twin["infohash"]] = [release["infohash"], category]
                 source = "its public twin"
+            elif release["free"]:
+                qbt.add(prowlarr.download(release["link"]), category)
+                state["free"][release["infohash"]] = now
+                source = "the tracker, freeleech"
             elif may_pay(state, settings, category):
                 qbt.add(prowlarr.download(release["link"]), category)
                 state["grabbed"][release["infohash"]] = now
@@ -436,6 +464,7 @@ def run_once(qbt, prowlarr, settings, state, now):
     record(state, torrents, settings, now)
     drop_twins(qbt, state, torrents)
     clean_farm(qbt, settings, state, torrents, now)
+    adopt(qbt, settings, state, torrents)
     clean_zen(qbt, settings, torrents)
     grab(qbt, prowlarr, settings, state, torrents, now)
 
@@ -469,6 +498,9 @@ def settings_from_env():
         "per_day": int(number("RATIO_GRAB_PER_DAY", 3)),
         "max_downloading": int(number("RATIO_GRAB_MAX_DOWNLOADING", 2)),
         "twin_lookups": int(number("RATIO_TWIN_LOOKUPS", 10)),
+        "library_categories": tuple(c.strip() for c in os.environ.get("RATIO_LIBRARY_CATEGORIES", "radarr,tv-sonarr").split(",")),
+        "adopt_after": number("RATIO_ADOPT_AFTER_HOURS", 6) * 3600,
+        "tracker_seeders_in_peers": int(number("RATIO_TRACKER_SEEDERS_IN_PEERS", 2)),
         "rules": {
             "min_size": number("RATIO_GRAB_MIN_SIZE_GB", 1) * GB,
             "max_size": number("RATIO_GRAB_MAX_SIZE_GB", 5) * GB,
@@ -487,7 +519,11 @@ def main():
         os.environ.get("QBITTORRENT_USER", ""),
         os.environ.get("QBITTORRENT_PASSWORD", ""),
     )
-    prowlarr = Prowlarr(os.environ.get("PROWLARR_URL", "http://prowlarr:9696"), os.environ.get("PROWLARR_API_KEY", ""))
+    prowlarr = Prowlarr(
+        os.environ.get("PROWLARR_URL", "http://prowlarr:9696"),
+        os.environ.get("PROWLARR_API_KEY", ""),
+        settings["tracker_seeders_in_peers"],
+    )
     state_path = os.environ.get("RATIO_STATE", "/state/ratio-grab.json")
     state = load_state(state_path)
     if not settings["indexers"]:

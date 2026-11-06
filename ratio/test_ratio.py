@@ -39,7 +39,7 @@ def torrent(hash, category="ratio", size_gb=3, seeding_days=10, uploaded_gb=0, d
     }
 
 
-def release(infohash, leechers=40, seeders=1, size_gb=3, age_hours=0.5, title=None):
+def release(infohash, leechers=40, seeders=1, size_gb=3, age_hours=0.5, title=None, free=False):
     return {
         "infohash": infohash,
         "title": title or f"Release.{infohash}.1080p",
@@ -48,6 +48,7 @@ def release(infohash, leechers=40, seeders=1, size_gb=3, age_hours=0.5, title=No
         "seeders": seeders,
         "leechers": leechers,
         "age_hours": age_hours,
+        "free": free,
     }
 
 
@@ -122,6 +123,9 @@ SETTINGS = {
     "per_day": 3,
     "max_downloading": 2,
     "twin_lookups": 10,
+    "library_categories": ("radarr", "tv-sonarr"),
+    "adopt_after": 6 * 3600,
+    "tracker_seeders_in_peers": 2,
     "rules": {
         "min_size": 1 * GB,
         "max_size": 5 * GB,
@@ -137,7 +141,7 @@ def settings(**changes):
 
 
 def empty_state(**changes):
-    return {"transfers": {}, "grabbed": {}, "twins": {}, "uploads": {}, "paused": False, **changes}
+    return {"transfers": {}, "grabbed": {}, "twins": {}, "uploads": {}, "free": {}, "paused": False, **changes}
 
 
 def run(qbt, prowlarr=None, state=None, now=NOW, **changes):
@@ -178,6 +182,18 @@ class Farm(unittest.TestCase):
         state = run(qbt, FakeProwlarr([release("hungry")]))
         self.assertEqual(qbt.added, [])
         self.assertTrue(state["paused"])
+
+    def test_a_freeleech_release_is_grabbed_even_while_paused(self):
+        qbt = FakeQBittorrent([torrent("old", category="radarr", downloaded_gb=20)])
+        state = run(qbt, FakeProwlarr([release("free", free=True)]))
+        self.assertEqual(qbt.added, [("http://prowlarr/free.torrent", "ratio")])
+        self.assertEqual(state["free"], {"free": NOW})
+        self.assertEqual(state["grabbed"], {})
+
+    def test_a_freeleech_download_does_not_count_in_the_deficit(self):
+        qbt = FakeQBittorrent([torrent("free", downloaded_gb=4, uploaded_gb=1)])
+        state = run(qbt, state=empty_state(free={"free": NOW - 100}))
+        self.assertEqual(state["transfers"], {"free": [0, 1 * GB]})
 
     def test_three_paid_grabs_a_day_at_most(self):
         qbt = FakeQBittorrent()
@@ -323,6 +339,22 @@ class ZenReserve(unittest.TestCase):
         self.assertTrue(is_rare(200 * GB, 199))
 
 
+class Adoption(unittest.TestCase):
+    def test_a_rare_tracker_torrent_of_radarr_joins_the_zen_reserve(self):
+        qbt = FakeQBittorrent([torrent("movie", category="radarr", seeders=6)])
+        run(qbt)
+        self.assertEqual(qbt.moved, [("movie", "zen")])
+
+    def test_a_crowded_public_or_fresh_library_torrent_stays_with_radarr(self):
+        qbt = FakeQBittorrent([
+            torrent("crowded", category="radarr", seeders=80),
+            torrent("public", category="tv-sonarr", seeders=3, tracker="http://nyaa.tracker.wf/announce"),
+            torrent("fresh", category="tv-sonarr", seeders=3, seeding_days=0.1),
+        ])
+        run(qbt)
+        self.assertEqual(qbt.moved, [])
+
+
 class Ledger(unittest.TestCase):
     def test_only_tracker_torrents_count_and_removed_ones_stay(self):
         qbt = FakeQBittorrent([
@@ -376,7 +408,21 @@ FEED = b"""<?xml version="1.0"?>
 </channel></rss>"""
 
 
+C411_FEED = b"""<?xml version="1.0"?>
+<rss xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel>
+<item><title>The.Ark.S03E03</title><link>http://prowlarr/1</link><size>100</size>
+<pubDate>Tue, 03 Nov 2026 22:00:00 +0100</pubDate>
+<torznab:attr name="infohash" value="ABC"/><torznab:attr name="seeders" value="87"/><torznab:attr name="peers" value="174"/>
+<torznab:attr name="downloadvolumefactor" value="0"/></item>
+</channel></rss>"""
+
+
 class Torznab(unittest.TestCase):
+    def test_c411_counts_each_seeder_twice_in_its_peers(self):
+        releases = parse_torznab(C411_FEED, 1793743200, seeders_in_peers=2)
+        self.assertEqual(releases[0]["leechers"], 0)
+        self.assertTrue(releases[0]["free"])
+
     def test_items_without_a_date_are_skipped(self):
         releases = parse_torznab(FEED, 1793743200)
         self.assertEqual([r["infohash"] for r in releases], ["abc"])
