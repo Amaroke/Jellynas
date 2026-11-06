@@ -1,6 +1,6 @@
 # The NAS answers on its own domain
 
-Friends reached Jellyfin and Seerr through a random DuckDNS subdomain, and the Admin reached each tool over plain HTTP on its own port of the NAS. The NAS now answers on `amaroke.fr`, the domain of the Admin hosted by OVH, over HTTPS only, through Caddy on a single port.
+Friends reached Jellyfin and Seerr through a random DuckDNS subdomain, and the Admin reached each tool over plain HTTP on its own port of the NAS. The NAS now answers on the domain of the Admin, hosted by OVH, over HTTPS only, through Caddy on a single port.
 
 ## Decision
 
@@ -13,7 +13,7 @@ Friends reached Jellyfin and Seerr through a random DuckDNS subdomain, and the A
 
 - **Keep DuckDNS for the public names, the domain for the lan names only**: rejected. It kept the public address apart from the identity of the Admin, but the certificate logs already list the DuckDNS name, the page behind it is a login, and the pseudonym of the Admin already names the public repo.
 - **A certificate per name**: rejected. Each one lands in the certificate logs, which would list every tool of the NAS.
-- **A port per tool, under the 50000 range**: rejected. Once every tool sits behind Caddy, a port per tool only widens what the NAS publishes.
+- **A port per tool**: rejected. Once every tool sits behind Caddy, a port per tool only widens what the NAS publishes.
 - **A local certificate authority**: rejected. Each device, phones included, would need its root certificate, and a private suffix would need a local DNS server.
 - **The private ranges for the lan names**: rejected. Docker relays the IPv6 and loopback connections through its own private addresses, which would pass for local ones, so the lan names only accept `LAN_SUBNET` and Caddy only listens on IPv4.
 
