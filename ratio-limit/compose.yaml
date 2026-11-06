@@ -1,6 +1,6 @@
 services:
   ratio-limit:
-    image: python:3.13.9-alpine3.22
+    image: python:3.14.5-alpine3.22
     container_name: ratio-limit
     restart: unless-stopped
     user: ${PUID}:${PGID}
@@ -15,7 +15,7 @@ services:
       - ./ratio_limit.py:/app/ratio_limit.py:ro
 
   ratio-grab:
-    image: python:3.13.9-alpine3.22
+    image: python:3.14.5-alpine3.22
     container_name: ratio-grab
     restart: unless-stopped
     user: ${PUID}:${PGID}
