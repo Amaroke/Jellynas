@@ -980,7 +980,7 @@ docker restart jellynas-deployer
 
 [Renovate](https://github.com/apps/renovate) keeps the images and the GitHub Actions up to date. Install the app on the repo only, then merge the onboarding pull request it opens if it still opens one. Its settings are in `renovate.json`:
 
-- It opens its pull requests early on Saturday morning, between midnight and 6 am, for releases at least 3 days old.
+- It opens its pull requests as soon as a release is published, and merges an update only once its release is 3 days old.
 - It merges a minor or patch update by itself once the CI passes, and the NAS deploys it.
 - A major update, and any update of Gluetun or qBittorrent, waits for the Admin to read its release notes and merge it.
 - The Dependency Dashboard issue lists every pending update.
