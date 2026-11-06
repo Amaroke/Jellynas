@@ -1,6 +1,27 @@
 # Jellynas
 
-A personal media server built on Jellyfin, shared with Friends over the internet. Follow these steps in order, running every command from the repo folder.
+A personal media server built on Jellyfin, shared with Friends over the internet.
+
+Follow the sections in order. Each one starts with the sections it requires, which must be done first. Every command runs on the Host, as root, from the clone, as [Host](#host) sets out.
+
+1. [Host](#host)
+2. [Fill in the settings](#fill-in-the-settings)
+3. [Create the data and appdata roots](#create-the-data-and-appdata-roots)
+4. [Start the NAS](#start-the-nas)
+5. [Jellyfin](#jellyfin)
+6. [Public access](#public-access)
+7. [Seerr](#seerr)
+8. [qBittorrent](#qbittorrent)
+9. [Radarr](#radarr)
+10. [Prowlarr](#prowlarr)
+11. [Movie Requests](#movie-requests)
+12. [Sonarr](#sonarr)
+13. [Show Requests](#show-requests)
+14. [Recyclarr](#recyclarr)
+15. [Tdarr](#tdarr)
+16. [Bazarr](#bazarr)
+17. [Private tracker ratio](#private-tracker-ratio)
+18. [Verify the NAS](#verify-the-nas)
 
 ## Architecture
 
@@ -313,12 +334,67 @@ flowchart LR
     linkStyle 22,23,24,25,26,27,28,29,30,31,32 stroke:#9e9e9e,stroke-width:1px,stroke-dasharray:4 4,color:#9e9e9e
 ```
 
-## Prerequisites
+## Host
 
-- Docker: Docker Desktop on Windows, Docker Engine with the Compose plugin on Linux.
-- Git, with Git Bash on Windows to run the verification script.
+The NAS runs on TrueNAS SCALE, in a Hyper-V virtual machine on the PC until the UGREEN NAS replaces it. [ADR 0007](docs/adr/0007-the-nas-runs-on-the-docker-of-truenas-scale.md) records why. Every command of this README runs on TrueNAS, in System > Shell or over SSH, as root and from the clone:
+
+```sh
+sudo -i
+cd /mnt/tank/jellynas
+```
+
+### Virtual machine
+
+Download the TrueNAS SCALE ISO from [truenas.com](https://www.truenas.com/download-truenas-community-edition/). In PowerShell run as administrator, create an external switch on the Ethernet adapter, which cuts the network of the PC for a few seconds, then the virtual machine with its boot and pool disks:
+
+```powershell
+New-VMSwitch -Name External -NetAdapterName Ethernet -AllowManagementOS $true
+New-VM -Name truenas -Generation 2 -MemoryStartupBytes 8GB -SwitchName External -NewVHDPath C:\Hyper-V\truenas\boot.vhdx -NewVHDSizeBytes 32GB
+Set-VM -Name truenas -ProcessorCount 3 -StaticMemory -CheckpointType Disabled -AutomaticStartAction Start -AutomaticStopAction ShutDown
+Set-VMFirmware -VMName truenas -EnableSecureBoot Off
+New-VHD -Path C:\Hyper-V\truenas\pool.vhdx -SizeBytes 200GB -Dynamic
+Add-VMHardDiskDrive -VMName truenas -Path C:\Hyper-V\truenas\pool.vhdx
+Add-VMDvdDrive -VMName truenas -Path <path of the ISO>
+Set-VMFirmware -VMName truenas -FirstBootDevice (Get-VMDvdDrive -VMName truenas)
+Start-VM -Name truenas
+```
+
+Checkpoints stay disabled, the snapshots of ZFS replace them. The virtual machine starts and stops with the PC.
+
+Open it in Hyper-V Manager and install TrueNAS on the 32 GB disk, with `truenas_admin` as the administrative user. Leave the installer on its final menu, and pin the MAC address of the virtual machine, so that the router always gives it the same address:
+
+```powershell
+$mac = (Get-VMNetworkAdapter -VMName truenas).MacAddress
+Stop-VM -Name truenas -TurnOff -Force
+Set-VMNetworkAdapter -VMName truenas -StaticMacAddress $mac
+Get-VMDvdDrive -VMName truenas | Remove-VMDvdDrive
+Set-VMFirmware -VMName truenas -FirstBootDevice (Get-VMHardDiskDrive -VMName truenas -ControllerLocation 0)
+Start-VM -Name truenas
+```
+
+In the router, give that MAC address a fixed local IP. It is the address of the NAS.
+
+### Pool and datasets
+
+Open `http://<NAS address>` and sign in with `truenas_admin`.
+
+1. In Storage, create a pool named `tank` on the 200 GB disk, as a stripe. The redundancy comes with the UGREEN.
+2. In Datasets, add three datasets to `tank` with the "Apps" preset, so the `apps` user, 568, owns them: `data`, `appdata` and `jellynas`. Never add a child dataset under `data`: `torrents` and `media` are plain folders, so that the hardlinks of cross-seed stay on one file system.
+3. In Apps, click "Configure", pick `tank` as the pool, and save. TrueNAS starts its Docker.
+
+### Clone
+
+In System > Shell, clone the repo into its dataset. Git refuses a clone that root does not own until it is marked as safe:
+
+```sh
+sudo -i
+git clone https://github.com/Amaroke/Jellynas.git /mnt/tank/jellynas
+git config --global --add safe.directory /mnt/tank/jellynas
+```
 
 ## Fill in the settings
+
+Requires [Host](#host).
 
 ```sh
 cp .env.example .env
@@ -327,6 +403,8 @@ cp .env.example .env
 Open `.env` and fill in every value. Each variable is explained in `.env.example`. Wrap a value in double quotes if it contains a space. `.env` is ignored by git and must never be committed.
 
 ## Create the data and appdata roots
+
+Requires [Host](#host) and [Fill in the settings](#fill-in-the-settings).
 
 Both roots live outside the repo, at the paths set in `DATA_ROOT` and `APPDATA_ROOT`. The data root holds a single tree, so that one folder holds every download and the whole Library:
 
@@ -342,32 +420,70 @@ Both roots live outside the repo, at the paths set in `DATA_ROOT` and `APPDATA_R
     └── manga
 ```
 
-Create it from the repo folder, in bash (Git Bash on Windows):
+Create it from the clone:
 
 ```bash
-set -a && . <(tr -d '\r' < .env) && set +a
+set -a && . ./.env && set +a
 mkdir -p "$DATA_ROOT"/torrents "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$APPDATA_ROOT"/seerr "$APPDATA_ROOT"/recyclarr
+chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
-On Linux, make sure the user matching `PUID` and `PGID` owns both roots.
+The services run as `PUID` and `PGID`, so the last command gives them the folders that root just created.
 
 ## Start the NAS
 
+Requires [Fill in the settings](#fill-in-the-settings) and [Create the data and appdata roots](#create-the-data-and-appdata-roots).
+
+The NAS follows the `main` branch of GitHub: a change merged into `main` reaches the NAS within minutes, and nothing else changes it. The NAS runs from its own clone of the repo, kept on `main` and never edited: the deployer refuses to deploy while a tracked file differs from git. Edit the repo in another folder and go through a pull request. `.env` stays in the NAS clone only, outside git.
+
+The settings made in the web UIs of the services live in the appdata root, not in git, so the deploy never touches them. Back up the appdata root to keep them.
+
+### Deployer
+
+The deployer is a container, outside the NAS project, that runs `scripts/deploy.sh` every 5 minutes. Start it once from the clone, its first run starts the whole NAS:
+
 ```sh
-docker compose up -d
+docker compose -f deployer/compose.yaml up -d --build
 ```
 
-Each service is one line in the root `compose.yaml`. Comment a line to disable that service, then run the command again.
+Each run fast-forwards `main` to GitHub, then runs `docker compose up -d --build --remove-orphans`, which recreates the services whose compose file or image changed and removes the services commented out in `compose.yaml`. A service also restarts when another file of its folder changes, such as a script or a config file it mounts, since Docker would keep the old one. The deployer remembers the last deployed commit in `.git/jellynas-deployed` and does nothing until a new one is merged. A failed deploy is retried at the next run. When a change touches `deployer/Dockerfile` or `deployer/compose.yaml`, the deployer recreates itself.
+
+The deployer reaches Docker through its socket, which gives it full control of the machine, like any tool that runs Compose.
+
+Its logs name each deploy, and the reason of each failed run, repeated every 5 minutes until it is fixed:
+
+```sh
+docker logs jellynas-deployer
+```
+
+To deploy without waiting, restart it, it deploys as soon as it starts:
+
+```sh
+docker restart jellynas-deployer
+```
+
+Each service is one line in the root `compose.yaml`. To disable a service, comment its line in a pull request: once merged, the deployer removes it.
+
+### Renovate
+
+[Renovate](https://github.com/apps/renovate) keeps the images and the GitHub Actions up to date. Install the app on the repo only, then merge the onboarding pull request it opens if it still opens one. Its settings are in `renovate.json`:
+
+- It opens its pull requests as soon as a release is published, and merges an update only once its release is 3 days old.
+- It merges a minor or patch update by itself once the CI passes, and the NAS deploys it.
+- A major update, and any update of Gluetun or qBittorrent, waits for the Admin to read its release notes and merge it.
+- The Dependency Dashboard issue lists every pending update.
 
 ## Jellyfin
+
+Requires [Start the NAS](#start-the-nas).
 
 ### First-run wizard
 
 1. Open `http://<NAS address>:<JELLYFIN_PORT>` from a browser on the local network.
 2. Pick the display language and create the Admin Account with a strong password stored in your password manager.
-3. Skip the library step, it is done below.
+3. Skip the library step, [Libraries](#libraries) does it.
 4. Keep the metadata language and country you prefer.
-5. Leave "Allow remote connections to this server" checked, Friends will reach Jellyfin from the internet later.
+5. Leave "Allow remote connections to this server" checked, Friends will reach Jellyfin from the internet through [Public access](#public-access).
 
 ### Libraries
 
@@ -395,6 +511,8 @@ Each Friend gets their own Account, so their watch history and progress are thei
 
 ## Public access
 
+Requires [Jellyfin](#jellyfin).
+
 Friends reach Jellyfin from the internet over HTTPS. DuckDNS gives the NAS a free address that follows your home IP, and Caddy is the only service the router lets in. Caddy obtains the certificate on its own and refuses any hostname other than the ones set in `.env`, so the forwarded port can never lead to an admin tool. Caddy proves to Let's Encrypt that it owns the address through DuckDNS with your token, so the certificate needs no open port.
 
 ### DuckDNS
@@ -407,7 +525,7 @@ The duckdns service then updates the address every five minutes. Your DuckDNS ad
 
 ### Router port forwards
 
-Pick the HTTPS port Friends will use and set it in `CADDY_HTTPS_PORT`, or leave it empty for 443. A high port that no service uses by default, such as a random five-digit number, draws fewer automated scans. Stay below 49152: Windows reserves blocks of ports above it for Hyper-V and Docker, and `netsh interface ipv4 show excludedportrange protocol=tcp` lists them. Friends then add it to the address, for example `https://jellyfin.<subdomain>.duckdns.org:<port>`, which the Jellyfin apps accept.
+Pick the HTTPS port Friends will use and set it in `CADDY_HTTPS_PORT`, or leave it empty for 443. A high port that no service uses by default, such as a random five-digit number, draws fewer automated scans. Friends then add it to the address, for example `https://jellyfin.<subdomain>.duckdns.org:<port>`, which the Jellyfin apps accept.
 
 On your router, forward that single TCP port to the local IP of the NAS, and nothing else. Set both the external and the internal port of the rule to `CADDY_HTTPS_PORT`, never the internal port to 443: Caddy listens on `CADDY_HTTPS_PORT` on the NAS. Every other port, including the Jellyfin port and the admin tools, stays reachable on the local network only. Give the NAS a fixed local IP in the router so the forward keeps working.
 
@@ -435,6 +553,8 @@ docker compose restart jellyfin
 
 ## Seerr
 
+Requires [Jellyfin](#jellyfin) and [Public access](#public-access).
+
 Friends make Requests in Seerr, on its own public hostname, and log in with their Jellyfin Account. Seerr has no access to the Library files.
 
 ### Hostname
@@ -452,7 +572,7 @@ docker compose up -d
 3. Enter `jellyfin` as the hostname, `8096` as the port, leave SSL off and the URL base empty.
 4. Enter an email address and the username and password of the Jellyfin Admin Account. This Account becomes the Seerr Admin.
 5. Sync the libraries and enable Movies, Shows and Anime.
-6. Skip the Radarr and Sonarr step, they are added later.
+6. Skip the Radarr and Sonarr step, [Movie Requests](#movie-requests) and [Show Requests](#show-requests) add them.
 
 ### Settings
 
@@ -464,6 +584,8 @@ docker compose up -d
 A Friend then opens the Seerr address, picks "Sign in with Jellyfin" and enters their Jellyfin Account, with no second login to create.
 
 ## qBittorrent
+
+Requires [Start the NAS](#start-the-nas).
 
 qBittorrent downloads torrents into the torrents tree, the only folder it sees, mounted under `/data/torrents`. It shares the network of Gluetun, whose firewall only lets traffic out through the VPN. When the VPN is down or not configured yet, qBittorrent has no connectivity at all, so your real IP never leaks.
 
@@ -534,6 +656,8 @@ Optionally, in Speed, set a global upload limit to about 60% of your internet up
 
 ## Radarr
 
+Requires [qBittorrent](#qbittorrent).
+
 Radarr fulfils movie Requests: it searches the indexers, sends the torrent to qBittorrent, then copies the finished movie into the Library. It sees only the movies folder, under `/data/media/movies`, and the torrents tree, under `/data/torrents`.
 
 ### Account
@@ -553,8 +677,9 @@ In Settings > Media Management, click "Show Advanced" at the top, then:
 Create the recycle bin folder first, from the repo folder in bash:
 
 ```bash
-set -a && . <(tr -d '\r' < .env) && set +a
+set -a && . ./.env && set +a
 mkdir -p "$DATA_ROOT"/media/movies/.recycle
+chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
 ### Download client
@@ -566,9 +691,11 @@ mkdir -p "$DATA_ROOT"/media/movies/.recycle
 5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding goal, Radarr removes it and its files from the torrents tree, and the movie stays in the Library.
 6. Click "Test", then "Save".
 
-Copy the API key from Settings > General > Security, Prowlarr and Seerr need it below.
+Copy the API key from Settings > General > Security, [Radarr sync](#radarr-sync) and [Movie Requests](#movie-requests) need it.
 
 ## Prowlarr
+
+Requires [Radarr](#radarr).
 
 Prowlarr holds the indexers once and pushes them to Radarr, and later to the other tools. FlareSolverr opens indexers protected by Cloudflare for it. Neither sees any media file.
 
@@ -599,6 +726,8 @@ A private tracker bans an Account that removes a torrent before its minimum seed
 
 ## Movie Requests
 
+Requires [Seerr](#seerr), [Radarr](#radarr) and [Prowlarr](#prowlarr).
+
 In Seerr, Settings > Services, click "Add Radarr Server":
 
 1. Check "Default Server" and enter `Radarr` as the name.
@@ -609,6 +738,8 @@ In Seerr, Settings > Services, click "Add Radarr Server":
 An approved movie Request is then searched by Radarr, downloaded by qBittorrent into `/data/torrents/movies`, and copied into the movies folder, where Jellyfin picks it up.
 
 ## Sonarr
+
+Requires [qBittorrent](#qbittorrent) and [Prowlarr](#prowlarr).
 
 Sonarr fulfils show Requests and fetches new episodes on its own: it searches the indexers, sends the torrent to qBittorrent, then copies each finished episode into the Library. It sees only the shows and anime folders, under `/data/media/shows` and `/data/media/anime`, and the torrents tree, under `/data/torrents`.
 
@@ -628,8 +759,9 @@ In Settings > Media Management, click "Show Advanced" at the top, then:
 Create the recycle bin folder first, from the repo folder in bash:
 
 ```bash
-set -a && . <(tr -d '\r' < .env) && set +a
+set -a && . ./.env && set +a
 mkdir -p "$DATA_ROOT"/media/shows/.recycle
+chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
 ### Download client
@@ -641,13 +773,15 @@ mkdir -p "$DATA_ROOT"/media/shows/.recycle
 5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding goal, Sonarr removes it and its files from the torrents tree, and the episodes stay in the Library.
 6. Click "Test", then "Save".
 
-Copy the API key from Settings > General > Security, Prowlarr and Seerr need it below.
+Copy the API key from Settings > General > Security, [Sonarr sync](#sonarr-sync) and [Show Requests](#show-requests) need it.
 
 ### Sonarr sync
 
 In Prowlarr, Settings > Apps, click "+" and pick Sonarr. Set "Prowlarr Server" to `http://prowlarr:9696` and "Sonarr Server" to `http://sonarr:8989`, paste the Sonarr API key, click "Test", then "Save". Every indexer with TV categories then shows up in Sonarr, Settings > Indexers. An indexer without TV categories, such as Internet Archive, is never synced to Sonarr.
 
 ## Show Requests
+
+Requires [Seerr](#seerr) and [Sonarr](#sonarr).
 
 In Seerr, Settings > Services, click "Add Sonarr Server":
 
@@ -660,6 +794,8 @@ In Seerr, Settings > Services, click "Add Sonarr Server":
 An approved show Request is then searched by Sonarr, downloaded by qBittorrent into `/data/torrents/shows`, and copied into the shows folder, or the anime folder for an anime, where Jellyfin picks it up. New episodes of a monitored show follow on their own.
 
 ## Recyclarr
+
+Requires [Radarr](#radarr) and [Sonarr](#sonarr).
 
 Recyclarr creates the quality profiles of Radarr and Sonarr, so that most downloads already match the Library format and Tdarr rarely has to re-encode. It sees no media file and only talks to the Radarr and Sonarr APIs. Its config is `recyclarr/recyclarr.yml`, with a few custom formats of our own in `recyclarr/custom-formats`, and it syncs again every day at midnight.
 
@@ -700,13 +836,71 @@ Recyclarr creates the profiles but never assigns them.
 Interactive Search, in a movie or an episode, shows the score of each release and why any is refused. To score a release name without searching, use the parse endpoint of Radarr. The name must match a movie already in Radarr, here Your Name, otherwise no profile applies and the score stays at 0:
 
 ```bash
-set -a && . <(tr -d '\r' < .env) && set +a
+set -a && . ./.env && set +a
 curl -s -G -H "X-Api-Key: $RADARR_API_KEY" --data-urlencode "title=Your.Name.2016.MULTi.1080p.WEB.x265-GROUP" "http://localhost:${RADARR_PORT:-7878}/api/v3/parse"
 ```
 
 The answer holds `customFormats` and `customFormatScore`. A score below -5000 means refused. Sonarr answers the same on its own port with the name of an episode of a show it has.
 
+## Tdarr
+
+Requires [Radarr](#radarr) and [Sonarr](#sonarr).
+
+Tdarr normalises every video of the Library to MKV H265 within 1920x1080, as [ADR 0001](docs/adr/0001-tdarr-normalises-to-mkv-h265.md) sets out. It sees only the movies, shows and anime folders, under the same paths as Radarr and Sonarr, and never the torrents tree, so a torrent still seeding is never touched. Its work files go to `<APPDATA_ROOT>/tdarr/cache`.
+
+The flow, `tdarr/flow.json`, decides from the tracks of each file, as [ADR 0004](docs/adr/0004-tdarr-picks-tracks-from-the-file.md) records:
+
+- It keeps French audio and the original audio, the language of the first audio track that is not French.
+- It keeps French and English subtitles, or French and Japanese ones when the original audio is Japanese, forced subtitles included, inside the MKV.
+- A file already in H265 within 1920x1080 keeps its video as is, only its extra tracks are removed. Any other video is encoded to H265 and scaled down to fit within 1920x1080, keeping its aspect ratio, never scaled up.
+- It embeds the subtitle files that Bazarr saved next to the video, such as `.fr.srt` or `.ja.forced.ass`, under the same language rules, and deletes them once the new file is in place.
+- The new MKV replaces the original file. Tdarr then asks Radarr for movies, or Sonarr for shows and anime, to rescan the folder, with the API keys of `.env`, so they and Bazarr know the new file right away.
+
+### Disk space while seeding
+
+Each import is a copy, so a downloaded file sits twice on the disk: once in the torrents tree, where it seeds, and once in the Library, where Tdarr rewrites it. The torrents copy goes away once qBittorrent stops the torrent at its seeding goal and Radarr or Sonarr remove it with "Remove Completed". Keep enough free space for every torrent still seeding.
+
+### Account
+
+1. In `.env`, set `TDARR_API_KEY` before the first start of Tdarr, to `tapi_` followed by random letters and digits:
+
+   ```bash
+   echo "tapi_$(openssl rand -hex 16)"
+   ```
+
+2. Start Tdarr with `docker compose up -d`. It creates the `admin` Account with that key as its password, and its internal node connects with the same key.
+3. Open `http://<NAS address>:<TDARR_PORT>` from a browser on the local network and sign in with `admin` and the key.
+4. In Tools > Account, click "Change Password" and set a strong password, distinct from the other tools, stored in your password manager. The key keeps working for the node.
+
+### Flow
+
+1. In Flows, click "Import JSON Flow Template", paste the content of `tdarr/flow.json`, and create the flow.
+2. After pulling a change to `tdarr/flow.json`, import it again and pick "Update Existing Flow".
+
+### Libraries
+
+In Libraries, click "Library +" once per folder:
+
+| Library | Source |
+| --- | --- |
+| Movies | `/data/media/movies` |
+| Shows | `/data/media/shows` |
+| Anime | `/data/media/anime` |
+
+For each library:
+
+1. In Source, enter the folder, check "Folder Watch", and leave "Hold Files After Scanning" checked so a file still being copied by Radarr or Sonarr waits before it is processed.
+2. In Transcode Cache, enter `/temp`.
+3. In Transcode, pick "Flows" and the `Jellynas normalise to MKV H265 1080p` flow.
+4. Leave the output folder empty, so each file is replaced in place.
+
+### Node
+
+On the home page, the internal node starts with one transcode and one health check CPU worker. Raise the transcode workers if the machine has cores to spare, each one encodes a file at a time.
+
 ## Bazarr
+
+Requires [Radarr](#radarr), [Sonarr](#sonarr), [Recyclarr](#recyclarr) and [Tdarr](#tdarr).
 
 Bazarr gives every movie and show French and English subtitles. It learns about each file from Radarr and Sonarr, then saves the subtitles next to it in the Library, where Tdarr embeds them into the video and deletes the subtitle files. It sees only the movies, shows and anime folders, under the same paths as Radarr and Sonarr, so no path mapping is needed.
 
@@ -774,61 +968,9 @@ The Library holds no subtitle file: Tdarr embeds each one into its video, so a F
 
 Bazarr writes the outcome of each command in System > Logs.
 
-## Tdarr
-
-Tdarr normalises every video of the Library to MKV H265 within 1920x1080, as [ADR 0001](docs/adr/0001-tdarr-normalises-to-mkv-h265.md) sets out. It sees only the movies, shows and anime folders, under the same paths as Radarr and Sonarr, and never the torrents tree, so a torrent still seeding is never touched. Its work files go to `<APPDATA_ROOT>/tdarr/cache`.
-
-The flow, `tdarr/flow.json`, decides from the tracks of each file, as [ADR 0004](docs/adr/0004-tdarr-picks-tracks-from-the-file.md) records:
-
-- It keeps French audio and the original audio, the language of the first audio track that is not French.
-- It keeps French and English subtitles, or French and Japanese ones when the original audio is Japanese, forced subtitles included, inside the MKV.
-- A file already in H265 within 1920x1080 keeps its video as is, only its extra tracks are removed. Any other video is encoded to H265 and scaled down to fit within 1920x1080, keeping its aspect ratio, never scaled up.
-- It embeds the subtitle files that Bazarr saved next to the video, such as `.fr.srt` or `.ja.forced.ass`, under the same language rules, and deletes them once the new file is in place.
-- The new MKV replaces the original file. Tdarr then asks Radarr for movies, or Sonarr for shows and anime, to rescan the folder, with the API keys of `.env`, so they and Bazarr know the new file right away.
-
-### Disk space while seeding
-
-Each import is a copy, so a downloaded file sits twice on the disk: once in the torrents tree, where it seeds, and once in the Library, where Tdarr rewrites it. The torrents copy goes away once qBittorrent stops the torrent at its seeding goal and Radarr or Sonarr remove it with "Remove Completed". Keep enough free space for every torrent still seeding.
-
-### Account
-
-1. In `.env`, set `TDARR_API_KEY` before the first start of Tdarr, to `tapi_` followed by random letters and digits:
-
-   ```bash
-   echo "tapi_$(openssl rand -hex 16)"
-   ```
-
-2. Start Tdarr with `docker compose up -d`. It creates the `admin` Account with that key as its password, and its internal node connects with the same key.
-3. Open `http://<NAS address>:<TDARR_PORT>` from a browser on the local network and sign in with `admin` and the key.
-4. In Tools > Account, click "Change Password" and set a strong password, distinct from the other tools, stored in your password manager. The key keeps working for the node.
-
-### Flow
-
-1. In Flows, click "Import JSON Flow Template", paste the content of `tdarr/flow.json`, and create the flow.
-2. After pulling a change to `tdarr/flow.json`, import it again and pick "Update Existing Flow".
-
-### Libraries
-
-In Libraries, click "Library +" once per folder:
-
-| Library | Source |
-| --- | --- |
-| Movies | `/data/media/movies` |
-| Shows | `/data/media/shows` |
-| Anime | `/data/media/anime` |
-
-For each library:
-
-1. In Source, enter the folder, check "Folder Watch", and leave "Hold Files After Scanning" checked so a file still being copied by Radarr or Sonarr waits before it is processed.
-2. In Transcode Cache, enter `/temp`.
-3. In Transcode, pick "Flows" and the `Jellynas normalise to MKV H265 1080p` flow.
-4. Leave the output folder empty, so each file is replaced in place.
-
-### Node
-
-On the home page, the internal node starts with one transcode and one health check CPU worker. Raise the transcode workers if the machine has cores to spare, each one encodes a file at a time.
-
 ## Private tracker ratio
+
+Requires [qBittorrent](#qbittorrent), [Prowlarr](#prowlarr), [Radarr](#radarr) and [Sonarr](#sonarr).
 
 The Admin keeps a good ratio on private trackers with torrents grabbed only to seed, without touching the Library. [ADR 0005](docs/adr/0005-ratio-torrents-stay-in-the-torrents-tree.md) records the layout:
 
@@ -848,8 +990,9 @@ None of them sees the media tree. autobrr, ratio-grab and ratio-limit see no fol
 ### Folders
 
 ```bash
-set -a && . <(tr -d '\r' < .env) && set +a
+set -a && . ./.env && set +a
 mkdir -p "$DATA_ROOT"/torrents/{ratio,cross-seed} "$APPDATA_ROOT"/{autobrr,cross-seed,qbit_manage}
+chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
 The `cross-seed` folder holds hardlinks to the data of other torrents, so the torrents tree must stay on a single disk.
@@ -907,7 +1050,7 @@ qbit_manage runs every 10 minutes, so a new ratio torrent gets its own limits be
 1. Copy it, replacing the file qbit_manage creates at its first start:
 
    ```bash
-   set -a && . <(tr -d '\r' < .env) && set +a
+   set -a && . ./.env && set +a
    cp qbit_manage/config.yml "$APPDATA_ROOT"/qbit_manage/config.yml
    docker compose restart qbit_manage
    ```
@@ -946,160 +1089,11 @@ docker compose logs ratio-grab
 
 ratio-grab reads `RATIO_GRAB_MAX_AGE_HOURS`, `RATIO_GRAB_MIN_SIZE_GB`, `RATIO_GRAB_MAX_SIZE_GB`, `RATIO_GRAB_MIN_LEECHERS`, `RATIO_GRAB_MIN_LEECHERS_PER_SEEDER`, `RATIO_GRAB_PER_DAY` and `RATIO_GRAB_MAX_DOWNLOADING` to change the limits above, once added to its `environment` in `ratio-limit/compose.yaml`.
 
-## Automatic deployment
-
-The NAS follows the `main` branch of GitHub: a change merged into `main` reaches the NAS within minutes, and nothing else changes it. The NAS runs from its own clone of the repo, kept on `main` and never edited: the deployer refuses to deploy while a tracked file differs from git. Edit the repo in another folder and go through a pull request. `.env` stays in the NAS clone only, outside git.
-
-The settings made in the web UIs of the services live in the appdata root, not in git, so the deploy never touches them. Back up the appdata root to keep them.
-
-### Deployer
-
-The deployer is a container, outside the NAS project, that runs `scripts/deploy.sh` every 5 minutes. Start it once from the NAS clone, in Git Bash on Windows:
-
-```sh
-docker compose -f deployer/compose.yaml up -d --build
-```
-
-Each run fast-forwards `main` to GitHub, then runs `docker compose up -d --build --remove-orphans`, which recreates the services whose compose file or image changed and removes the services commented out in `compose.yaml`. A service also restarts when another file of its folder changes, such as a script or a config file it mounts, since Docker would keep the old one. The deployer remembers the last deployed commit in `.git/jellynas-deployed` and does nothing until a new one is merged. A failed deploy is retried at the next run. When a change touches `deployer/Dockerfile` or `deployer/compose.yaml`, the deployer recreates itself.
-
-The deployer reaches Docker through its socket, which gives it full control of the machine, like any tool that runs Compose. Under Docker Desktop, it sees the clone through the path of the Docker Desktop VM, so its first deploy recreates every service that mounts a file of the repo.
-
-Its logs name each deploy, and the reason of each failed run, repeated every 5 minutes until it is fixed:
-
-```sh
-docker logs jellynas-deployer
-```
-
-To deploy without waiting, restart it, it deploys as soon as it starts. Running `scripts/deploy.sh` or `docker compose up` from Windows instead would recreate every service that mounts a file of the repo, twice, since Windows and the VM name the clone differently.
-
-```sh
-docker restart jellynas-deployer
-```
-
-### Renovate
-
-[Renovate](https://github.com/apps/renovate) keeps the images and the GitHub Actions up to date. Install the app on the repo only, then merge the onboarding pull request it opens if it still opens one. Its settings are in `renovate.json`:
-
-- It opens its pull requests as soon as a release is published, and merges an update only once its release is 3 days old.
-- It merges a minor or patch update by itself once the CI passes, and the NAS deploys it.
-- A major update, and any update of Gluetun or qBittorrent, waits for the Admin to read its release notes and merge it.
-- The Dependency Dashboard issue lists every pending update.
-
-## TrueNAS host
-
-The NAS moves from Docker Desktop on the PC to TrueNAS SCALE, first in a Hyper-V virtual machine on the PC, later on a UGREEN NAS. [ADR 0007](docs/adr/0007-the-nas-runs-on-the-docker-of-truenas-scale.md) records why. The services keep the same paths inside their containers, so nothing changes in their web UIs.
-
-### Virtual machine
-
-Download the TrueNAS SCALE ISO from [truenas.com](https://www.truenas.com/download-truenas-scale/). In PowerShell run as administrator, create an external switch on the Ethernet adapter, which cuts the network of the PC for a few seconds, then the virtual machine with its boot and pool disks:
-
-```powershell
-New-VMSwitch -Name External -NetAdapterName Ethernet -AllowManagementOS $true
-New-VM -Name truenas -Generation 2 -MemoryStartupBytes 8GB -SwitchName External -NewVHDPath C:\Hyper-V\truenas\boot.vhdx -NewVHDSizeBytes 32GB
-Set-VM -Name truenas -ProcessorCount 3 -StaticMemory -CheckpointType Disabled -AutomaticStartAction Start -AutomaticStopAction ShutDown
-Set-VMFirmware -VMName truenas -EnableSecureBoot Off
-New-VHD -Path C:\Hyper-V\truenas\pool.vhdx -SizeBytes 200GB -Dynamic
-Add-VMHardDiskDrive -VMName truenas -Path C:\Hyper-V\truenas\pool.vhdx
-Add-VMDvdDrive -VMName truenas -Path <path of the ISO>
-Set-VMFirmware -VMName truenas -FirstBootDevice (Get-VMDvdDrive -VMName truenas)
-Start-VM -Name truenas
-```
-
-Checkpoints stay disabled, the snapshots of ZFS replace them. The virtual machine starts and stops with Windows.
-
-Open it in Hyper-V Manager and install TrueNAS on the 32 GB disk. Once it runs, pin its MAC address, so that the router always gives it the same address:
-
-```powershell
-$mac = (Get-VMNetworkAdapter -VMName truenas).MacAddress
-Stop-VM -Name truenas
-Set-VMNetworkAdapter -VMName truenas -StaticMacAddress $mac
-Get-VMDvdDrive -VMName truenas | Remove-VMDvdDrive
-Start-VM -Name truenas
-```
-
-In the router, give that MAC address a fixed local IP. It is the address of the NAS from now on.
-
-### Pool and datasets
-
-Open `http://<NAS address>` and sign in with the admin Account set during the install.
-
-1. In Storage, create a pool named `tank` on the 200 GB disk, as a stripe. The redundancy comes with the UGREEN.
-2. In Datasets, add three datasets to `tank` with the "Apps" preset, so the `apps` user, 568, owns them: `data`, `appdata` and `jellynas`. Never add a child dataset under `data`: `torrents` and `media` are plain folders, so that the hardlinks of cross-seed stay on one file system.
-3. In Apps, click "Configure", pick `tank` as the pool, and save. TrueNAS starts its Docker.
-4. In System > Shell, check that Gluetun can open its tunnel and that Compose is there:
-
-   ```sh
-   ls -l /dev/net/tun
-   sudo docker compose version
-   ```
-
-### Clone and settings
-
-In System > Shell, clone the repo into its dataset, with the image the deployer is built from, since TrueNAS may have no git:
-
-```sh
-sudo docker run --rm -v /mnt/tank/jellynas:/repo docker:29.9.1-cli sh -c "apk add --no-cache git && git clone https://github.com/Amaroke/Jellynas.git /repo"
-```
-
-Create `.env` from the one of the PC and paste its content:
-
-```sh
-sudo nano /mnt/tank/jellynas/.env
-```
-
-Then change only these four values:
-
-```sh
-PUID=568
-PGID=568
-DATA_ROOT=/mnt/tank/data
-APPDATA_ROOT=/mnt/tank/appdata
-```
-
-### Move the NAS
-
-1. In Credentials > Users, edit the admin Account, check "Allow all sudo commands with no password" and enable the SSH service in System > Services, for the copy only.
-2. On the PC, stop the deployer first, so it does not start the NAS again, then the NAS, from the NAS clone in Git Bash:
-
-   ```sh
-   docker stop jellynas-deployer
-   docker compose down
-   ```
-
-3. Copy the data and appdata roots into their datasets, in Git Bash, with the roots of the PC:
-
-   ```bash
-   tar -C /c/NAS -cf - data appdata | ssh truenas_admin@<NAS address> "sudo tar -C /mnt/tank -xf -"
-   ```
-
-4. In System > Shell, give them to the `apps` user:
-
-   ```sh
-   sudo chown -R 568:568 /mnt/tank/data /mnt/tank/appdata
-   ```
-
-5. Uncheck "Allow all sudo commands with no password" and disable the SSH service.
-6. Start the deployer from the clone. Its first run starts the whole NAS:
-
-   ```sh
-   cd /mnt/tank/jellynas
-   sudo docker compose -f deployer/compose.yaml up -d --build
-   sudo docker logs -f jellynas-deployer
-   ```
-
-7. In the router, point the forward of `CADDY_HTTPS_PORT` to the address of the NAS.
-8. Run the verification script in System > Shell, then open the public addresses on a phone on 4G:
-
-   ```sh
-   cd /mnt/tank/jellynas
-   sudo bash scripts/verify.sh
-   ```
-
-Once every check passes, uninstall Docker Desktop from the PC. Keep `C:\NAS` until the Library and the history of each Friend show up as before.
-
 ## Verify the NAS
 
-Run the verification script from the repo folder, in Git Bash on Windows:
+Requires [Public access](#public-access) and [qBittorrent](#qbittorrent).
+
+Run the verification script from the clone:
 
 ```sh
 ./scripts/verify.sh
