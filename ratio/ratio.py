@@ -98,27 +98,32 @@ class QBittorrent:
 
 
 class Prowlarr:
-    def __init__(self, url, api_key):
+    def __init__(self, url, api_key, tracker_seeders_in_peers):
         self.url = url.rstrip("/")
         self.api_key = api_key
+        self.tracker_seeders_in_peers = tracker_seeders_in_peers
 
     def newest(self, indexer, now):
-        return self.query(indexer, {"t": "search", "cat": "2000,5000", "limit": 100}, now)
+        fields = {"t": "search", "cat": "2000,5000", "limit": 100}
+        return self.query(indexer, fields, now, self.tracker_seeders_in_peers)
 
     def search(self, indexer, title, now):
-        return self.query(indexer, {"t": "search", "q": re.sub(r"[._]+", " ", title), "limit": 100}, now)
+        return self.query(indexer, {"t": "search", "q": re.sub(r"[._]+", " ", title), "limit": 100}, now, 1)
 
-    def download(self, link):
-        with urllib.request.urlopen(link, timeout=60) as response:
+    def torrent(self, release):
+        page = re.search(r"nyaa\.si/view/(\d+)", release["page"])
+        link = f"https://nyaa.si/download/{page.group(1)}.torrent" if page else release["link"]
+        request = urllib.request.Request(link, headers={"User-Agent": "Mozilla/5.0 (compatible; jellynas-ratio)"})
+        with urllib.request.urlopen(request, timeout=60) as response:
             return response.read()
 
-    def query(self, indexer, fields, now):
+    def query(self, indexer, fields, now, seeders_in_peers):
         query = urllib.parse.urlencode({**fields, "apikey": self.api_key})
         with urllib.request.urlopen(f"{self.url}/{indexer}/api?{query}", timeout=60) as response:
-            return parse_torznab(response.read(), now)
+            return parse_torznab(response.read(), now, seeders_in_peers)
 
 
-def parse_torznab(xml_bytes, now):
+def parse_torznab(xml_bytes, now, seeders_in_peers=1):
     releases = []
     for item in ET.fromstring(xml_bytes).iter("item"):
         attrs = {a.get("name"): a.get("value") for a in item.iter(TORZNAB)}
@@ -135,13 +140,39 @@ def parse_torznab(xml_bytes, now):
                 "infohash": attrs["infohash"].lower(),
                 "title": item.findtext("title"),
                 "link": item.findtext("link"),
+                "page": item.findtext("comments") or item.findtext("guid") or "",
                 "size": int(item.findtext("size") or 0),
                 "seeders": seeders,
-                "leechers": max(peers - seeders, 0),
+                "leechers": max(peers - seeders_in_peers * seeders, 0),
                 "age_hours": (now - published) / 3600,
+                "free": attrs.get("downloadvolumefactor") == "0",
             }
         )
     return releases
+
+
+def bdecode(data, start=0):
+    kind = data[start:start + 1]
+    if kind == b"i":
+        end = data.index(b"e", start)
+        return int(data[start + 1:end]), end + 1
+    if kind in (b"l", b"d"):
+        items, position = [], start + 1
+        while data[position:position + 1] != b"e":
+            item, position = bdecode(data, position)
+            items.append(item)
+        value = items if kind == b"l" else dict(zip(items[::2], items[1::2]))
+        return value, position + 1
+    colon = data.index(b":", start)
+    length = int(data[start:colon])
+    return data[colon + 1:colon + 1 + length], colon + 1 + length
+
+
+def file_lengths(torrent):
+    info = bdecode(torrent)[0][b"info"]
+    if b"files" in info:
+        return sorted(f[b"length"] for f in info[b"files"])
+    return [info[b"length"]]
 
 
 def rare_limit(size):
@@ -232,6 +263,8 @@ def load_state(path):
         "grabbed": state.get("grabbed", {}),
         "twins": state.get("twins", {}),
         "uploads": state.get("uploads", {}),
+        "free": state.get("free", {}),
+        "checked": state.get("checked", {}),
         "paused": state.get("paused", False),
     }
 
@@ -263,7 +296,8 @@ def prepare(qbt, settings):
 def record(state, torrents, settings, now):
     for t in torrents.values():
         if t["hash"] in state["transfers"] or settings["tracker"] in t["tracker"].lower():
-            state["transfers"][t["hash"]] = [t["downloaded"], t["uploaded"]]
+            downloaded = 0 if t["hash"] in state["free"] else t["downloaded"]
+            state["transfers"][t["hash"]] = [downloaded, t["uploaded"]]
         if t["category"] in FARM:
             samples = state["uploads"].setdefault(t["hash"], [])
             if not samples or now - samples[-1][0] >= DAY:
@@ -276,6 +310,10 @@ def record(state, torrents, settings, now):
         state["uploads"][infohash] = [s for s in state["uploads"][infohash] if s[0] >= keep_after]
     for infohash in [h for h, at in state["grabbed"].items() if at < now - DAY]:
         del state["grabbed"][infohash]
+    for infohash in [h for h in state["free"] if h not in torrents and h in state["transfers"]]:
+        del state["free"][infohash]
+    for infohash in [h for h, at in state["checked"].items() if at < now - 2 * DAY]:
+        del state["checked"][infohash]
 
 
 def drop_twins(qbt, state, torrents):
@@ -319,6 +357,23 @@ def clean_farm(qbt, settings, state, torrents, now):
         print(f"The farm holds {used / GB:.1f} GB, over {settings['farm_size'] / GB:g} GB, the rest is still downloading or too young")
 
 
+def adopt(qbt, settings, state, torrents):
+    room = settings["zen_size"] - size_of(torrents, (ZEN,))
+    for t in torrents.values():
+        if (
+            t["category"] in settings["library_categories"]
+            and t["hash"] in state["transfers"]
+            and t["progress"] >= 1
+            and t["seeding_time"] >= settings["adopt_after"]
+            and is_rare(t["size"], t["num_complete"])
+            and t["size"] <= room
+        ):
+            qbt.set_category([t["hash"]], ZEN)
+            t["category"] = ZEN
+            room -= t["size"]
+            print(f"Moved {t['name']} from {settings['library_categories']} to the Zen reserve, {t['num_complete']} seeders")
+
+
 def clean_zen(qbt, settings, torrents):
     zen = [t for t in torrents.values() if t["category"] == ZEN]
     seeded = [t for t in zen if t["progress"] >= 1 and t["seeding_time"] >= settings["min_seeding"]]
@@ -337,16 +392,48 @@ def clean_zen(qbt, settings, torrents):
         print(f"Removed {t['name']} from the Zen reserve, it is full and this one is the least rare")
 
 
-def find_twin(prowlarr, settings, release, now):
+def episode_of(title):
+    found = re.search(r"S\d{2}E\d{2}", title, re.IGNORECASE)
+    return found.group(0).upper() if found else None
+
+
+def language_of(title):
+    upper = title.upper()
+    return next((language for language in ("VOSTFR", "MULTI", "FRENCH") if language in upper), None)
+
+
+def squeeze(text):
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def group_of(title):
+    return squeeze(title.rsplit("-", 1)[1]) if "-" in title else ""
+
+
+def may_be_twin(release, candidate):
+    group = group_of(release["title"])
+    return (
+        group != ""
+        and group in squeeze(candidate["title"])
+        and episode_of(candidate["title"]) == episode_of(release["title"])
+        and abs(candidate["size"] - release["size"]) <= 0.05 * release["size"]
+        and candidate["seeders"] >= 1
+    )
+
+
+def find_twin(prowlarr, settings, release, now, searches):
+    episode, language = episode_of(release["title"]), language_of(release["title"])
+    if not episode or not language:
+        return None
     for indexer in settings["twin_indexers"]:
-        try:
-            results = prowlarr.search(indexer, release["title"], now)
-        except Exception as error:
-            print(f"Cannot search indexer {indexer} for a twin: {error}")
-            continue
-        for r in results:
-            if r["size"] == release["size"] and r["seeders"] >= 1:
-                return r
+        query = (indexer, f"{episode} {language}")
+        if query not in searches:
+            searches[query] = prowlarr.search(indexer, query[1], now)
+        for candidate in searches[query]:
+            if may_be_twin(release, candidate):
+                twin_torrent = prowlarr.torrent(candidate)
+                if file_lengths(twin_torrent) == file_lengths(prowlarr.torrent(release)):
+                    return {**candidate, "torrent": twin_torrent}
     return None
 
 
@@ -386,48 +473,78 @@ def wishes(releases, known, settings, torrents):
     return hungry + rare
 
 
-def grab(qbt, prowlarr, settings, state, torrents, now):
-    downloading = sum(1 for t in torrents.values() if t["category"] in FARM + (ZEN,) and t["progress"] < 1)
-    slots = settings["max_downloading"] - downloading
-    if slots <= 0 or not settings["indexers"]:
-        return
-    room = {
-        "ratio": settings["farm_size"] - size_of(torrents, FARM),
-        ZEN: settings["zen_size"] - size_of(torrents, (ZEN,)),
-    }
-    known = set(torrents) | {original for original, _ in state["twins"].values()}
+def take(qbt, budget, known, release, torrent, category, source):
+    qbt.add(torrent, category)
+    known.add(release["infohash"])
+    budget[category] -= release["size"]
+    budget["slots"] -= 1
+    print(
+        f"Grabbed {release['title']} for the {'Zen reserve' if category == ZEN else 'farm'} from {source}, "
+        f"{release['seeders']} seeders, {release['leechers']} leechers, {release['size'] / GB:.1f} GB"
+    )
+
+
+def grab_twins(qbt, prowlarr, settings, state, releases, known, budget, now):
+    searches = {}
     lookups = settings["twin_lookups"]
-    twins = {}
-    for release, category in wishes(fetch_newest(prowlarr, settings, now), known, settings, torrents):
-        if slots <= 0:
+    episodes = [
+        r
+        for r in releases
+        if r["infohash"] not in known
+        and episode_of(r["title"])
+        and r["age_hours"] <= settings["twin_max_age_hours"]
+        and r["leechers"] >= settings["twin_min_leechers"]
+        and state["checked"].get(r["infohash"], 0) < now - settings["twin_recheck"]
+    ]
+    for release in sorted(episodes, key=lambda r: -r["leechers"]):
+        if budget["slots"] <= 0 or lookups <= 0:
             return
-        if release["infohash"] in known or release["size"] > room[category]:
+        if release["size"] > budget["ratio"]:
             continue
-        if release["infohash"] not in twins and lookups > 0:
-            lookups -= 1
-            twins[release["infohash"]] = find_twin(prowlarr, settings, release, now)
-        twin = twins.get(release["infohash"])
+        lookups -= 1
+        state["checked"][release["infohash"]] = now
         try:
+            twin = find_twin(prowlarr, settings, release, now, searches)
             if twin:
-                qbt.add(prowlarr.download(twin["link"]), category)
-                state["twins"][twin["infohash"]] = [release["infohash"], category]
-                source = "its public twin"
-            elif may_pay(state, settings, category):
-                qbt.add(prowlarr.download(release["link"]), category)
-                state["grabbed"][release["infohash"]] = now
-                source = "the tracker"
-            else:
-                continue
+                take(qbt, budget, known, release, twin["torrent"], "ratio", f"its public twin {twin['title']}")
+                state["twins"][twin["infohash"]] = [release["infohash"], "ratio"]
+        except Exception as error:
+            print(f"Cannot look for a twin of {release['title']}: {error}")
+
+
+def grab_paid(qbt, prowlarr, settings, state, torrents, releases, known, budget, now):
+    for release, category in wishes(releases, known, settings, torrents):
+        if budget["slots"] <= 0:
+            return
+        if release["infohash"] in known or release["size"] > budget[category]:
+            continue
+        if release["free"]:
+            source, ledger = "the tracker, freeleech", state["free"]
+        elif may_pay(state, settings, category):
+            source, ledger = "the tracker", state["grabbed"]
+        else:
+            continue
+        try:
+            take(qbt, budget, known, release, prowlarr.torrent(release), category, source)
         except Exception as error:
             print(f"Cannot grab {release['title']}: {error}")
             continue
-        known.add(release["infohash"])
-        room[category] -= release["size"]
-        slots -= 1
-        print(
-            f"Grabbed {release['title']} for the {'Zen reserve' if category == ZEN else 'farm'} from {source}, "
-            f"{release['seeders']} seeders, {release['leechers']} leechers, {release['size'] / GB:.1f} GB"
-        )
+        ledger[release["infohash"]] = now
+
+
+def grab(qbt, prowlarr, settings, state, torrents, now):
+    downloading = sum(1 for t in torrents.values() if t["category"] in FARM + (ZEN,) and t["progress"] < 1)
+    budget = {
+        "slots": settings["max_downloading"] - downloading,
+        "ratio": settings["farm_size"] - size_of(torrents, FARM),
+        ZEN: settings["zen_size"] - size_of(torrents, (ZEN,)),
+    }
+    if budget["slots"] <= 0 or not settings["indexers"]:
+        return
+    known = set(torrents) | {original for original, _ in state["twins"].values()}
+    releases = fetch_newest(prowlarr, settings, now)
+    grab_twins(qbt, prowlarr, settings, state, releases, known, budget, now)
+    grab_paid(qbt, prowlarr, settings, state, torrents, releases, known, budget, now)
 
 
 def run_once(qbt, prowlarr, settings, state, now):
@@ -436,6 +553,7 @@ def run_once(qbt, prowlarr, settings, state, now):
     record(state, torrents, settings, now)
     drop_twins(qbt, state, torrents)
     clean_farm(qbt, settings, state, torrents, now)
+    adopt(qbt, settings, state, torrents)
     clean_zen(qbt, settings, torrents)
     grab(qbt, prowlarr, settings, state, torrents, now)
 
@@ -469,6 +587,12 @@ def settings_from_env():
         "per_day": int(number("RATIO_GRAB_PER_DAY", 3)),
         "max_downloading": int(number("RATIO_GRAB_MAX_DOWNLOADING", 2)),
         "twin_lookups": int(number("RATIO_TWIN_LOOKUPS", 10)),
+        "twin_max_age_hours": number("RATIO_TWIN_MAX_AGE_HOURS", 24),
+        "twin_min_leechers": number("RATIO_TWIN_MIN_LEECHERS", 1),
+        "twin_recheck": number("RATIO_TWIN_RECHECK_HOURS", 2) * 3600,
+        "library_categories": tuple(c.strip() for c in os.environ.get("RATIO_LIBRARY_CATEGORIES", "radarr,tv-sonarr").split(",")),
+        "adopt_after": number("RATIO_ADOPT_AFTER_HOURS", 6) * 3600,
+        "tracker_seeders_in_peers": int(number("RATIO_TRACKER_SEEDERS_IN_PEERS", 2)),
         "rules": {
             "min_size": number("RATIO_GRAB_MIN_SIZE_GB", 1) * GB,
             "max_size": number("RATIO_GRAB_MAX_SIZE_GB", 5) * GB,
@@ -487,7 +611,11 @@ def main():
         os.environ.get("QBITTORRENT_USER", ""),
         os.environ.get("QBITTORRENT_PASSWORD", ""),
     )
-    prowlarr = Prowlarr(os.environ.get("PROWLARR_URL", "http://prowlarr:9696"), os.environ.get("PROWLARR_API_KEY", ""))
+    prowlarr = Prowlarr(
+        os.environ.get("PROWLARR_URL", "http://prowlarr:9696"),
+        os.environ.get("PROWLARR_API_KEY", ""),
+        settings["tracker_seeders_in_peers"],
+    )
     state_path = os.environ.get("RATIO_STATE", "/state/ratio-grab.json")
     state = load_state(state_path)
     if not settings["indexers"]:
