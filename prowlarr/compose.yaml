@@ -9,8 +9,6 @@ services:
       TZ: ${TZ}
     volumes:
       - ${APPDATA_ROOT}/prowlarr:/config
-    ports:
-      - ${PROWLARR_PORT:-9696}:9696
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:9696/ping"]
       interval: 30s
