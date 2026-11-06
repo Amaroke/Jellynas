@@ -1,6 +1,6 @@
 services:
   duckdns:
-    image: lscr.io/linuxserver/duckdns:8aabc87c-ls95
+    image: lscr.io/linuxserver/duckdns:b9e2cafd-ls153
     container_name: duckdns
     restart: unless-stopped
     environment:
