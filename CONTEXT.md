@@ -8,6 +8,10 @@ A personal media server built on Jellyfin, shared with friends over the internet
 All the services and data hosted for this project, whatever machine runs them.
 _Avoid_: server, box, stack
 
+**Host**:
+The machine, or virtual machine, whose Docker runs the NAS. A Host is never called the NAS, even when it runs TrueNAS.
+_Avoid_: server, NAS box, machine
+
 **Library**:
 The movies, shows, anime, music, books and manga served by Jellyfin.
 _Avoid_: media collection, catalog
