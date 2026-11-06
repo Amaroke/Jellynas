@@ -30,8 +30,6 @@ services:
       - ${DATA_ROOT}/media/movies:/data/media/movies
       - ${DATA_ROOT}/media/shows:/data/media/shows
       - ${DATA_ROOT}/media/anime:/data/media/anime
-    ports:
-      - ${TDARR_PORT:-8265}:8265
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8265/api/v2/status"]
       interval: 30s

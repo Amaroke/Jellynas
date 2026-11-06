@@ -10,8 +10,6 @@ services:
       LOG_LEVEL: info
     volumes:
       - ${APPDATA_ROOT}/seerr:/app/config
-    ports:
-      - ${SEERR_PORT:-5055}:5055
     security_opt:
       - no-new-privileges
     cap_drop:

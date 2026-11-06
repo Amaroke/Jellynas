@@ -54,11 +54,6 @@
     },
     {
       "matchDatasources": ["docker"],
-      "matchPackageNames": ["lscr.io/linuxserver/duckdns"],
-      "versioning": "regex:^[0-9a-f]+-ls(?<patch>\\d+)$"
-    },
-    {
-      "matchDatasources": ["docker"],
       "matchPackageNames": ["jellynas-caddy", "jellynas-deployer"],
       "enabled": false
     }

@@ -9,8 +9,6 @@ services:
       AUTOBRR__HOST: 0.0.0.0
     volumes:
       - ${APPDATA_ROOT}/autobrr:/config
-    ports:
-      - ${AUTOBRR_PORT:-7474}:7474
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:7474/api/healthz/liveness"]
       interval: 30s

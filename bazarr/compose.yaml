@@ -14,8 +14,6 @@ services:
       - ${DATA_ROOT}/media/shows:/data/media/shows
       - ${DATA_ROOT}/media/anime:/data/media/anime
       - ./tdarr_requeue.py:/scripts/tdarr_requeue.py:ro
-    ports:
-      - ${BAZARR_PORT:-6767}:6767
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:6767/api/system/ping"]
       interval: 30s
