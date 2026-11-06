@@ -139,6 +139,7 @@ check_not_mounted() {
   esac
   id="$(docker compose ps -q "$service" 2>/dev/null | head -n 1)"
   while IFS= read -r source; do
+    [ -n "$source" ] || continue
     source="$(printf '%s' "$source" | tr '\\' / | tr '[:upper:]' '[:lower:]')"
     case "$data_root" in
       "$source"/*) mounted="$mounted $source" ;;
