@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-export MSYS_NO_PATHCONV=1
-
 cd "$(dirname "$0")/.." || exit 1
 
 failures=0
@@ -29,7 +27,7 @@ container_state() {
 
 env_value() {
   local value ref
-  value="$(grep -E "^$1=" .env 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d '\r' | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")"
+  value="$(grep -E "^$1=" .env 2>/dev/null | tail -n 1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")"
   while [[ "$value" =~ \$\{([A-Z_]+)\} ]]; do
     ref="${BASH_REMATCH[1]}"
     [ "$ref" != "$1" ] || break
@@ -123,7 +121,7 @@ check_read_only() {
 
 check_not_mounted() {
   local service="$1" subpath="$2" promise="$3" data_root target id source mounted=""
-  data_root="$(env_value DATA_ROOT | tr '\\' / | tr '[:upper:]' '[:lower:]')"
+  data_root="$(env_value DATA_ROOT)"
   data_root="${data_root%/}"
   if [ -z "$data_root" ]; then
     fail "$service" "DATA_ROOT is empty, cannot check that it $promise"
@@ -140,7 +138,6 @@ check_not_mounted() {
   id="$(docker compose ps -q "$service" 2>/dev/null | head -n 1)"
   while IFS= read -r source; do
     [ -n "$source" ] || continue
-    source="$(printf '%s' "$source" | tr '\\' / | tr '[:upper:]' '[:lower:]')"
     case "$data_root" in
       "$source"/*) mounted="$mounted $source" ;;
     esac
