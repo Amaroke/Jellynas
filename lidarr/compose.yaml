@@ -12,6 +12,7 @@ services:
     labels:
       kuma.lidarr.http.name: Lidarr
       kuma.lidarr.http.url: http://lidarr:8686/ping
+      docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/lidarr:/config
       - ${DATA_ROOT}/media/music:/data/media/music

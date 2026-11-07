@@ -21,6 +21,7 @@ services:
     labels:
       kuma.cross-seed.http.name: cross-seed
       kuma.cross-seed.http.url: http://cross-seed:2468/api/ping
+      docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/cross-seed:/config
       - ./config.js:/config/config.js:ro

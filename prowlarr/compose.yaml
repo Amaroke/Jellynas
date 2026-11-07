@@ -12,6 +12,7 @@ services:
     labels:
       kuma.prowlarr.http.name: Prowlarr
       kuma.prowlarr.http.url: http://prowlarr:9696/ping
+      docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/prowlarr:/config
     healthcheck:

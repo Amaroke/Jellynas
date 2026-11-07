@@ -26,3 +26,4 @@ include:
   - uptime-kuma/compose.yaml
   - dozzle/compose.yaml
   - homepage/compose.yaml
+  - backup/compose.yaml

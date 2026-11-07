@@ -26,6 +26,7 @@ services:
     labels:
       kuma.indexarr.http.name: Indexarr
       kuma.indexarr.http.url: http://indexarr:8787/health
+      docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/indexarr:/app/data
       - ${DATA_ROOT}/media/movies:/data/media/movies:ro

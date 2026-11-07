@@ -13,6 +13,7 @@ services:
     labels:
       kuma.bazarr.http.name: Bazarr
       kuma.bazarr.http.url: http://bazarr:6767/api/system/ping
+      docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/bazarr:/config
       - ${DATA_ROOT}/media/movies:/data/media/movies

@@ -11,6 +11,7 @@ services:
       TZ: ${TZ}
     labels:
       kuma.lazylibrarian.docker.name: LazyLibrarian
+      docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/lazylibrarian:/config
       - ${DATA_ROOT}/media/books:/data/media/books

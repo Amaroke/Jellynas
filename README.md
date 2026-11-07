@@ -31,8 +31,9 @@ Follow the sections in order. Each one starts with the sections it requires. Eve
 23. [Uptime Kuma](#uptime-kuma)
 24. [Dozzle](#dozzle)
 25. [Homepage](#homepage)
-26. [Verify the NAS](#verify-the-nas)
-27. [Contributing](#contributing)
+26. [Backup](#backup)
+27. [Verify the NAS](#verify-the-nas)
+28. [Contributing](#contributing)
 
 ## Architecture
 
@@ -104,6 +105,7 @@ flowchart LR
         Dozzle("Dozzle<br/>logs, read-only")
         Indexarr("Indexarr<br/>Library catalog, read-only")
         Homepage("Homepage<br/>dashboard")
+        Backup("Backup<br/>appdata, every night")
     end
 
     subgraph data["Data"]
@@ -172,7 +174,7 @@ flowchart LR
     class autobrr,crossseed,qbitmanage,ratioscript ratioNode
     style ratio fill:#fce4ec,stroke:#ec407a,stroke-width:2px,color:#1f2937
     classDef observationNode fill:#ffffff,stroke:#00897b,color:#1f2937,stroke-width:1.5px
-    class Beszel,UptimeKuma,Dozzle,Indexarr,Homepage observationNode
+    class Beszel,UptimeKuma,Dozzle,Indexarr,Homepage,Backup observationNode
     style observation fill:#e0f2f1,stroke:#00897b,stroke-width:2px,color:#1f2937
     classDef dataNode fill:#ffffff,stroke:#78909c,color:#1f2937,stroke-width:1.5px
     class Torrents,Library dataNode
@@ -211,7 +213,7 @@ cd /mnt/tank/jellynas
 
 Open the TrueNAS web UI. The commands of this README name the pool `tank`.
 
-1. In Datasets, add three datasets to the pool with the "Apps" preset, so the `apps` user, 568, owns them: `data`, `appdata` and `jellynas`. Never add a child dataset under `data`: `torrents` and `media` are plain folders, so that the hardlinks of cross-seed stay on one file system.
+1. In Datasets, add four datasets to the pool with the "Apps" preset, so the `apps` user, 568, owns them: `data`, `appdata`, `backup` and `jellynas`. Never add a child dataset under `data`: `torrents` and `media` are plain folders, so that the hardlinks of cross-seed stay on one file system.
 2. In Apps, click "Configure", pick the pool, and save. TrueNAS starts its Docker.
 
 Once [Domain](#domain) is done, TrueNAS also answers at `https://truenas.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`.
@@ -236,7 +238,7 @@ cp .env.example .env
 
 Open `.env` and fill in every value of the modules you keep. Each variable is explained in `.env.example`. Wrap a value in double quotes if it contains a space. `.env` is ignored by git and must never be committed.
 
-Both roots live outside the repo, at the paths set in `DATA_ROOT` and `APPDATA_ROOT`. The data root holds a single tree, so that one folder holds every download and the whole Library:
+Both roots live outside the repo, at the paths set in `DATA_ROOT` and `APPDATA_ROOT`, and so do the archives of the appdata, at `BACKUP_ROOT`. The data root holds a single tree, so that one folder holds every download and the whole Library:
 
 ```text
 <DATA_ROOT>
@@ -254,11 +256,11 @@ Both roots live outside the repo, at the paths set in `DATA_ROOT` and `APPDATA_R
     └── manga
 ```
 
-Create both roots, the recycle bins of Radarr and Sonarr, and the appdata folders of the services that run as `PUID` from their first start:
+Create both roots, the folder of the archives, the recycle bins of Radarr and Sonarr, and the appdata folders of the services that run as `PUID` from their first start:
 
 ```bash
-. <(grep -E '^(DATA_ROOT|APPDATA_ROOT|PUID|PGID)=' .env)
-mkdir -p "$DATA_ROOT"/torrents/{ratio,zen,cross-seed} "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,recyclarr,autobrr,cross-seed,qbit_manage,ratio,slskd,suwayomi}
+. <(grep -E '^(DATA_ROOT|APPDATA_ROOT|BACKUP_ROOT|PUID|PGID)=' .env)
+mkdir -p "$BACKUP_ROOT" "$DATA_ROOT"/torrents/{ratio,zen,cross-seed} "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,recyclarr,autobrr,cross-seed,qbit_manage,ratio,slskd,suwayomi}
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
@@ -1304,6 +1306,42 @@ The Uptime Kuma tile counts the services up and down from a status page. In Upti
 ### Open
 
 Open `https://homepage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `HOMEPAGE_PASSWORD`. The playback controls of Jellyfin stay off, so Homepage only reads the services. A tile whose service is down, or whose key is wrong, shows an error in place of its figures. The Ratio group shows the summary of ratio in four tiles: the Ledger, the Farm, the Zen reserve and the Sources. The tiles of Recyclarr, Caddy, LazyLibrarian and Indexarr show no figures, since Homepage has no widget for them.
+
+## Backup
+
+Requires [Observation](#observation).
+
+The settings made in the web UIs of the services live in the appdata root, outside git, as [ADR 0010](docs/adr/0010-doco-cd-deploys-main.md) records. The backup service, [docker-volume-backup](https://offen.github.io/docker-volume-backup/), archives the whole appdata root every night at 4:00 into `BACKUP_ROOT`, a dataset of its own, and deletes the archives older than 30 days. A failed backup sends an alert to the ntfy topic. The caches of Jellyfin and Tdarr, the logs of Tdarr and the images Jellyfin keeps in `data/metadata` stay out of the archive: Jellyfin fetches the images again at its next library scan, and keeping them would take gigabytes per archive. No copy leaves the NAS for now, so a lost pool takes the archives with it. restic or Borg can add a copy elsewhere, and the snapshots and replication of TrueNAS can replace the service.
+
+A service whose database could be copied mid-write is stopped during the backup, and started again once the archive is written. It carries the label `docker-volume-backup.stop-during-backup: "true"` in its `compose.yaml`. Uptime Kuma carries it too, so the services stopped for the night send no alert. A service slower to start than Uptime Kuma, such as Jellyfin, can still send one as it comes back. `python3 -m unittest discover -s backup` checks that every service with an appdata folder either carries the label or is listed in `backup/test_backup.py` as one that keeps running.
+
+The backup service mounts the appdata root read-only, and the Docker socket to stop and start the services. `./scripts/verify.sh` checks that it cannot write to the appdata and that `BACKUP_ROOT` is on another dataset than the data and appdata roots.
+
+### First archive
+
+Run a backup now, then check that its archive is there:
+
+```bash
+. <(grep '^BACKUP_ROOT=' .env)
+docker exec backup backup
+ls -lh "$BACKUP_ROOT"
+```
+
+### Restore a service
+
+Each archive holds the appdata root under `backup/appdata`. Pick an archive, stop the service, set its folder aside, extract it from the archive, and start the service again. With Radarr:
+
+```bash
+. <(grep -E '^(APPDATA_ROOT|BACKUP_ROOT)=' .env)
+ls "$BACKUP_ROOT"
+archive="$BACKUP_ROOT"/appdata-2026-11-07T04-00-00.tar.gz
+docker compose stop radarr
+mv "$APPDATA_ROOT"/radarr "$APPDATA_ROOT"/radarr.old
+tar -xzf "$archive" -C "$APPDATA_ROOT" --strip-components=2 backup/appdata/radarr
+docker compose start radarr
+```
+
+Once the service works again, delete `radarr.old`. Restore the services that talk to each other, such as Radarr and Prowlarr, from the same archive.
 
 ## Verify the NAS
 

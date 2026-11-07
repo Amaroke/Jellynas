@@ -1,0 +1,22 @@
+services:
+  backup:
+    image: offen/docker-volume-backup:v2.49.3
+    container_name: backup
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges
+    environment:
+      TZ: ${TZ}
+      BACKUP_CRON_EXPRESSION: 0 4 * * *
+      BACKUP_FILENAME: appdata-%Y-%m-%dT%H-%M-%S.tar.gz
+      BACKUP_PRUNING_PREFIX: appdata-
+      BACKUP_RETENTION_DAYS: "30"
+      BACKUP_EXCLUDE_REGEXP: ^/backup/appdata/(jellyfin/cache|jellyfin/data/metadata|jellyfin/data/transcodes|tdarr/cache|tdarr/logs)/
+      NOTIFICATION_URLS: ntfy://ntfy.sh/${NTFY_TOPIC}
+      NOTIFICATION_LEVEL: error
+    labels:
+      kuma.backup.docker.name: Backup
+    volumes:
+      - ${APPDATA_ROOT}/:/backup/appdata:ro
+      - ${BACKUP_ROOT}/:/archive
+      - /var/run/docker.sock:/var/run/docker.sock:ro

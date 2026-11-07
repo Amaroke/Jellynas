@@ -21,6 +21,7 @@ services:
     labels:
       kuma.tdarr.http.name: Tdarr
       kuma.tdarr.http.url: http://tdarr:8265/api/v2/status
+      docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/tdarr/server:/app/server
       - ${APPDATA_ROOT}/tdarr/configs:/app/configs

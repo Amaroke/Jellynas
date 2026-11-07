@@ -15,6 +15,7 @@ services:
       kuma.jellyfin-public.http.name: Jellyfin public
       kuma.jellyfin-public.http.url: https://jellyfin.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/health
       kuma.jellyfin-public.http.expiry_notification: "true"
+      docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/jellyfin:/config
       - ${DATA_ROOT}/media:/data/media:ro

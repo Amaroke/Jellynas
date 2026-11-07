@@ -25,6 +25,7 @@ services:
       RATIO_ZEN_HUNT_MIN_SURPLUS_GB: ${RATIO_ZEN_HUNT_MIN_SURPLUS_GB:-}
     labels:
       kuma.ratio.docker.name: ratio
+      docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ./ratio.py:/app/ratio.py:ro
       - ${APPDATA_ROOT}/ratio:/state
