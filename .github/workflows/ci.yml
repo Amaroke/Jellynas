@@ -37,10 +37,6 @@ jobs:
         with:
           persist-credentials: false
       - run: |
-          if [ ! -f compose.yaml ]; then
-            echo "No compose.yaml yet"
-            exit 0
-          fi
           cp .env.example .env
           docker compose config --quiet
           docker compose -f doco-cd/compose.yaml config --quiet
@@ -64,6 +60,27 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 -m unittest discover -s ratio -v
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: shellcheck scripts/*.sh gluetun/entrypoint.sh
+      - run: pipx run ruff==0.15.4 check .
+
+  renovate:
+    name: Renovate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: npx --yes --package renovate@44.222.0 -- renovate-config-validator --strict renovate.json
 
   markdown:
     name: Markdown
