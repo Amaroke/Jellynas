@@ -61,6 +61,7 @@ jobs:
       - run: python3 -m unittest discover -s homepage -v
       - run: python3 -m unittest discover -s uptime-kuma -v
       - run: python3 -m unittest discover -s backup -v
+      - run: python3 -m unittest discover -s music-bot -v
 
   lint:
     name: Lint

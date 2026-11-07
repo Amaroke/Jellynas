@@ -23,6 +23,23 @@
           url: http://seerr:5055
           key: '{{HOMEPAGE_VAR_SEERR_API_KEY}}'
           fields: ["pending", "processing", "available", "issues"]
+    - Music bot:
+        icon: mdi-music-circle-#ab47bc
+        description: Music of the Library on Discord
+        widget:
+          type: customapi
+          url: http://music-bot:8000/status
+          refreshInterval: 15000
+          mappings:
+            - field: state
+              label: State
+            - field: track
+              label: Track
+            - field: queue
+              label: Queue
+              format: number
+            - field: shuffle
+              label: Shuffle
 
 - Downloads:
     - qBittorrent:

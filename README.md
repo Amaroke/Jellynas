@@ -25,15 +25,16 @@ Follow the sections in order. Each one starts with the sections it requires. Eve
 17. [Tdarr](#tdarr)
 18. [Bazarr](#bazarr)
 19. [Indexarr](#indexarr)
-20. [Private tracker ratio](#private-tracker-ratio)
-21. [Observation](#observation)
-22. [Beszel](#beszel)
-23. [Uptime Kuma](#uptime-kuma)
-24. [Dozzle](#dozzle)
-25. [Homepage](#homepage)
-26. [Backup](#backup)
-27. [Verify the NAS](#verify-the-nas)
-28. [Contributing](#contributing)
+20. [Music bot](#music-bot)
+21. [Private tracker ratio](#private-tracker-ratio)
+22. [Observation](#observation)
+23. [Beszel](#beszel)
+24. [Uptime Kuma](#uptime-kuma)
+25. [Dozzle](#dozzle)
+26. [Homepage](#homepage)
+27. [Backup](#backup)
+28. [Verify the NAS](#verify-the-nas)
+29. [Contributing](#contributing)
 
 ## Architecture
 
@@ -51,6 +52,7 @@ flowchart LR
     Soulseek{{"Soulseek"}}
     Manga{{"Manga sites"}}
     ntfy{{"ntfy.sh"}}
+    Discord{{"Discord"}}
 
     subgraph exposure["Exposure"]
         direction LR
@@ -68,6 +70,7 @@ flowchart LR
         direction TB
         Jellyfin("Jellyfin<br/>streaming")
         Seerr("Seerr<br/>Requests")
+        MusicBot("Music bot<br/>Discord voice")
     end
 
     subgraph automation["Automation stack"]
@@ -130,6 +133,8 @@ flowchart LR
     Admin -->|LAN| automation
     Admin -->|LAN| observation
     observation -->|alerts| ntfy
+    Friend -->|voice| Discord
+    MusicBot -->|"music, outbound only"| Discord
     ntfy -->|push| Admin
     Admin --> GitHub
     gitops -->|"update PRs, pulls main"| GitHub
@@ -154,7 +159,7 @@ flowchart LR
     classDef person fill:#37474f,stroke:#263238,color:#ffffff,stroke-width:2px
     classDef external fill:#ffffff,stroke:#607d8b,color:#1f2937,stroke-width:1.5px
     class Friend,Admin person
-    class GitHub,Trackers,Soulseek,Manga,ntfy external
+    class GitHub,Trackers,Soulseek,Manga,ntfy,Discord external
     classDef exposureNode fill:#ffffff,stroke:#1e88e5,color:#1f2937,stroke-width:1.5px
     class OVH,Caddy exposureNode
     style exposure fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#1f2937
@@ -162,7 +167,7 @@ flowchart LR
     class Renovate,Deployer gitopsNode
     style gitops fill:#ede7f6,stroke:#7e57c2,stroke-width:2px,color:#1f2937
     classDef watchNode fill:#ffffff,stroke:#ab47bc,color:#1f2937,stroke-width:1.5px
-    class Jellyfin,Seerr watchNode
+    class Jellyfin,Seerr,MusicBot watchNode
     style watch fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px,color:#1f2937
     classDef automationNode fill:#ffffff,stroke:#43a047,color:#1f2937,stroke-width:1.5px
     class Prowlarr,Recyclarr,FlareSolverr,Radarr,Sonarr,Lidarr,LazyLibrarian,Bazarr,Tdarr automationNode
@@ -1016,6 +1021,44 @@ Radarr and Sonarr give Indexarr the title, the year and the poster of each work.
 ### Folders to scan
 
 The folders are set in `indexarr/compose.yaml`, not in the web UI: `/data/media/movies` for movies, `/data/media/shows` and `/data/media/anime` for series. With `RADARR_API_KEY` and `SONARR_API_KEY` set, Indexarr takes the list of works and files from Radarr and Sonarr, then reads the tracks of each file from these folders. It refreshes the catalog every 24 hours. To refresh it at once, after a large import, click "Scan" in its web UI. The first scan reads every file of the Library and takes a while.
+
+## Music bot
+
+Requires [Jellyfin](#jellyfin) and [Lidarr](#lidarr).
+
+The music bot plays the music of the Library in a voice channel of the Discord server of the Admin. Only a DJ commands it, a member who holds the `MusicDJ` role. It searches Jellyfin, then reads the files from the music folder, mounted read-only under the same path as Jellyfin, so it can never change a file. It connects out to Discord only, so it has no public name and no lan name. `./scripts/verify.sh` checks that it mounts nothing else and cannot write to it. It reports no play to Jellyfin.
+
+### Discord application
+
+1. On [the Discord developer portal](https://discord.com/developers/applications), click "New Application" and name it.
+2. In Bot, click "Reset Token" and copy the token into `DISCORD_TOKEN`.
+3. In OAuth2 > URL Generator, tick the scopes `bot` and `applications.commands`, then the permissions View Channels, Send Messages, Embed Links, Connect and Speak. Open the generated URL and add the bot to your server.
+4. In Discord, User Settings > Advanced, turn on Developer Mode. Right click the server, click "Copy Server ID" and paste it into `DISCORD_GUILD_ID`.
+5. In Server Settings > Roles, create the `MusicDJ` role and give it to each DJ.
+
+### Jellyfin key
+
+In Jellyfin, Dashboard > Advanced > API Keys, click "+", name it `Music bot`, and copy it into `MUSIC_BOT_JELLYFIN_API_KEY`. Restart doco-cd to apply `.env`:
+
+```sh
+docker restart doco-cd
+```
+
+### Commands
+
+A DJ joins a voice channel, then:
+
+| Command | Effect |
+| --- | --- |
+| `/play` | Starts the Shuffle, the endless random play of the whole music of the Library, every track once before any repeats |
+| `/play <search>` | Lists up to 25 artists, albums, playlists and tracks that match, for the DJ alone. The pick goes to the Queue, which plays before the Shuffle. An album or a playlist plays in order, an artist in random order |
+| `/pause` | Pauses or resumes |
+| `/skip` | Skips the track playing |
+| `/stop` | Empties the Queue, ends the Shuffle and leaves the voice channel |
+| `/queue` | Shows the track playing and the Queue |
+| `/volume <0-100>` | Sets the volume |
+
+Each track posts a message with Pause, Skip and Stop buttons. Every command but `/queue` needs the DJ in the voice channel of the music bot, and a `/play` from another voice channel waits until it stops there. It leaves a voice channel after one minute alone or five minutes without playing.
 
 ## Private tracker ratio
 

@@ -1,0 +1,24 @@
+services:
+  music-bot:
+    build: .
+    container_name: music-bot
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    user: ${PUID}:${PGID}
+    environment:
+      TZ: ${TZ}
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+      MUSIC_BOT_JELLYFIN_API_KEY: ${MUSIC_BOT_JELLYFIN_API_KEY}
+    labels:
+      kuma.music-bot.http.name: Music bot
+      kuma.music-bot.http.url: http://music-bot:8000/health
+    volumes:
+      - ${DATA_ROOT}/media/music:/data/media/music:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      timeout: 10s
+      start_period: 60s

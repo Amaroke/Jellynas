@@ -40,6 +40,24 @@ _Avoid_: downloads folder
 The services that find, download, rename, subtitle and normalise media to file them into the Library.
 _Avoid_: arr, arr stack
 
+### Discord
+
+**Music bot**:
+The Discord bot of the NAS that plays the music of the Library in a voice channel of the Discord server of the Admin.
+_Avoid_: the bot, jukebox
+
+**DJ**:
+A member of the Discord server of the Admin who holds the MusicDJ role and may command the Music bot. A DJ needs no Account.
+_Avoid_: listener, MusicDJ
+
+**Queue**:
+The tracks the Music bot will play next, in order.
+_Avoid_: playlist, list
+
+**Shuffle**:
+The endless random play of the whole music of the Library, which plays every track once before any repeats.
+_Avoid_: random, radio
+
 ### Ratio
 
 **C411**:

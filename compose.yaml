@@ -3,6 +3,7 @@ name: jellynas
 include:
   - jellyfin/compose.yaml
   - seerr/compose.yaml
+  - music-bot/compose.yaml
   - caddy/compose.yaml
   - gluetun/compose.yaml
   - qbittorrent/compose.yaml
