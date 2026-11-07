@@ -515,6 +515,8 @@ check_no_media_tree qbittorrent
 check_mounts_only lidarr media/music torrents
 check_mounts_only slskd media/music torrents/soulseek
 check_read_only slskd /data/media/music
+check_mounts_only music-bot media/music
+check_read_only music-bot /data/media/music
 check_slskd_port
 check_mounts_only lazylibrarian media/books torrents
 check_mounts_only suwayomi media/manga
