@@ -3,7 +3,7 @@ import os
 import sys
 import urllib.request
 
-TDARR_URL = os.environ.get("TDARR_URL", "http://tdarr:8265")
+TDARR_URL = "http://tdarr:8265"
 
 
 def cruddb(data):

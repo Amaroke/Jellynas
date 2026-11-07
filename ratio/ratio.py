@@ -761,7 +761,7 @@ def ids(name):
 
 def settings_from_env():
     return {
-        "tracker": os.environ.get("RATIO_TRACKER", "c411").lower(),
+        "tracker": (os.environ.get("RATIO_TRACKER") or "c411").lower(),
         "indexers": ids("RATIO_GRAB_INDEXER_IDS"),
         "twin_indexers": ids("RATIO_TWIN_INDEXER_IDS"),
         "cross_seed_key": os.environ.get("CROSS_SEED_API_KEY", ""),
@@ -780,7 +780,7 @@ def settings_from_env():
         "twin_min_leechers": number("RATIO_TWIN_MIN_LEECHERS", 1),
         "twin_recheck": number("RATIO_TWIN_RECHECK_HOURS", 2) * 3600,
         "twin_seed_after": number("RATIO_TWIN_SEED_AFTER_MINUTES", 60) * 60,
-        "library_categories": tuple(c.strip() for c in os.environ.get("RATIO_LIBRARY_CATEGORIES", "radarr,tv-sonarr").split(",")),
+        "library_categories": tuple(c.strip() for c in (os.environ.get("RATIO_LIBRARY_CATEGORIES") or "radarr,tv-sonarr").split(",")),
         "adopt_after": number("RATIO_ADOPT_AFTER_HOURS", 6) * 3600,
         "tracker_seeders_in_peers": int(number("RATIO_TRACKER_SEEDERS_IN_PEERS", 2)),
         "rules": {
@@ -797,16 +797,16 @@ def main():
     settings = settings_from_env()
     interval = int(number("RATIO_MINUTES", 10)) * 60
     qbt = QBittorrent(
-        os.environ.get("QBITTORRENT_URL", "http://gluetun:8080"),
+        "http://gluetun:8080",
         os.environ.get("QBITTORRENT_USER", ""),
         os.environ.get("QBITTORRENT_PASSWORD", ""),
     )
     prowlarr = Prowlarr(
-        os.environ.get("PROWLARR_URL", "http://prowlarr:9696"),
+        "http://prowlarr:9696",
         os.environ.get("PROWLARR_API_KEY", ""),
         settings["tracker_seeders_in_peers"],
     )
-    state_path = os.environ.get("RATIO_STATE", "/state/ratio-grab.json")
+    state_path = "/state/ratio-grab.json"
     state = load_state(state_path)
     if not settings["indexers"]:
         print("RATIO_GRAB_INDEXER_IDS is empty, ratio grabs nothing and only cleans")
