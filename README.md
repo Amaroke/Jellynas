@@ -913,11 +913,13 @@ In `.env`, set the `RATIO_*` values, then recreate it with `docker restart doco-
 docker compose logs ratio
 ```
 
-Once a day, the logs also hold one line per Source: paid grab, Twin, freeleech, cross-seed of the Library, Library download, Zen hunt, or unknown for the torrents removed before ratio kept Sources. Each line gives the torrents, the GB downloaded and uploaded and their ratio, the same over the last 7 days, and the days seeded in the Zen reserve. The state file holds the same figures under `report`, for a dashboard to read:
+Once a day, the logs also hold one line per Source: paid grab, Twin, freeleech, cross-seed of the Library, Library download, Zen hunt, or unknown for the torrents removed before ratio kept Sources. Each line gives the torrents, the GB downloaded and uploaded and their ratio, the same over the last 7 days, and the days seeded in the Zen reserve. The state file holds the same figures under `report`:
 
 ```sh
 docker compose logs ratio | grep Source
 ```
+
+After each run, ratio also serves a summary at `http://ratio:8000/summary`, on the Compose network only, for [Homepage](#homepage): the Ledger with its ratio and its Surplus, the fill of the Farm and of the Zen reserve, the paid grabs of the day, and one line per Source. It holds no key and changes nothing.
 
 To start the Deficit over, for example once the ratio on the tracker has a buffer, stop ratio, delete its state file and start it again. Every other limit above is fixed in `settings_from_env` of `ratio/ratio.py`.
 
@@ -1103,7 +1105,7 @@ The Uptime Kuma tile counts the services up and down from a status page. In Upti
 
 ### Open
 
-Open `https://homepage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `HOMEPAGE_PASSWORD`. The playback controls of Jellyfin stay off, so Homepage only reads the services. A tile whose service is down, or whose key is wrong, shows an error in place of its figures. The tiles of Recyclarr, ratio and Caddy show no figures, since none of them has an API Homepage could read.
+Open `https://homepage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `HOMEPAGE_PASSWORD`. The playback controls of Jellyfin stay off, so Homepage only reads the services. A tile whose service is down, or whose key is wrong, shows an error in place of its figures. The Ratio group shows the summary of ratio in four tiles: the Ledger, the Farm, the Zen reserve and the Sources. The tiles of Recyclarr and Caddy show no figures, since neither has an API Homepage could read.
 
 ## Verify the NAS
 
