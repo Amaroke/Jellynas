@@ -38,7 +38,7 @@ services:
       kuma.nas.docker_host.path: /var/run/docker.sock
       kuma.ntfy.notification.name: ntfy
       kuma.ntfy.notification.active: "true"
-      kuma.ntfy.notification.config: '{"type": "ntfy", "ntfyserverurl": "https://ntfy.sh", "ntfytopic": "${NTFY_TOPIC}", "ntfyPriority": 5}'
+      kuma.ntfy.notification.config: '{"type": "ntfy", "ntfyserverurl": "https://ntfy.sh", "ntfytopic": "${NTFY_TOPIC}", "ntfyPriority": 5, "applyExisting": false}'
       kuma.autokuma.docker.name: AutoKuma
     volumes:
       - ${APPDATA_ROOT}/autokuma:/data
