@@ -7,7 +7,7 @@ import time
 import discord
 from discord import app_commands
 from player import Player
-from rules import ROLE, control_refusal, play_refusal, should_leave
+from rules import ROLE, control_refusal, nickname, play_refusal, should_leave
 from status import Status, serve, summary
 
 from jellyfin import Jellyfin
@@ -57,6 +57,7 @@ class MusicBot(discord.Client):
         self.volume = 0.5
         self.text_channel = None
         self.now_playing = None
+        self.nickname = ""
         self.alone_since = None
         self.idle_since = None
         self.lock = asyncio.Lock()
@@ -123,7 +124,19 @@ class MusicBot(discord.Client):
             log.error("Playback failed: %s", error)
         asyncio.run_coroutine_threadsafe(self.play_next(), self.loop)
 
+    async def rename(self, track):
+        name = nickname(track)
+        guild = self.get_guild(self.guild.id)
+        if name == self.nickname or guild is None:
+            return
+        try:
+            await guild.me.edit(nick=name)
+            self.nickname = name
+        except discord.HTTPException:
+            log.exception("Could not rename the music bot")
+
     async def show(self, track):
+        await self.rename(track)
         if self.now_playing:
             try:
                 await self.now_playing.delete()

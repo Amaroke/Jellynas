@@ -1,6 +1,7 @@
 ROLE = "MusicDJ"
 ALONE_SECONDS = 60
 IDLE_SECONDS = 300
+NICKNAME_SIZE = 32
 
 
 def play_refusal(is_dj, user_channel, bot_channel, busy):
@@ -27,3 +28,10 @@ def should_leave(now, alone_since, idle_since):
     alone = alone_since is not None and now - alone_since >= ALONE_SECONDS
     idle = idle_since is not None and now - idle_since >= IDLE_SECONDS
     return alone or idle
+
+
+def nickname(track):
+    if track is None or not track.title.strip():
+        return None
+    title = track.title.strip()
+    return title if len(title) <= NICKNAME_SIZE else title[: NICKNAME_SIZE - 1] + "…"
