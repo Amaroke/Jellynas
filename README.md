@@ -18,18 +18,20 @@ Follow the sections in order. Each one starts with the sections it requires. Eve
 10. [Prowlarr](#prowlarr)
 11. [Radarr](#radarr)
 12. [Sonarr](#sonarr)
-13. [Requests](#requests)
-14. [Recyclarr](#recyclarr)
-15. [Tdarr](#tdarr)
-16. [Bazarr](#bazarr)
-17. [Private tracker ratio](#private-tracker-ratio)
-18. [Observation](#observation)
-19. [Beszel](#beszel)
-20. [Uptime Kuma](#uptime-kuma)
-21. [Dozzle](#dozzle)
-22. [Homepage](#homepage)
-23. [Verify the NAS](#verify-the-nas)
-24. [Contributing](#contributing)
+13. [slskd](#slskd)
+14. [Lidarr](#lidarr)
+15. [Requests](#requests)
+16. [Recyclarr](#recyclarr)
+17. [Tdarr](#tdarr)
+18. [Bazarr](#bazarr)
+19. [Private tracker ratio](#private-tracker-ratio)
+20. [Observation](#observation)
+21. [Beszel](#beszel)
+22. [Uptime Kuma](#uptime-kuma)
+23. [Dozzle](#dozzle)
+24. [Homepage](#homepage)
+25. [Verify the NAS](#verify-the-nas)
+26. [Contributing](#contributing)
 
 ## Architecture
 
@@ -44,6 +46,7 @@ flowchart LR
     Admin(("Admin"))
     GitHub{{"GitHub"}}
     Trackers{{"Trackers and peers"}}
+    Soulseek{{"Soulseek"}}
     ntfy{{"ntfy.sh"}}
 
     subgraph exposure["Exposure"]
@@ -71,6 +74,7 @@ flowchart LR
         FlareSolverr("FlareSolverr<br/>Cloudflare")
         Radarr("Radarr<br/>movies")
         Sonarr("Sonarr<br/>shows, anime")
+        Lidarr("Lidarr<br/>music")
         Bazarr("Bazarr<br/>subtitles")
         Tdarr("Tdarr<br/>MKV H265")
     end
@@ -78,6 +82,7 @@ flowchart LR
     subgraph vpn["Gluetun VPN, kill switch"]
         direction TB
         qBittorrent("qBittorrent<br/>torrents")
+        slskd("slskd<br/>Soulseek")
     end
 
     subgraph ratio["Ratio"]
@@ -110,6 +115,7 @@ flowchart LR
     ratio -->|"grab, clean, cross-seed"| vpn
     automation -->|search| Trackers
     vpn -->|"tunnel only"| Trackers
+    vpn -->|"tunnel only"| Soulseek
     vpn -->|download| data
     automation -->|"import, subtitles, MKV H265"| data
     watch -->|"read-only"| data
@@ -123,6 +129,7 @@ flowchart LR
     Prowlarr --- FlareSolverr
     Prowlarr -->|indexers| Radarr
     Prowlarr -->|indexers| Sonarr
+    Prowlarr -->|indexers| Lidarr
     Recyclarr -->|profiles| Radarr
     Recyclarr -->|profiles| Sonarr
     Radarr -->|"new files"| Bazarr
@@ -136,7 +143,7 @@ flowchart LR
     classDef person fill:#37474f,stroke:#263238,color:#ffffff,stroke-width:2px
     classDef external fill:#ffffff,stroke:#607d8b,color:#1f2937,stroke-width:1.5px
     class Friend,Admin person
-    class GitHub,Trackers,ntfy external
+    class GitHub,Trackers,Soulseek,ntfy external
     classDef exposureNode fill:#ffffff,stroke:#1e88e5,color:#1f2937,stroke-width:1.5px
     class OVH,Caddy exposureNode
     style exposure fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#1f2937
@@ -147,10 +154,10 @@ flowchart LR
     class Jellyfin,Seerr watchNode
     style watch fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px,color:#1f2937
     classDef automationNode fill:#ffffff,stroke:#43a047,color:#1f2937,stroke-width:1.5px
-    class Prowlarr,Recyclarr,FlareSolverr,Radarr,Sonarr,Bazarr,Tdarr automationNode
+    class Prowlarr,Recyclarr,FlareSolverr,Radarr,Sonarr,Lidarr,Bazarr,Tdarr automationNode
     style automation fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#1f2937
     classDef vpnNode fill:#ffffff,stroke:#fb8c00,color:#1f2937,stroke-width:1.5px
-    class qBittorrent vpnNode
+    class qBittorrent,slskd vpnNode
     style vpn fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#1f2937
     classDef ratioNode fill:#ffffff,stroke:#ec407a,color:#1f2937,stroke-width:1.5px
     class autobrr,crossseed,qbitmanage,ratioscript ratioNode
@@ -173,7 +180,7 @@ flowchart LR
 Each optional part is a set of services in `compose.yaml`. To leave one out, comment its lines in a pull request, and doco-cd removes them once merged:
 
 - Without a private tracker, comment `autobrr`, `cross-seed`, `qbit_manage` and `ratio`.
-- Without a VPN, comment `gluetun`, remove `network_mode` and `depends_on` from `qbittorrent/compose.yaml`, and replace `gluetun:8080` with `qbittorrent:8080` in `caddy/Caddyfile`, `cross-seed/config.js`, `qbit_manage/config.yml`, `ratio/ratio.py` and `homepage/services.yaml`.
+- Without a VPN, comment `gluetun` and `slskd`, remove `network_mode` and `depends_on` from `qbittorrent/compose.yaml`, and replace `gluetun:8080` with `qbittorrent:8080` in `caddy/Caddyfile`, `cross-seed/config.js`, `qbit_manage/config.yml`, `ratio/ratio.py` and `homepage/services.yaml`. Soulseek shows the IP of each user to the others, so slskd never runs without the VPN.
 - Without a domain, comment `caddy` and publish the port of each web UI in its own `compose.yaml`, reachable over plain HTTP on the local network only.
 
 Remove the tiles of the services left out from `homepage/services.yaml` too.
@@ -227,7 +234,8 @@ Both roots live outside the repo, at the paths set in `DATA_ROOT` and `APPDATA_R
 ├── torrents
 │   ├── ratio
 │   ├── zen
-│   └── cross-seed
+│   ├── cross-seed
+│   └── soulseek
 └── media
     ├── movies
     ├── shows
@@ -241,7 +249,7 @@ Create both roots, the recycle bins of Radarr and Sonarr, and the appdata folder
 
 ```bash
 . <(grep -E '^(DATA_ROOT|APPDATA_ROOT|PUID|PGID)=' .env)
-mkdir -p "$DATA_ROOT"/torrents/{ratio,zen,cross-seed} "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,recyclarr,autobrr,cross-seed,qbit_manage,ratio}
+mkdir -p "$DATA_ROOT"/torrents/{ratio,zen,cross-seed} "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,recyclarr,autobrr,cross-seed,qbit_manage,ratio,slskd}
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
@@ -297,6 +305,8 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with `:<CA
 | Prowlarr | `https://prowlarr.lan.<DOMAIN>` | Local network |
 | Radarr | `https://radarr.lan.<DOMAIN>` | Local network |
 | Sonarr | `https://sonarr.lan.<DOMAIN>` | Local network |
+| Lidarr | `https://lidarr.lan.<DOMAIN>` | Local network |
+| slskd | `https://slskd.lan.<DOMAIN>` | Local network |
 | Bazarr | `https://bazarr.lan.<DOMAIN>` | Local network |
 | Tdarr | `https://tdarr.lan.<DOMAIN>` | Local network |
 | autobrr | `https://autobrr.lan.<DOMAIN>` | Local network |
@@ -466,10 +476,10 @@ The line `Public IP address is` in `docker compose logs gluetun` shows the VPN a
 2. Pick Linux as the system, WireGuard as the protocol, and the country you want to exit from, then generate and download the config file.
 3. In `.env`, set `VPN_SERVICE_PROVIDER` to `airvpn`, `VPN_TYPE` to `wireguard`, and either `SERVER_COUNTRIES` to a country such as `Netherlands` or `SERVER_REGIONS` to `Europe` to let Gluetun pick among every European server. The keys work with any server.
 4. From the config file, copy `PrivateKey` into `WIREGUARD_PRIVATE_KEY`, `PresharedKey` into `WIREGUARD_PRESHARED_KEY`, and only the IPv4 part of `Address` into `WIREGUARD_ADDRESSES`, for example `10.128.0.2/32`. Then delete the file, it holds your keys.
-5. On the [ports page](https://airvpn.org/ports/), reserve a port, leave its local port empty, and set `VPN_FORWARDED_PORT` to it.
+5. On the [ports page](https://airvpn.org/ports/), reserve a port, leave its local port empty, and set `VPN_FORWARDED_PORT` to it. [slskd](#slskd) reserves a second one later.
 6. Recreate Gluetun and qBittorrent with `docker restart doco-cd`.
 
-In qBittorrent, Tools > Options > Connection, set "Port used for incoming connections" to `VPN_FORWARDED_PORT` and uncheck "Use UPnP / NAT-PMP port forwarding from my router". Back on the ports page, the test button of the port then shows it as open while a torrent runs.
+In qBittorrent, Tools > Options > Connection, set "Port used for incoming connections" to the first port of `VPN_FORWARDED_PORT` and uncheck "Use UPnP / NAT-PMP port forwarding from my router". Back on the ports page, the test button of the port then shows it as open while a torrent runs.
 
 ### Login
 
@@ -522,7 +532,7 @@ Optionally, in Speed, set a global upload limit to about 60% of your internet up
 
 Requires [qBittorrent](#qbittorrent).
 
-Prowlarr holds the indexers once and pushes them to Radarr, Sonarr and the other tools. FlareSolverr opens indexers protected by Cloudflare for it. Neither sees any media file. Jackett can replace Prowlarr, without the push.
+Prowlarr holds the indexers once and pushes them to Radarr, Sonarr, Lidarr and the other tools. FlareSolverr opens indexers protected by Cloudflare for it. Neither sees any media file. Jackett can replace Prowlarr, without the push.
 
 ### Login
 
@@ -541,7 +551,7 @@ In Indexers, click "Add Indexer", pick a tracker and fill in what it asks for, a
 
 ### Seeding goals of private trackers
 
-A private tracker bans an account for a hit and run. For each private indexer, in Indexers, edit it, click "Show Advanced", and set "Seed Ratio" and "Seed Time" in minutes to the minimums of its rules page. Prowlarr syncs them to Radarr and Sonarr, which hand them to qBittorrent with each torrent, so "Remove Completed" never removes a private torrent before the tracker allows it. An indexer left empty uses the global seeding limits of qBittorrent.
+A private tracker bans an account for a hit and run. For each private indexer, in Indexers, edit it, click "Show Advanced", and set "Seed Ratio" and "Seed Time" in minutes to the minimums of its rules page. Prowlarr syncs them to Radarr, Sonarr and Lidarr, which hand them to qBittorrent with each torrent, so "Remove Completed" never removes a private torrent before the tracker allows it. An indexer left empty uses the global seeding limits of qBittorrent.
 
 ## Radarr
 
@@ -611,6 +621,98 @@ In Settings > Media Management, click "Show Advanced" at the top, then:
 ### Indexers from Prowlarr
 
 In Prowlarr, Settings > Apps, click "+" and pick Sonarr. Set "Prowlarr Server" to `http://prowlarr:9696` and "Sonarr Server" to `http://sonarr:8989`, paste the Sonarr API key, click "Test", then "Save". Every indexer with TV categories then shows up in Sonarr, Settings > Indexers. An indexer without TV categories, such as Internet Archive, is never synced to Sonarr.
+
+## slskd
+
+Requires [qBittorrent](#qbittorrent).
+
+slskd is a Soulseek client. Soulseek is a network of music lovers who share their own folders, where rare albums missing from every tracker often turn up. slskd shares the network of Gluetun, like qBittorrent: when the VPN is down, it has no connectivity at all. It downloads into the `soulseek` folder of the torrents tree, under `/data/torrents/soulseek`, and shares the music folder of the Library, mounted read-only under `/data/media/music`, so nobody can change the Library through it. Nicotine+ can replace it, without the API that Lidarr needs.
+
+### Soulseek account
+
+Soulseek has no sign-up page: slskd creates the account at its first connection, if the username is free. In `.env`, set `SOULSEEK_USERNAME` to a username that does not identify you and `SOULSEEK_PASSWORD` to a strong password stored in your password manager. Other Soulseek users see the username and the IP of the VPN, never the home IP.
+
+### Login
+
+In `.env`, set `SLSKD_USERNAME` and `SLSKD_PASSWORD` to the login of its web UI, distinct from the other tools, and `SLSKD_API_KEY` to a new key, which Lidarr and Homepage use:
+
+```bash
+openssl rand -hex 24
+```
+
+Restart doco-cd to apply `.env`:
+
+```sh
+docker restart doco-cd
+```
+
+Open `https://slskd.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. The status at the top turns to connected once slskd reaches Soulseek.
+
+### Forwarded port
+
+Other Soulseek users connect to slskd on its listening port. Without a forwarded port, slskd still downloads, but fewer users can reach it and some transfers fail.
+
+1. Reserve a second port at the VPN provider, on the [ports page](https://airvpn.org/ports/) with AirVPN, and leave its local port empty.
+2. In `.env`, add it to `VPN_FORWARDED_PORT` after the qBittorrent one, for example `VPN_FORWARDED_PORT=41234,52345`, and set `SLSKD_LISTEN_PORT` to it, here `52345`. Gluetun opens every port of `VPN_FORWARDED_PORT` in its firewall.
+3. Restart doco-cd to apply `.env`.
+
+`./scripts/verify.sh` checks that `SLSKD_LISTEN_PORT` is one of the ports of `VPN_FORWARDED_PORT` after the qBittorrent one, and fails slskd until it is.
+
+### Sharing
+
+Many Soulseek users refuse to send files to a user who shares nothing. slskd shares the whole music folder, which it scans at each start. Once Lidarr imported new albums, open Shares in slskd and click "Rescan" so that other users see them.
+
+## Lidarr
+
+Requires [Prowlarr](#prowlarr) and [slskd](#slskd).
+
+Lidarr follows artists: every album of a followed artist arrives in the Library on its own, from the indexers through qBittorrent, or from Soulseek through slskd when no indexer has it. Its image supports plugins, and it uses the [Tubifarry](https://github.com/TypNull/Tubifarry) plugin, which adds slskd as an indexer and as a download client. It sees only the music folder, under `/data/media/music`, and the torrents tree, under `/data/torrents`. No other maintained open source tool follows artists as well.
+
+### Login
+
+Open `https://lidarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication the same way as Prowlarr, with its own username and password. Copy the API key from Settings > General > Security into `LIDARR_API_KEY` in `.env`.
+
+### Tubifarry
+
+In System > Plugins, paste `https://github.com/TypNull/Tubifarry` into "GitHub URL", click "Install", and let Lidarr restart. Tubifarry then shows up in the list of installed plugins.
+
+### Media management
+
+In Settings > Media Management, click "Show Advanced" at the top, then:
+
+1. Under Root Folders, add `/data/media/music`, with the default quality and metadata profiles.
+2. Check "Rename Tracks".
+3. Under Importing, uncheck "Use Hardlinks instead of Copy". Each import is a copy, so the torrent keeps seeding from the torrents tree.
+
+### Quality profile
+
+In Settings > Profiles, edit the quality profile of the root folder, check "Upgrades Allowed" and set "Upgrade Until" to the format you want, for example `FLAC`. Lidarr then replaces an album with a better release until it reaches that format, and stops there, like movies and shows.
+
+### Download clients
+
+For qBittorrent:
+
+1. In qBittorrent, add a category `lidarr` with `/data/torrents/music` as the save path.
+2. In Lidarr, Settings > Download Clients, click "+" and pick qBittorrent.
+3. Enter `gluetun` as the host, `8080` as the port, and the qBittorrent login.
+4. Set "Category" to `lidarr`.
+5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding goal, Lidarr removes it and its files from the torrents tree, and the album stays in the Library.
+6. Click "Test", then "Save".
+
+For slskd:
+
+1. In Settings > Download Clients, click "+" and pick Slskd.
+2. Enter `http://gluetun:5030` as the URL, since slskd shares the network of Gluetun, and paste `SLSKD_API_KEY`.
+3. Check "Remove Completed", click "Test", then "Save". Tubifarry reads the download folder from slskd, `/data/torrents/soulseek/downloads`, which Lidarr sees at the same path.
+
+### Indexers
+
+1. In Prowlarr, Settings > Apps, click "+" and pick Lidarr. Set "Prowlarr Server" to `http://prowlarr:9696` and "Lidarr Server" to `http://lidarr:8686`, paste the Lidarr API key, click "Test", then "Save". Every indexer with audio categories then shows up in Lidarr, Settings > Indexers.
+2. In Lidarr, Settings > Indexers, click "+" and pick Slskd. Enter `http://gluetun:5030` as the URL, paste `SLSKD_API_KEY`, check "Include Only Audio Files", click "Test", then "Save".
+
+### Follow an artist
+
+In Library > Add New, search an artist, pick `/data/media/music` as the root folder and the albums to monitor, and check "Start search for missing albums". Lidarr searches the indexers and Soulseek, sends each album to qBittorrent or slskd, then copies it into the music folder, where the Music library of Jellyfin picks it up.
 
 ## Requests
 
@@ -1009,6 +1111,8 @@ Add one monitor per line, with the default interval of 60 seconds. An HTTP monit
 | FlareSolverr | HTTP(s) | `http://flaresolverr:8191/health` |
 | Radarr | HTTP(s) | `http://radarr:7878/ping` |
 | Sonarr | HTTP(s) | `http://sonarr:8989/ping` |
+| Lidarr | HTTP(s) | `http://lidarr:8686/ping` |
+| slskd | HTTP(s) | `http://gluetun:5030/health` |
 | Bazarr | HTTP(s) | `http://bazarr:6767/api/system/ping` |
 | Tdarr | HTTP(s) | `http://tdarr:8265/api/v2/status` |
 | autobrr | HTTP(s) | `http://autobrr:7474/api/healthz/liveness` |
@@ -1054,7 +1158,7 @@ Open `https://dozzle.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in.
 
 Requires [Bazarr](#bazarr), [Private tracker ratio](#private-tracker-ratio), [Beszel](#beszel) and [Uptime Kuma](#uptime-kuma).
 
-Homepage is the start page of the Admin: one tile per service, grouped as in [Architecture](#architecture), with a link to its lan name and its live figures, such as the Requests waiting in Seerr, the queues of Radarr and Sonarr, the torrents of qBittorrent, the public IP and the country of the VPN, and the free space of the data disk. Homarr or Dashy can replace it.
+Homepage is the start page of the Admin: one tile per service, grouped as in [Architecture](#architecture), with a link to its lan name and its live figures, such as the Requests waiting in Seerr, the queues of Radarr, Sonarr and Lidarr, the torrents of qBittorrent, the public IP and the country of the VPN, and the free space of the data disk. Homarr or Dashy can replace it.
 
 Its config is `homepage/settings.yaml`, `homepage/services.yaml` and `homepage/widgets.yaml`. They hold no key and no personal value: Homepage reads each one from `.env`, through the `HOMEPAGE_VAR_` variables of `homepage/compose.yaml`. Homepage pastes each value into the YAML before reading it, so a value it reads must hold no single quote, or the whole page stays empty. This is why it reads qBittorrent with an API key rather than its password. Homepage calls the APIs itself, so no key ever reaches the browser. It sees no file of the data root, only the empty folder `<DATA_ROOT>/.homepage`, which gives it the free space of the data disk. `./scripts/verify.sh` checks that it mounts neither the media tree nor the torrents tree.
 
@@ -1079,6 +1183,8 @@ Most keys are already in `.env` from the sections of their service. Add the othe
 | Prowlarr | `PROWLARR_API_KEY` | Set in [Prowlarr](#prowlarr) |
 | Radarr | `RADARR_API_KEY` | Set in [Radarr](#radarr) |
 | Sonarr | `SONARR_API_KEY` | Set in [Sonarr](#sonarr) |
+| Lidarr | `LIDARR_API_KEY` | Set in [Lidarr](#lidarr) |
+| slskd | `SLSKD_API_KEY` | Set in [slskd](#slskd) |
 | Bazarr | `BAZARR_API_KEY` | Settings > General > Security, "API Key" |
 | Tdarr | `TDARR_API_KEY` | Set in [Tdarr](#tdarr) |
 | autobrr | `AUTOBRR_API_KEY` | Settings > API Keys, click "Add new" and name it `Homepage` |
@@ -1116,7 +1222,7 @@ Run the verification script from the Clone:
 ./scripts/verify.sh
 ```
 
-It checks the NAS from the outside and prints one line per promise, for the services `compose.yaml` includes. To prove the kill switch, it cuts the VPN for a few seconds and then restarts Gluetun and qBittorrent. A failing line names the service that broke it, and the script exits with an error if any check fails.
+It checks the NAS from the outside and prints one line per promise, for the services `compose.yaml` includes. To prove the kill switch, it cuts the VPN for a few seconds and then restarts Gluetun, qBittorrent and slskd. A failing line names the service that broke it, and the script exits with an error if any check fails.
 
 The script ends with the public addresses to test yourself. Open each one on a phone on 4G with wifi off: it must load over HTTPS without a certificate warning.
 

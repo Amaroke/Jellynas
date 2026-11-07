@@ -44,6 +44,15 @@
           key: '{{HOMEPAGE_VAR_GLUETUN_API_KEY}}'
           version: 2
           fields: ["public_ip", "region", "country"]
+    - slskd:
+        icon: slskd.svg
+        description: Soulseek, through the VPN only
+        href: https://slskd.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        widget:
+          type: slskd
+          url: http://gluetun:5030
+          key: '{{HOMEPAGE_VAR_SLSKD_API_KEY}}'
+          fields: ["slskStatus", "downloads", "uploads", "sharedFiles"]
 
 - Ratio:
     - Ratio:
@@ -174,6 +183,15 @@
           key: '{{HOMEPAGE_VAR_SONARR_API_KEY}}'
           enableQueue: true
           fields: ["series", "wanted", "queued"]
+    - Lidarr:
+        icon: lidarr.svg
+        description: Music
+        href: https://lidarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        widget:
+          type: lidarr
+          url: http://lidarr:8686
+          key: '{{HOMEPAGE_VAR_LIDARR_API_KEY}}'
+          fields: ["artists", "wanted", "queued"]
     - Bazarr:
         icon: bazarr.svg
         description: Subtitles

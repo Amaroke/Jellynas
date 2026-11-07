@@ -69,9 +69,16 @@ class HomepageConfigTest(unittest.TestCase):
         used = {name for path in CONFIG_FILES for name in PLACEHOLDER.findall(path.read_text(encoding="utf-8"))}
         self.assertEqual(set(), used - homepage_environment())
 
+    def test_every_link_has_a_lan_name(self):
+        caddyfile = (ROOT / "caddy" / "Caddyfile").read_text(encoding="utf-8")
+        routed = set(re.findall(r"^\s*import lan ([a-z0-9-]+) ", caddyfile, re.MULTILINE))
+        routed |= set(re.findall(r"^\s*host ([a-z0-9-]+)\.lan\.", caddyfile, re.MULTILINE))
+        linked = set(re.findall(r"href: https://([a-z0-9-]+)\.lan\.", (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")))
+        self.assertEqual(set(), linked - routed)
+
     def test_every_variable_is_documented(self):
         documented = set(re.findall(r"^([A-Z_]+)=", (ROOT / ".env.example").read_text(encoding="utf-8"), re.MULTILINE))
-        for path in (HOMEPAGE / "compose.yaml", ROOT / "gluetun" / "compose.yaml"):
+        for path in included_compose_files():
             used = set(re.findall(r"\$\{([A-Z_]+)", path.read_text(encoding="utf-8")))
             self.assertEqual(set(), used - documented, path.name)
 

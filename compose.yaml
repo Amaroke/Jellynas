@@ -10,6 +10,8 @@ include:
   - prowlarr/compose.yaml
   - radarr/compose.yaml
   - sonarr/compose.yaml
+  - lidarr/compose.yaml
+  - slskd/compose.yaml
   - recyclarr/compose.yaml
   - bazarr/compose.yaml
   - tdarr/compose.yaml

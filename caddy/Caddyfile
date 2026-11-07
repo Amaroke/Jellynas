@@ -66,6 +66,8 @@
 	import lan prowlarr prowlarr:9696
 	import lan radarr radarr:7878
 	import lan sonarr sonarr:8989
+	import lan lidarr lidarr:8686
+	import lan slskd gluetun:5030
 	import lan bazarr bazarr:6767
 	import lan tdarr tdarr:8265
 	import lan autobrr autobrr:7474

@@ -1,0 +1,32 @@
+services:
+  slskd:
+    image: slskd/slskd:0.26.2
+    container_name: slskd
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges
+    user: ${PUID}:${PGID}
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_started
+        restart: true
+    environment:
+      TZ: ${TZ}
+      SLSKD_USERNAME: ${SLSKD_USERNAME}
+      SLSKD_PASSWORD: ${SLSKD_PASSWORD}
+      SLSKD_API_KEY: ${SLSKD_API_KEY}
+      SLSKD_SLSK_USERNAME: ${SOULSEEK_USERNAME}
+      SLSKD_SLSK_PASSWORD: ${SOULSEEK_PASSWORD}
+      SLSKD_SLSK_LISTEN_PORT: ${SLSKD_LISTEN_PORT:-50300}
+      SLSKD_DOWNLOADS_DIR: /data/torrents/soulseek/downloads
+      SLSKD_INCOMPLETE_DIR: /data/torrents/soulseek/incomplete
+      SLSKD_SHARED_DIR: /data/media/music
+    volumes:
+      - ${APPDATA_ROOT}/slskd:/app
+      - ${DATA_ROOT}/torrents/soulseek:/data/torrents/soulseek
+      - ${DATA_ROOT}/media/music:/data/media/music:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document", "/dev/null", "http://localhost:5030/health"]
+      timeout: 10s
+      start_period: 30s
