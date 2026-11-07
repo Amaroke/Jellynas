@@ -1,15 +1,7 @@
 commands:
-  dry_run: false
-  recheck: false
-  cat_update: false
   tag_update: true
-  rem_unregistered: false
   tag_tracker_error: true
-  rem_orphaned: false
-  tag_nohardlinks: false
-  share_limits: false
   skip_qb_version_check: true
-  skip_cleanup: false
 
 qbt:
   host: gluetun:8080
@@ -17,22 +9,9 @@ qbt:
   pass: !ENV QBITTORRENT_PASSWORD
 
 settings:
-  force_auto_tmm: false
-  tracker_error_tag: issue
-  nohardlinks_tag: noHL
-  stalled_tag: stalledDL
   private_tag: private
-  share_limits_tag: ~share_limit
-  share_limits_min_seeding_time_tag: MinSeedTimeNotReached
-  share_limits_min_num_seeds_tag: MinSeedsNotMet
-  share_limits_last_active_tag: LastActiveLimitNotReached
-  cat_filter_completed: true
-  share_limits_filter_completed: true
-  tag_nohardlinks_filter_completed: true
-  rem_unregistered_filter_completed: false
   cat_update_all: false
   disable_qbt_default_share_limits: false
-  tag_stalled_torrents: true
 
 directory:
   root_dir: /data/torrents
