@@ -743,24 +743,16 @@ Bazarr finds the subtitles for watching in the original audio. It learns about e
 
 ### Languages
 
-Movies and shows get French and English subtitles, anime get French and Japanese ones, and a French original work gets none. [ADR 0004](docs/adr/0004-the-library-is-mkv-h265-with-embedded-subtitles.md) records why.
+Every work in a foreign language, anime included, gets French and English subtitles, and a French original work gets none. [ADR 0004](docs/adr/0004-the-library-is-mkv-h265-with-embedded-subtitles.md) records why.
 
-Sonarr and Radarr tag each work so that Bazarr knows which case applies. In Settings > Tags of Sonarr, click "+" under Auto Tagging twice, check "Remove Tags Automatically" each time, and create:
-
-| Name | Tag | Condition |
-| --- | --- | --- |
-| Anime | `anime` | Series Type is Anime |
-| French original | `french-original` | Original Language is French |
-
-Do the same in Radarr, with the condition "Quality Profile is `Anime 1080p`" for the Anime rule, since Radarr cannot tell an anime movie apart. Each work gets its tags at its next refresh, or right away with "Update All" in Series and in Movies.
+Sonarr and Radarr tag each French original work so that Bazarr leaves it out. In Settings > Tags of Sonarr, click "+" under Auto Tagging, name the rule `French original`, check "Remove Tags Automatically", enter `french-original` as the tag, add the condition "Original Language is French", and save. Do the same in Radarr. Each work gets its tag at its next refresh, or right away with "Update All" in Series and in Movies.
 
 Then in Bazarr, Settings > Languages:
 
-1. Add French, English and Japanese to "Languages Filter".
+1. Add French and English to "Languages Filter".
 2. Under "Languages Profile", click "Add New Profile", name it `French and English`, add French and English, and save the profile.
-3. Add a second profile named `French and Japanese` with French and Japanese, and enter `anime` as its tag.
-4. Check "Series" and "Movies" under "Tag-Based Automatic Language Profile Selection", and enter `french-original` under "Remove Profile Tags".
-5. Under "Default Language Profiles For Newly Added Shows", check "Series" and "Movies" and pick `French and English` for both, then save.
+3. Check "Series" and "Movies" under "Tag-Based Automatic Language Profile Selection", and enter `french-original` under "Remove Profile Tags".
+4. Under "Default Language Profiles For Newly Added Shows", check "Series" and "Movies" and pick `French and English` for both, then save.
 
 A subtitle track already inside the file counts as found, so a `MULTi` release with French subtitles needs no download.
 
@@ -773,9 +765,6 @@ In Settings > Providers, click "+" for each provider, fill in what it asks for, 
 | OpenSubtitles.com | Free account on [opensubtitles.com](https://www.opensubtitles.com), with a daily download limit | Movies and shows, the widest French catalogue |
 | Podnapisi | None | Movies and shows |
 | Gestdown | None | Shows, from the Addic7ed catalogue |
-| Jimaku.cc | Free account on [jimaku.cc](https://jimaku.cc), then an API key from its account page | Anime, the Japanese subtitles |
-
-Jimaku.cc needs the AniDB integration first: register an API client on [anidb.net](https://anidb.net/software/add), with the HTTP API, not UDP, then in Settings > Providers, Metadata tab, click "+" under "Metadata Providers" and add AniDB with that client name and version.
 
 ### Sonarr and Radarr
 
@@ -783,6 +772,16 @@ Jimaku.cc needs the AniDB integration first: register an API client on [anidb.ne
 2. In Settings > Radarr, check "Enabled", enter `radarr` as the address and `7878` as the port, paste the Radarr API key, click "Test", then "Save".
 
 Bazarr then lists every show and movie, picks the profile of each from its tags at every sync, and searches subtitles for each new file.
+
+### Anime on an older NAS
+
+A NAS set up before anime got French and English subtitles still gives them French and Japanese ones. To switch it:
+
+1. In Bazarr, Series, click "Mass Edit", select every anime, pick `French and English` as the profile, and save. Do the same in Movies for every anime movie.
+2. In Settings > Languages, delete the `French and Japanese` profile, remove Japanese from "Languages Filter", and save.
+3. In Settings > Providers, delete Jimaku.cc. In the Metadata tab, delete AniDB, and save.
+4. In Settings > Tags of Sonarr and of Radarr, delete the `Anime` rule under Auto Tagging.
+5. Import `tdarr/flow.json` again in Tdarr, as [Tdarr](#tdarr) describes.
 
 ### Subtitles embedded by Tdarr
 
