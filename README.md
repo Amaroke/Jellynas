@@ -23,8 +23,9 @@ Follow the sections in order. Each one starts with the sections it requires. Eve
 15. [Tdarr](#tdarr)
 16. [Bazarr](#bazarr)
 17. [Private tracker ratio](#private-tracker-ratio)
-18. [Verify the NAS](#verify-the-nas)
-19. [Contributing](#contributing)
+18. [Dozzle](#dozzle)
+19. [Verify the NAS](#verify-the-nas)
+20. [Contributing](#contributing)
 
 ## Architecture
 
@@ -82,6 +83,11 @@ flowchart LR
         ratioscript("ratio<br/>farm, Zen reserve")
     end
 
+    subgraph observation["Observation"]
+        direction TB
+        Dozzle("Dozzle<br/>logs, read-only")
+    end
+
     subgraph data["Data"]
         direction TB
         Torrents[("Torrents")]
@@ -100,6 +106,7 @@ flowchart LR
     automation -->|"import, subtitles, MKV H265"| data
     watch -->|"read-only"| data
     Admin -->|LAN| automation
+    Admin -->|LAN| observation
     Admin --> GitHub
     gitops -->|"update PRs, pulls main"| GitHub
     OVH -.-|"public IP, DNS challenge"| Caddy
@@ -138,6 +145,9 @@ flowchart LR
     classDef ratioNode fill:#ffffff,stroke:#ec407a,color:#1f2937,stroke-width:1.5px
     class autobrr,crossseed,qbitmanage,ratioscript ratioNode
     style ratio fill:#fce4ec,stroke:#ec407a,stroke-width:2px,color:#1f2937
+    classDef observationNode fill:#ffffff,stroke:#00897b,color:#1f2937,stroke-width:1.5px
+    class Dozzle observationNode
+    style observation fill:#e0f2f1,stroke:#00897b,stroke-width:2px,color:#1f2937
     classDef dataNode fill:#ffffff,stroke:#78909c,color:#1f2937,stroke-width:1.5px
     class Torrents,Library dataNode
     style data fill:#eceff1,stroke:#78909c,stroke-width:2px,color:#1f2937
@@ -279,6 +289,7 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with `:<CA
 | Tdarr | `https://tdarr.lan.<DOMAIN>` | Local network |
 | autobrr | `https://autobrr.lan.<DOMAIN>` | Local network |
 | qbit_manage | `https://qbit-manage.lan.<DOMAIN>` | Local network |
+| Dozzle | `https://dozzle.lan.<DOMAIN>` | Local network |
 
 cross-seed has an API only, which the other containers reach at `http://cross-seed:2468`. The first certificates take a few minutes, follow them with:
 
@@ -894,6 +905,29 @@ docker compose logs ratio | grep Source
 ```
 
 To start the Deficit over, for example once the ratio on the tracker has a buffer, stop ratio, delete its state file and start it again. Every other limit above is fixed in `settings_from_env` of `ratio/ratio.py`.
+
+## Dozzle
+
+Requires [Deploy](#deploy).
+
+Dozzle shows the logs of every container on the Host, the NAS and doco-cd included. Its container actions and its shell stay off, so it cannot start, stop or change a container: git stays the only way to change the NAS, as [ADR 0010](docs/adr/0010-doco-cd-deploys-main.md) records. It mounts the Docker socket read-only, which does not make the Docker API read-only: a flaw in Dozzle could still reach it, so its login and its lan name keep it to the Admin. Portainer can replace it, though it can also change containers.
+
+### Login
+
+Dozzle reads its login from `users.yml` in its appdata folder, and refuses to start without it. Create it with a username and a strong password, distinct from the other tools, then restart Dozzle:
+
+```bash
+. <(grep '^APPDATA_ROOT=' .env)
+mkdir -p "$APPDATA_ROOT"/dozzle
+read -rp 'Username: ' user
+read -rsp 'Password: ' password
+echo
+printf '%s\n' "$password" | docker compose run --rm --no-deps -T dozzle generate "$user" > "$APPDATA_ROOT"/dozzle/users.yml
+unset password
+docker compose restart dozzle
+```
+
+Open `https://dozzle.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in.
 
 ## Verify the NAS
 
