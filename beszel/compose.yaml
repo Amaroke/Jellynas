@@ -1,0 +1,44 @@
+services:
+  beszel:
+    image: henrygd/beszel:0.21.1
+    container_name: beszel
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges
+    environment:
+      USER_EMAIL: ${BESZEL_EMAIL}
+      USER_PASSWORD: ${BESZEL_PASSWORD}
+      CONTAINER_DETAILS: "false"
+    volumes:
+      - ${APPDATA_ROOT}/beszel:/beszel_data
+      - ./config.yml:/beszel_data/config.yml:ro
+      - beszel_socket:/beszel_socket
+    healthcheck:
+      test: ["CMD", "/beszel", "health", "--url", "http://localhost:8090"]
+      interval: 60s
+      timeout: 10s
+      start_period: 30s
+
+  beszel-agent:
+    image: henrygd/beszel-agent:0.21.1
+    container_name: beszel-agent
+    restart: unless-stopped
+    network_mode: host
+    security_opt:
+      - no-new-privileges
+    environment:
+      LISTEN: /beszel_socket/beszel.sock
+      KEY: ${BESZEL_AGENT_KEY}
+      DOCKER_IMAGE_CHECK: "false"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - beszel_socket:/beszel_socket
+      - ${DATA_ROOT}/.beszel:/extra-filesystems/data__Data:ro
+    healthcheck:
+      test: ["CMD", "/agent", "health"]
+      interval: 60s
+      timeout: 10s
+      start_period: 30s
+
+volumes:
+  beszel_socket:

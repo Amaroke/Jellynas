@@ -23,8 +23,12 @@ Follow the sections in order. Each one starts with the sections it requires. Eve
 15. [Tdarr](#tdarr)
 16. [Bazarr](#bazarr)
 17. [Private tracker ratio](#private-tracker-ratio)
-18. [Verify the NAS](#verify-the-nas)
-19. [Contributing](#contributing)
+18. [Observation](#observation)
+19. [Beszel](#beszel)
+20. [Uptime Kuma](#uptime-kuma)
+21. [Dozzle](#dozzle)
+22. [Verify the NAS](#verify-the-nas)
+23. [Contributing](#contributing)
 
 ## Architecture
 
@@ -39,6 +43,7 @@ flowchart LR
     Admin(("Admin"))
     GitHub{{"GitHub"}}
     Trackers{{"Trackers and peers"}}
+    ntfy{{"ntfy.sh"}}
 
     subgraph exposure["Exposure"]
         direction LR
@@ -82,6 +87,13 @@ flowchart LR
         ratioscript("ratio<br/>farm, Zen reserve")
     end
 
+    subgraph observation["Observation"]
+        direction TB
+        Beszel("Beszel<br/>resources")
+        UptimeKuma("Uptime Kuma<br/>checks")
+        Dozzle("Dozzle<br/>logs, read-only")
+    end
+
     subgraph data["Data"]
         direction TB
         Torrents[("Torrents")]
@@ -100,6 +112,9 @@ flowchart LR
     automation -->|"import, subtitles, MKV H265"| data
     watch -->|"read-only"| data
     Admin -->|LAN| automation
+    Admin -->|LAN| observation
+    observation -->|alerts| ntfy
+    ntfy -->|push| Admin
     Admin --> GitHub
     gitops -->|"update PRs, pulls main"| GitHub
     OVH -.-|"public IP, DNS challenge"| Caddy
@@ -119,7 +134,7 @@ flowchart LR
     classDef person fill:#37474f,stroke:#263238,color:#ffffff,stroke-width:2px
     classDef external fill:#ffffff,stroke:#607d8b,color:#1f2937,stroke-width:1.5px
     class Friend,Admin person
-    class GitHub,Trackers external
+    class GitHub,Trackers,ntfy external
     classDef exposureNode fill:#ffffff,stroke:#1e88e5,color:#1f2937,stroke-width:1.5px
     class OVH,Caddy exposureNode
     style exposure fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#1f2937
@@ -138,6 +153,9 @@ flowchart LR
     classDef ratioNode fill:#ffffff,stroke:#ec407a,color:#1f2937,stroke-width:1.5px
     class autobrr,crossseed,qbitmanage,ratioscript ratioNode
     style ratio fill:#fce4ec,stroke:#ec407a,stroke-width:2px,color:#1f2937
+    classDef observationNode fill:#ffffff,stroke:#00897b,color:#1f2937,stroke-width:1.5px
+    class Beszel,UptimeKuma,Dozzle observationNode
+    style observation fill:#e0f2f1,stroke:#00897b,stroke-width:2px,color:#1f2937
     classDef dataNode fill:#ffffff,stroke:#78909c,color:#1f2937,stroke-width:1.5px
     class Torrents,Library dataNode
     style data fill:#eceff1,stroke:#78909c,stroke-width:2px,color:#1f2937
@@ -279,6 +297,9 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with `:<CA
 | Tdarr | `https://tdarr.lan.<DOMAIN>` | Local network |
 | autobrr | `https://autobrr.lan.<DOMAIN>` | Local network |
 | qbit_manage | `https://qbit-manage.lan.<DOMAIN>` | Local network |
+| Beszel | `https://beszel.lan.<DOMAIN>` | Local network |
+| Uptime Kuma | `https://uptime-kuma.lan.<DOMAIN>` | Local network |
+| Dozzle | `https://dozzle.lan.<DOMAIN>` | Local network |
 
 cross-seed has an API only, which the other containers reach at `http://cross-seed:2468`. The first certificates take a few minutes, follow them with:
 
@@ -894,6 +915,133 @@ docker compose logs ratio | grep Source
 ```
 
 To start the Deficit over, for example once the ratio on the tracker has a buffer, stop ratio, delete its state file and start it again. Every other limit above is fixed in `settings_from_env` of `ratio/ratio.py`.
+
+## Observation
+
+Requires [Deploy](#deploy).
+
+Three tools tell the Admin that something goes wrong before a Friend does. [Beszel](#beszel) watches the resources of the Host and of each container, and alerts on the disk and the temperature. [Uptime Kuma](#uptime-kuma) checks that each service answers, and alerts when one is down. [Dozzle](#dozzle) shows the logs of every container. All three are reached from the local network only, behind their own login.
+
+None of them can start, stop or change a container: git stays the only way to change the NAS, as [ADR 0010](docs/adr/0010-doco-cd-deploys-main.md) records. Each mounts the Docker socket read-only, which `./scripts/verify.sh` checks. A read-only mount does not make the Docker API read-only though: a flaw in one of them could still reach it, so their logins and their lan names keep them to the Admin.
+
+### ntfy
+
+Beszel and Uptime Kuma send their alerts to a topic of the public [ntfy.sh](https://ntfy.sh) server, which pushes them to the phone of the Admin. A topic has no password: anyone who knows its name reads it, so the name is the secret. Gotify or a self-hosted ntfy can replace ntfy.sh, though both need a public address of their own to reach the phone.
+
+1. In `.env`, set `NTFY_TOPIC` to a long random name, as `.env.example` sets out.
+2. Install the ntfy app from the Play Store, F-Droid or the App Store. Subscribe to the topic, on the default server `ntfy.sh`.
+3. Send a test alert, which the phone shows within seconds:
+
+   ```bash
+   . <(grep '^NTFY_TOPIC=' .env)
+   curl -d 'Test alert from the NAS' "https://ntfy.sh/$NTFY_TOPIC"
+   ```
+
+## Beszel
+
+Requires [Observation](#observation).
+
+Beszel shows the processor, the memory, the disks, the network and the temperatures of the Host and of every container, over time. Its agent runs in the network of the Host to see its interfaces, and opens no port: the hub reaches it through a socket that both containers share. Container details are off in Beszel, since they show the environment of each container, secrets included. Dozzle shows the logs instead. Netdata, or Prometheus with Grafana, can replace it, with far more to set up.
+
+### Login and key
+
+1. In `.env`, set `BESZEL_EMAIL` and `BESZEL_PASSWORD`. Beszel creates this login at its first start only.
+2. Beszel creates its key at its first start. Print its public key:
+
+   ```bash
+   . <(grep '^APPDATA_ROOT=' .env)
+   ssh-keygen -y -f "$APPDATA_ROOT"/beszel/id_ed25519
+   ```
+
+3. In `.env`, set `BESZEL_AGENT_KEY` to the line it prints, then restart doco-cd to apply `.env`.
+4. Open `https://beszel.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. The system `NAS`, set in `beszel/config.yml`, turns up within a minute, with a `Data` disk for the data root.
+
+### Alerts
+
+In `.env`, set `BESZEL_DISK_ALERT_PERCENT` and `BESZEL_TEMPERATURE_ALERT_CELSIUS`, or leave them empty for their defaults. Apply them, and the ntfy topic, to every system of Beszel:
+
+```bash
+set -a
+. <(grep -E '^(BESZEL_EMAIL|BESZEL_PASSWORD|BESZEL_DISK_ALERT_PERCENT|BESZEL_TEMPERATURE_ALERT_CELSIUS|NTFY_TOPIC)=' .env)
+set +a
+python3 beszel/alerts.py "http://$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' beszel):8090"
+```
+
+An alert fires once a value stays over its threshold for 10 minutes. Run the same command after changing one of these values. The disk alert watches the data disk and the disk of Docker, and fires for the fuller of both.
+
+## Uptime Kuma
+
+Requires [Observation](#observation).
+
+Uptime Kuma checks every minute that each service answers, and sends an alert when one stops and when it comes back. Its checks live in its own database, in its appdata folder, so they are set once in its web UI. Gatus can replace it with checks kept in a file.
+
+### Account
+
+Open `https://uptime-kuma.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. Pick SQLite as the database, then create the admin account with a strong password, distinct from the other tools.
+
+### ntfy alerts
+
+In Settings > Notifications, click "Setup Notification":
+
+1. Pick the "Ntfy" type, keep the server URL `https://ntfy.sh`, and set the topic to `NTFY_TOPIC` of `.env`.
+2. Check "Default enabled" and "Apply on all existing monitors", then save.
+
+### Docker host
+
+In Settings > Docker Hosts, add a host named `NAS`, with the "Socket" connection type and `/var/run/docker.sock`. The checks of the containers without a web UI go through it.
+
+### Checks
+
+Add one monitor per line, with the default interval of 60 seconds. An HTTP monitor reaches each service by its name in the Docker network, with no login:
+
+| Monitor | Type | URL or container |
+| --- | --- | --- |
+| Jellyfin | HTTP(s) | `http://jellyfin:8096/health` |
+| Seerr | HTTP(s) | `http://seerr:5055/api/v1/settings/public` |
+| qBittorrent | HTTP(s) | `http://gluetun:8080` |
+| Prowlarr | HTTP(s) | `http://prowlarr:9696/ping` |
+| FlareSolverr | HTTP(s) | `http://flaresolverr:8191/health` |
+| Radarr | HTTP(s) | `http://radarr:7878/ping` |
+| Sonarr | HTTP(s) | `http://sonarr:8989/ping` |
+| Bazarr | HTTP(s) | `http://bazarr:6767/api/system/ping` |
+| Tdarr | HTTP(s) | `http://tdarr:8265/api/v2/status` |
+| autobrr | HTTP(s) | `http://autobrr:7474/api/healthz/liveness` |
+| cross-seed | HTTP(s) | `http://cross-seed:2468/api/ping` |
+| Beszel | HTTP(s) | `http://beszel:8090/api/health` |
+| Dozzle | HTTP(s) | `http://dozzle:8080/healthcheck` |
+| Caddy | Docker Container | `caddy` |
+| Gluetun | Docker Container | `gluetun` |
+| qbit_manage | Docker Container | `qbit_manage` |
+| Recyclarr | Docker Container | `recyclarr` |
+| ratio | Docker Container | `ratio` |
+| Beszel agent | Docker Container | `beszel-agent` |
+| Jellyfin public | HTTP(s) | `https://jellyfin.<DOMAIN>:<CADDY_HTTPS_PORT>/health` |
+| Seerr public | HTTP(s) | `https://seerr.<DOMAIN>:<CADDY_HTTPS_PORT>/api/v1/settings/public` |
+
+Skip the lines of the services `compose.yaml` no longer includes. On both public monitors, also check "Certificate Expiry Notification". They go out to the public IP and back in through the router, so they also catch a broken port forward or a stale DNS record. A router without NAT loopback never lets them in: they then stay down, and only a check from outside the home, such as a free monitor of UptimeRobot, covers the public addresses.
+
+## Dozzle
+
+Requires [Observation](#observation).
+
+Dozzle shows the logs of every container on the Host, the NAS and doco-cd included. Its container actions and its shell stay off. Portainer can replace it, though it can also change containers.
+
+### Login
+
+Dozzle reads its login from `users.yml` in its appdata folder, and refuses to start without it. Create it with a username and a strong password, distinct from the other tools, then restart Dozzle:
+
+```bash
+. <(grep '^APPDATA_ROOT=' .env)
+mkdir -p "$APPDATA_ROOT"/dozzle
+read -rp 'Username: ' user
+read -rsp 'Password: ' password
+echo
+printf '%s\n' "$password" | docker compose run --rm --no-deps -T dozzle generate "$user" > "$APPDATA_ROOT"/dozzle/users.yml
+unset password
+docker compose restart dozzle
+```
+
+Open `https://dozzle.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in.
 
 ## Verify the NAS
 

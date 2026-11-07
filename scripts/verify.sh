@@ -218,6 +218,20 @@ check_no_new_privileges() {
   fi
 }
 
+check_docker_socket_read_only() {
+  local service id writable=""
+  for service in $services; do
+    id="$(docker compose ps -q "$service" 2>/dev/null | head -n 1)"
+    [ -n "$id" ] || continue
+    docker inspect -f '{{range .Mounts}}{{if .RW}}{{println .Source}}{{end}}{{end}}' "$id" | grep -q 'docker\.sock$' && writable="$writable $service"
+  done
+  if [ -n "$writable" ]; then
+    fail compose "mounts the Docker socket read-write:$writable"
+  else
+    pass compose "no service mounts the Docker socket read-write"
+  fi
+}
+
 check_login_required() {
   local service="$1" url="$2" host result
   enabled "$service" || return
@@ -404,8 +418,14 @@ check_no_media_mount autobrr
 check_no_media_tree cross-seed
 check_no_media_tree qbit_manage
 check_no_media_mount ratio
+check_no_media_mount beszel
+check_no_media_tree beszel-agent
+check_no_torrents_mount beszel-agent
+check_no_media_mount uptime-kuma
+check_no_media_mount dozzle
 check_published_ports
 check_no_new_privileges
+check_docker_socket_read_only
 check_login_required qbittorrent "https://qbittorrent.$lan:$https_port/api/v2/app/version"
 check_login_required prowlarr "https://prowlarr.$lan:$https_port/"
 check_login_required radarr "https://radarr.$lan:$https_port/"
@@ -414,6 +434,9 @@ check_login_required bazarr "https://bazarr.$lan:$https_port/bazarr.log"
 check_login_required tdarr "https://tdarr.$lan:$https_port/api/v2/get-nodes"
 check_login_required autobrr "https://autobrr.$lan:$https_port/api/config"
 check_login_required qbit_manage "https://qbit-manage.$lan:$https_port/"
+check_login_required beszel "https://beszel.$lan:$https_port/api/beszel/info"
+check_login_required uptime-kuma "https://uptime-kuma.$lan:$https_port/metrics"
+check_login_required dozzle "https://dozzle.$lan:$https_port/"
 check_api_key_required cross-seed "http://cross-seed:2468/api/status"
 check_exit_ip qbittorrent
 check_kill_switch qbittorrent

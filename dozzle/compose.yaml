@@ -1,0 +1,17 @@
+services:
+  dozzle:
+    image: amir20/dozzle:v11.4.1
+    container_name: dozzle
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges
+    environment:
+      DOZZLE_AUTH_PROVIDER: simple
+      DOZZLE_NO_ANALYTICS: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${APPDATA_ROOT}/dozzle:/data
+    healthcheck:
+      test: ["CMD", "/dozzle", "healthcheck"]
+      timeout: 10s
+      start_period: 30s
