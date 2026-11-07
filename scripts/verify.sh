@@ -38,7 +38,7 @@ env_value() {
 
 fetch_in() {
   local service="$1" url="$2" seconds="$3"
-  docker compose exec -T "$service" sh -c 'if command -v curl >/dev/null 2>&1; then curl --silent --max-time "$2" "$1"; elif command -v wget >/dev/null 2>&1; then wget -q -T "$2" -O - "$1" || exit 7; else exit 127; fi' sh "$url" "$seconds" 2>/dev/null
+  docker compose exec -T "$service" sh -c 'if command -v curl >/dev/null 2>&1; then curl --silent --max-time "$2" "$1"; elif command -v wget >/dev/null 2>&1; then wget -q -t 1 -T "$2" -O - "$1" || exit 7; else exit 127; fi' sh "$url" "$seconds" 2>/dev/null
 }
 
 http_code() {
@@ -357,7 +357,7 @@ check_exit_ip() {
 }
 
 check_kill_switch() {
-  local service probed=()
+  local service probed=() pids=() i state
   enabled gluetun || return
   for service in "$@"; do
     enabled "$service" || continue
@@ -372,13 +372,22 @@ check_kill_switch() {
     return
   fi
   for service in "${probed[@]}"; do
-    fetch_in "$service" http://1.1.1.1 5 >/dev/null
-    case "$?" in
+    fetch_in "$service" http://1.1.1.1 5 </dev/null >/dev/null &
+    pids+=("$!")
+  done
+  for i in "${!probed[@]}"; do
+    wait "${pids[$i]}"
+    state="$?"
+    service="${probed[$i]}"
+    case "$state" in
       0) fail "$service" "reaches the internet with the VPN down" ;;
       6 | 7 | 28) pass "$service" "has no connectivity with the VPN down" ;;
       *) fail "$service" "cannot probe its connectivity with curl or wget" ;;
     esac
   done
+  if docker compose exec -T gluetun ip -br link show tun0 2>/dev/null </dev/null | grep -qv DOWN; then
+    fail gluetun "brought the VPN back up during the probes, the kill switch results above are not reliable"
+  fi
   docker compose restart gluetun "${probed[@]}" >/dev/null 2>&1
 }
 
