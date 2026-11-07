@@ -879,10 +879,10 @@ Bazarr then lists every show and movie, picks the profile of each from its tags 
 
 A NAS set up before anime got French and English subtitles still gives them French and Japanese ones. To switch it:
 
-1. In Bazarr, Series, click "Mass Edit", select every anime, pick `French and English` as the profile, and save. Do the same in Movies for every anime movie.
-2. In Settings > Languages, delete the `French and Japanese` profile, remove Japanese from "Languages Filter", and save.
-3. In Settings > Providers, delete Jimaku.cc. In the Metadata tab, delete AniDB, and save.
-4. In Settings > Tags of Sonarr and of Radarr, delete the `Anime` rule under Auto Tagging.
+1. In Settings > Tags of Sonarr and of Radarr, delete the `Anime` rule under Auto Tagging. Then in Series of Sonarr, click "Select Series", select every anime, click "Set Tags" at the bottom, pick `anime`, choose "Remove", and apply. Do the same in Movies of Radarr. Back in Settings > Tags, delete the `anime` tag, now unused.
+2. In Bazarr, Settings > Languages, delete the `French and Japanese` profile, remove Japanese from "Languages Filter", and save. No work carries the `anime` tag any more, so no sync gives it back that profile.
+3. In Series, click "Mass Edit", select every anime, pick `French and English` as the profile, and save. Do the same in Movies for every anime movie.
+4. In Settings > Providers, delete Jimaku.cc. In the Metadata tab, delete AniDB, and save.
 5. Import `tdarr/flow.json` again in Tdarr, as [Tdarr](#tdarr) describes.
 
 ### Subtitles embedded by Tdarr
