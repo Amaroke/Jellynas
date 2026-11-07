@@ -3,6 +3,8 @@ services:
     image: ghcr.io/qdm12/gluetun:v3.41.3
     container_name: gluetun
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges
     entrypoint: ["/bin/sh", "/jellynas-entrypoint.sh"]
     cap_add:
       - NET_ADMIN

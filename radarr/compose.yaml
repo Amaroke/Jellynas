@@ -3,6 +3,8 @@ services:
     image: lscr.io/linuxserver/radarr:6.4.4.10685-ls325
     container_name: radarr
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges
     environment:
       PUID: ${PUID}
       PGID: ${PGID}

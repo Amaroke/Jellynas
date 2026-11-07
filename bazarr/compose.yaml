@@ -3,6 +3,8 @@ services:
     image: lscr.io/linuxserver/bazarr:v1.6.2-ls371
     container_name: bazarr
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges
     environment:
       PUID: ${PUID}
       PGID: ${PGID}

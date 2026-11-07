@@ -3,11 +3,13 @@ services:
     image: ghcr.io/flaresolverr/flaresolverr:v3.5.2
     container_name: flaresolverr
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
     environment:
       TZ: ${TZ}
       LOG_LEVEL: info
-    security_opt:
-      - no-new-privileges
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8191/health"]
       timeout: 10s

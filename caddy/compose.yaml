@@ -4,6 +4,8 @@ services:
     image: jellynas-caddy
     container_name: caddy
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges
     environment:
       DOMAIN: ${DOMAIN}
       LAN_SUBNET: ${LAN_SUBNET}

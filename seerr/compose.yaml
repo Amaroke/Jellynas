@@ -4,16 +4,16 @@ services:
     container_name: seerr
     init: true
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
     user: ${PUID}:${PGID}
     environment:
       TZ: ${TZ}
       LOG_LEVEL: info
     volumes:
       - ${APPDATA_ROOT}/seerr:/app/config
-    security_opt:
-      - no-new-privileges
-    cap_drop:
-      - ALL
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:5055/api/v1/settings/public"]
       timeout: 10s
