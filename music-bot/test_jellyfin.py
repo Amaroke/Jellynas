@@ -4,6 +4,8 @@ import threading
 import unittest
 import urllib.parse
 
+from player import Track
+
 from jellyfin import MENU_SIZE, Hit, Jellyfin
 
 KEY = "secret-key"
@@ -108,6 +110,55 @@ class JellyfinTest(unittest.TestCase):
         tracks = jellyfin.library()
         self.assertEqual(["/data/media/music/1.flac"], [track.path for track in tracks])
         self.assertEqual("Artist - Song 1", tracks[0].label)
+
+
+class FakeCovers:
+    def __init__(self, covers):
+        self.covers = covers
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), self.handler())
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.server.server_port}"
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+    def handler(self):
+        covers = self.covers
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_GET(self):
+                item_id = urllib.parse.urlparse(self.path).path.split("/")[2]
+                if item_id not in covers:
+                    self.send_error(404)
+                    return
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(covers[item_id])))
+                self.end_headers()
+                self.wfile.write(covers[item_id])
+
+        return Handler
+
+
+class CoverTest(unittest.TestCase):
+    def cover(self, covers, track):
+        fake = FakeCovers(covers)
+        self.addCleanup(fake.close)
+        return Jellyfin(fake.url, KEY).cover(track)
+
+    def test_cover_is_the_image_of_the_track(self):
+        track = Track("t1", "Song", "Artist", "Album", "/x.flac", "a1")
+        self.assertEqual(b"track", self.cover({"t1": b"track", "a1": b"album"}, track))
+
+    def test_cover_falls_back_to_the_album(self):
+        track = Track("t1", "Song", "Artist", "Album", "/x.flac", "a1")
+        self.assertEqual(b"album", self.cover({"a1": b"album"}, track))
+
+    def test_no_cover_without_an_image(self):
+        self.assertIsNone(self.cover({}, Track("t1", "Song", "Artist", "Album", "/x.flac")))
 
 
 if __name__ == "__main__":

@@ -3,11 +3,11 @@ import unittest
 
 from player import Player, Track
 from rules import (
+    ACTIVITY_SIZE,
     ALONE_SECONDS,
     IDLE_SECONDS,
-    NICKNAME_SIZE,
+    activity,
     control_refusal,
-    nickname,
     play_refusal,
     should_leave,
 )
@@ -109,17 +109,17 @@ class RulesTest(unittest.TestCase):
         self.assertFalse(should_leave(1000, None, 1000 - IDLE_SECONDS + 1))
         self.assertTrue(should_leave(1000, None, 1000 - IDLE_SECONDS))
 
-    def test_nickname_is_the_title_of_the_track(self):
-        self.assertEqual("Song 1", nickname(track(1)))
+    def test_activity_is_the_title_of_the_track(self):
+        self.assertEqual("Song 1", activity(track(1)))
 
-    def test_nickname_is_cut_to_the_discord_limit(self):
-        long = Track("1", "A" * 40, "Artist", "Album", "/x.flac")
-        self.assertEqual(NICKNAME_SIZE, len(nickname(long)))
-        self.assertTrue(nickname(long).endswith("…"))
+    def test_activity_is_cut_to_the_discord_limit(self):
+        long = Track("1", "A" * 200, "Artist", "Album", "/x.flac")
+        self.assertEqual(ACTIVITY_SIZE, len(activity(long)))
+        self.assertTrue(activity(long).endswith("…"))
 
-    def test_nickname_resets_without_a_track(self):
-        self.assertIsNone(nickname(None))
-        self.assertIsNone(nickname(Track("1", " ", "Artist", "Album", "/x.flac")))
+    def test_activity_clears_without_a_track(self):
+        self.assertIsNone(activity(None))
+        self.assertIsNone(activity(Track("1", " ", "Artist", "Album", "/x.flac")))
 
 
 if __name__ == "__main__":
