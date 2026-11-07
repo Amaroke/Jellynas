@@ -9,6 +9,9 @@ services:
       - ALL
     environment:
       TZ: ${TZ}
+    labels:
+      kuma.flaresolverr.http.name: FlareSolverr
+      kuma.flaresolverr.http.url: http://flaresolverr:8191/health
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8191/health"]
       timeout: 10s

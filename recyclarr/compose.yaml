@@ -12,6 +12,8 @@ services:
       TZ: ${TZ}
       RADARR_API_KEY: ${RADARR_API_KEY}
       SONARR_API_KEY: ${SONARR_API_KEY}
+    labels:
+      kuma.recyclarr.docker.name: Recyclarr
     volumes:
       - ./recyclarr.yml:/config/recyclarr.yml:ro
       - ./settings.yml:/config/settings.yml:ro

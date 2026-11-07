@@ -9,6 +9,9 @@ services:
       USER_EMAIL: ${BESZEL_EMAIL}
       USER_PASSWORD: ${BESZEL_PASSWORD}
       CONTAINER_DETAILS: "false"
+    labels:
+      kuma.beszel.http.name: Beszel
+      kuma.beszel.http.url: http://beszel:8090/api/health
     volumes:
       - ${APPDATA_ROOT}/beszel:/beszel_data
       - ./config.yml:/beszel_data/config.yml:ro
@@ -30,6 +33,8 @@ services:
       LISTEN: /beszel_socket/beszel.sock
       KEY: ${BESZEL_AGENT_KEY}
       DOCKER_IMAGE_CHECK: "false"
+    labels:
+      kuma.beszel-agent.docker.name: Beszel agent
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - beszel_socket:/beszel_socket

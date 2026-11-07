@@ -18,6 +18,8 @@ services:
       OVH_CONSUMER_KEY: ${OVH_CONSUMER_KEY}
     extra_hosts:
       - host.docker.internal:host-gateway
+    labels:
+      kuma.caddy.docker.name: Caddy
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ${APPDATA_ROOT}/caddy/data:/data

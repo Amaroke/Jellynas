@@ -99,7 +99,7 @@ flowchart LR
     subgraph observation["Observation"]
         direction TB
         Beszel("Beszel<br/>resources")
-        UptimeKuma("Uptime Kuma<br/>checks")
+        UptimeKuma("Uptime Kuma<br/>checks, written by AutoKuma")
         Dozzle("Dozzle<br/>logs, read-only")
         Homepage("Homepage<br/>dashboard")
     end
@@ -1100,9 +1100,9 @@ To start the Deficit over, for example once the ratio on the tracker has a buffe
 
 Requires [Deploy](#deploy).
 
-Three tools tell the Admin that something goes wrong before a Friend does. [Beszel](#beszel) watches the resources of the Host and of each container, and alerts on the disk and the temperature. [Uptime Kuma](#uptime-kuma) checks that each service answers, and alerts when one is down. [Dozzle](#dozzle) shows the logs of every container. All three are reached from the local network only, behind their own login.
+Three tools tell the Admin that something goes wrong before a Friend does. [Beszel](#beszel) watches the resources of the Host and of each container, and alerts on the disk and the temperature. [Uptime Kuma](#uptime-kuma) checks that each service answers, and alerts when one is down, with checks AutoKuma writes from the labels of each service. [Dozzle](#dozzle) shows the logs of every container. All three are reached from the local network only, behind their own login.
 
-None of them can start, stop or change a container: git stays the only way to change the NAS, as [ADR 0010](docs/adr/0010-doco-cd-deploys-main.md) records. Each mounts the Docker socket read-only, which `./scripts/verify.sh` checks. A read-only mount does not make the Docker API read-only though: a flaw in one of them could still reach it, so their logins and their lan names keep them to the Admin.
+None of them can start, stop or change a container: git stays the only way to change the NAS, as [ADR 0010](docs/adr/0010-doco-cd-deploys-main.md) records. Each, AutoKuma included, mounts the Docker socket read-only, which `./scripts/verify.sh` checks. A read-only mount does not make the Docker API read-only though: a flaw in one of them could still reach it, so their logins and their lan names keep them to the Admin.
 
 ### ntfy
 
@@ -1153,57 +1153,33 @@ An alert fires once a value stays over its threshold for 10 minutes. Run the sam
 
 Requires [Observation](#observation).
 
-Uptime Kuma checks every minute that each service answers, and sends an alert when one stops and when it comes back. Its checks live in its own database, in its appdata folder, so they are set once in its web UI. Gatus can replace it with checks kept in a file.
+Uptime Kuma checks every minute that each service answers, and sends an alert when one stops and when it comes back. AutoKuma writes its checks: each service carries its own in the `kuma.*` labels of its `compose.yaml`, and AutoKuma creates and updates the monitors of Uptime Kuma to match the running containers. It never deletes one, so a container that stops stays down in Uptime Kuma and on its status page: delete the monitor of a service commented out in `compose.yaml` by hand. AutoKuma also creates the ntfy notification and the Docker host `NAS`, from the labels of its own service. Gatus can replace both with checks kept in a file.
 
 ### Account
 
-Open `https://uptime-kuma.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. Pick SQLite as the database, then create the admin account with a strong password, distinct from the other tools.
+1. Open `https://uptime-kuma.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. Pick SQLite as the database, then create the admin account with a strong password, distinct from the other tools. Leave two-factor authentication off: AutoKuma signs in with the password alone.
+2. In `.env`, set `UPTIME_KUMA_USERNAME` and `UPTIME_KUMA_PASSWORD` to this account, then restart doco-cd to apply `.env`.
+3. Within a minute, Uptime Kuma lists one monitor per service, a notification `ntfy` in Settings > Notifications and a Docker host `NAS` in Settings > Docker Hosts. If AutoKuma made none, read its logs:
 
-### ntfy alerts
+   ```bash
+   docker compose logs autokuma
+   ```
 
-In Settings > Notifications, click "Setup Notification":
-
-1. Pick the "Ntfy" type, keep the server URL `https://ntfy.sh`, and set the topic to `NTFY_TOPIC` of `.env`.
-2. Check "Default enabled" and "Apply on all existing monitors", then save.
-
-### Docker host
-
-In Settings > Docker Hosts, add a host named `NAS`, with the "Socket" connection type and `/var/run/docker.sock`. The checks of the containers without a web UI go through it.
+A monitor, notification or Docker host made by hand before AutoKuma stays as it was, beside the one AutoKuma makes: delete the old one in the web UI. A change made in the web UI to a monitor of AutoKuma is undone at its next sync, so change its labels instead.
 
 ### Checks
 
-Add one monitor per line, with the default interval of 60 seconds. An HTTP monitor reaches each service by its name in the Docker network, with no login:
+An HTTP monitor reaches its service by its name in the Docker network, with no login. A service without a route to check gets a Docker Container monitor, which only tells whether its container runs. The labels of a service read:
 
-| Monitor | Type | URL or container |
-| --- | --- | --- |
-| Jellyfin | HTTP(s) | `http://jellyfin:8096/health` |
-| Seerr | HTTP(s) | `http://seerr:5055/api/v1/settings/public` |
-| qBittorrent | HTTP(s) | `http://gluetun:8080` |
-| Prowlarr | HTTP(s) | `http://prowlarr:9696/ping` |
-| FlareSolverr | HTTP(s) | `http://flaresolverr:8191/health` |
-| Radarr | HTTP(s) | `http://radarr:7878/ping` |
-| Sonarr | HTTP(s) | `http://sonarr:8989/ping` |
-| Lidarr | HTTP(s) | `http://lidarr:8686/ping` |
-| slskd | HTTP(s) | `http://gluetun:5030/health` |
-| Bazarr | HTTP(s) | `http://bazarr:6767/api/system/ping` |
-| Tdarr | HTTP(s) | `http://tdarr:8265/api/v2/status` |
-| autobrr | HTTP(s) | `http://autobrr:7474/api/healthz/liveness` |
-| cross-seed | HTTP(s) | `http://cross-seed:2468/api/ping` |
-| Beszel | HTTP(s) | `http://beszel:8090/api/health` |
-| Dozzle | HTTP(s) | `http://dozzle:8080/healthcheck` |
-| Homepage | HTTP(s) | `http://homepage:3000/api/healthcheck` |
-| Caddy | Docker Container | `caddy` |
-| Gluetun | Docker Container | `gluetun` |
-| qbit_manage | Docker Container | `qbit_manage` |
-| Recyclarr | Docker Container | `recyclarr` |
-| LazyLibrarian | Docker Container | `lazylibrarian` |
-| Suwayomi | Docker Container | `suwayomi` |
-| ratio | Docker Container | `ratio` |
-| Beszel agent | Docker Container | `beszel-agent` |
-| Jellyfin public | HTTP(s) | `https://jellyfin.<DOMAIN>:<CADDY_HTTPS_PORT>/health` |
-| Seerr public | HTTP(s) | `https://seerr.<DOMAIN>:<CADDY_HTTPS_PORT>/api/v1/settings/public` |
+```yaml
+labels:
+  kuma.radarr.http.name: Radarr
+  kuma.radarr.http.url: http://radarr:7878/ping
+```
 
-Skip the lines of the services `compose.yaml` no longer includes. On both public monitors, also check "Certificate Expiry Notification". They go out to the public IP and back in through the router, so they also catch a broken port forward or a stale DNS record. A router without NAT loopback never lets them in: they then stay down, and only a check from outside the home, such as a free monitor of UptimeRobot, covers the public addresses.
+The defaults of every monitor, its interval of 60 seconds, the ntfy notification and the Docker host `NAS`, sit in `AUTOKUMA__DEFAULT_SETTINGS` in `uptime-kuma/compose.yaml`. `python3 -m unittest discover -s uptime-kuma` checks that every service has a monitor.
+
+`Jellyfin public` and `Seerr public` also alert before the certificate expires. They go out to the public IP and back in through the router, so they also catch a broken port forward or a stale DNS record. A router without NAT loopback never lets them in: they then stay down, and only a check from outside the home, such as a free monitor of UptimeRobot, covers the public addresses.
 
 ## Dozzle
 
@@ -1281,7 +1257,7 @@ At each start, Gluetun allows that key on one route only, `GET /v1/publicip/ip`,
 
 ### Uptime Kuma
 
-The Uptime Kuma tile counts the services up and down from a status page. In Uptime Kuma, Status Pages, click "New Status Page", enter `NAS` as the name and `nas` as the slug, add every monitor, and save. The status page is reachable on the lan name of Uptime Kuma without a login, so any device of the local network can read it.
+The Uptime Kuma tile counts the services up and down from a status page. In Uptime Kuma, Status Pages, click "New Status Page", enter `NAS` as the name and `nas` as the slug, add every monitor, and save. A monitor AutoKuma adds later, for a new service, goes on the status page by hand too. The status page is reachable on the lan name of Uptime Kuma without a login, so any device of the local network can read it.
 
 ### Open
 

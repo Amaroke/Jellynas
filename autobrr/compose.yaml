@@ -10,6 +10,9 @@ services:
     user: ${PUID}:${PGID}
     environment:
       TZ: ${TZ}
+    labels:
+      kuma.autobrr.http.name: autobrr
+      kuma.autobrr.http.url: http://autobrr:7474/api/healthz/liveness
     volumes:
       - ${APPDATA_ROOT}/autobrr:/config
     healthcheck:

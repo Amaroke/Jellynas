@@ -10,6 +10,9 @@ services:
       PGID: ${PGID}
       TZ: ${TZ}
       TDARR_API_KEY: ${TDARR_API_KEY}
+    labels:
+      kuma.bazarr.http.name: Bazarr
+      kuma.bazarr.http.url: http://bazarr:6767/api/system/ping
     volumes:
       - ${APPDATA_ROOT}/bazarr:/config
       - ${DATA_ROOT}/media/movies:/data/media/movies

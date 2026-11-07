@@ -14,6 +14,9 @@ services:
       PUID: ${PUID}
       PGID: ${PGID}
       TZ: ${TZ}
+    labels:
+      kuma.qbittorrent.http.name: qBittorrent
+      kuma.qbittorrent.http.url: http://gluetun:8080
     volumes:
       - ${APPDATA_ROOT}/qbittorrent:/config
       - ${DATA_ROOT}/torrents:/data/torrents
