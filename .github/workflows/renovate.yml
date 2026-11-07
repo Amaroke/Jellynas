@@ -31,4 +31,4 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: npx --yes --package renovate@44.216.5 -- renovate-config-validator --strict renovate.json
+      - run: npx --yes --package renovate@44.222.0 -- renovate-config-validator --strict renovate.json
