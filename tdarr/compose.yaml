@@ -32,7 +32,5 @@ services:
       - ${DATA_ROOT}/media/anime:/data/media/anime
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8265/api/v2/status"]
-      interval: 30s
       timeout: 10s
-      retries: 3
       start_period: 60s
