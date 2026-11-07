@@ -48,27 +48,35 @@ check_compose_renders() {
   fi
 }
 
+enabled() {
+  grep -qx "$1" <<<"$services"
+}
+
+included_compose_files() {
+  sed -n 's/^  - \([^ #]*compose\.yaml\)$/\1/p' compose.yaml
+}
+
 check_env_filled() {
-  local name value missing=""
+  local name value files missing=""
   if [ ! -f .env ]; then
     fail env ".env is missing, copy .env.example and fill it in"
     return
   fi
-  for name in $(grep -oE '^[A-Z_]+=' .env.example | tr -d '='); do
-    grep -rqF "\${$name:-" --include=compose.yaml . && continue
+  mapfile -t files < <(included_compose_files)
+  while read -r name; do
     value="$(env_value "$name")"
     [ -n "$value" ] || missing="$missing $name"
-  done
+  done < <(grep -ohE '[$][{][A-Z_]+[}]' "${files[@]}" | tr -d '$\{}' | sort -u)
   if [ -n "$missing" ]; then
     fail env "empty or missing in .env:$missing"
   else
-    pass env "every required variable of .env.example is set in .env"
+    pass env "every variable the enabled services require is set in .env"
   fi
 }
 
 check_containers_up() {
-  local service services state deadline
-  if ! services="$(docker compose config --services)" || [ -z "$services" ]; then
+  local service state deadline
+  if [ -z "$services" ]; then
     fail compose "cannot list services from the config"
     return
   fi
@@ -99,6 +107,7 @@ check_containers_up() {
 
 check_read_only() {
   local service="$1" path="$2" probe
+  enabled "$service" || return
   probe="$path/.verify-write-probe"
   case "$(container_state "$service")" in
     running*) ;;
@@ -121,6 +130,7 @@ check_read_only() {
 
 check_not_mounted() {
   local service="$1" subpath="$2" promise="$3" data_root target id source mounted=""
+  enabled "$service" || return
   data_root="$(env_value DATA_ROOT)"
   data_root="${data_root%/}"
   if [ -z "$data_root" ]; then
@@ -166,7 +176,7 @@ check_no_torrents_mount() {
 
 check_published_ports() {
   local service id ports bindings exposed=""
-  for service in $(docker compose config --services 2>/dev/null); do
+  for service in $services; do
     id="$(docker compose ps -q "$service" 2>/dev/null | head -n 1)"
     [ -n "$id" ] || continue
     ports="$(docker inspect -f '{{range $p, $b := .HostConfig.PortBindings}}{{range $b}} {{.HostPort}}{{end}}{{end}}' "$id")"
@@ -186,6 +196,7 @@ check_published_ports() {
 
 check_login_required() {
   local service="$1" url="$2" host result
+  enabled "$service" || return
   case "$(container_state "$service")" in
     running*) ;;
     *)
@@ -214,6 +225,7 @@ check_login_required() {
 
 check_api_key_required() {
   local service="$1" url="$2" status
+  enabled "$service" || return
   case "$(container_state "$service")" in
     running*) ;;
     *)
@@ -230,7 +242,7 @@ check_api_key_required() {
 
 check_exit_ip() {
   local service="$1" home vpn
-  [ -n "$vpn_provider" ] || return
+  [ -n "$vpn_provider" ] && enabled "$service" || return
   case "$(container_state "$service")" in
     running*) ;;
     *)
@@ -253,6 +265,7 @@ check_exit_ip() {
 
 check_kill_switch() {
   local service="$1"
+  enabled gluetun && enabled "$service" || return
   case "$(container_state gluetun) $(container_state "$service")" in
     running*" "running*) ;;
     *)
@@ -274,6 +287,7 @@ check_kill_switch() {
 }
 
 caddy_running() {
+  enabled caddy || return 1
   case "$(container_state caddy)" in
     running*) return 0 ;;
   esac
@@ -334,6 +348,7 @@ check_unknown_host_refused() {
   fi
 }
 
+services="$(docker compose config --services 2>/dev/null)"
 domain="$(env_value DOMAIN)"
 lan_subnet="$(env_value LAN_SUBNET)"
 lan="lan.$domain"
@@ -350,6 +365,10 @@ check_compose_renders
 check_env_filled
 check_containers_up
 check_read_only jellyfin /data/media
+check_no_media_mount caddy
+check_no_media_mount gluetun
+check_no_torrents_mount jellyfin
+check_no_media_tree qbittorrent
 check_no_media_mount seerr
 check_no_media_mount prowlarr
 check_no_media_mount flaresolverr
