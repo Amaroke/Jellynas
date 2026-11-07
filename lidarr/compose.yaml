@@ -1,0 +1,19 @@
+services:
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:3.1.6.5079-ls47
+    container_name: lidarr
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+    volumes:
+      - ${APPDATA_ROOT}/lidarr:/config
+      - ${DATA_ROOT}/media/music:/data/media/music
+      - ${DATA_ROOT}/torrents:/data/torrents
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8686/ping"]
+      timeout: 10s
+      start_period: 30s

@@ -19,6 +19,7 @@ directory:
 cat:
   radarr: /data/torrents/movies
   tv-sonarr: /data/torrents/shows
+  lidarr: /data/torrents/music
   ratio: /data/torrents/ratio
   zen: /data/torrents/zen
   cross-seed-link: /data/torrents/cross-seed/*

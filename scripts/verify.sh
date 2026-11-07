@@ -36,6 +36,11 @@ env_value() {
   printf '%s' "$value"
 }
 
+fetch_in() {
+  local service="$1" url="$2" seconds="$3"
+  docker compose exec -T "$service" sh -c 'if command -v curl >/dev/null 2>&1; then curl --silent --max-time "$2" "$1"; elif command -v wget >/dev/null 2>&1; then wget -q -T "$2" -O - "$1" || exit 7; else exit 127; fi' sh "$url" "$seconds" 2>/dev/null
+}
+
 http_code() {
   curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 "$@"
 }
@@ -138,37 +143,72 @@ check_read_only() {
   fi
 }
 
-check_not_mounted() {
-  local service="$1" subpath="$2" promise="$3" data_root target id source mounted=""
-  enabled "$service" || return
+data_mounts() {
+  local service="$1" promise="$2" data_root id source
+  enabled "$service" || return 1
   data_root="$(env_value DATA_ROOT)"
   data_root="${data_root%/}"
   if [ -z "$data_root" ]; then
     fail "$service" "DATA_ROOT is empty, cannot check that it $promise"
-    return
+    return 1
   fi
-  target="$data_root${subpath:+/$subpath}"
   case "$(container_state "$service")" in
     running*) ;;
     *)
       fail "$service" "is not running, cannot check that it $promise"
-      return
+      return 1
       ;;
   esac
   id="$(docker compose ps -q "$service" 2>/dev/null | head -n 1)"
   while IFS= read -r source; do
-    [ -n "$source" ] || continue
     case "$data_root" in
-      "$source"/*) mounted="$mounted $source" ;;
+      "$source"/*) printf '/ %s\n' "$source" ;;
     esac
     case "$source" in
-      "$data_root" | "$target" | "$target"/*) mounted="$mounted $source" ;;
+      "$data_root") printf '/ %s\n' "$source" ;;
+      "$data_root"/*) printf '%s %s\n' "${source#"$data_root"/}" "$source" ;;
     esac
   done < <(docker inspect -f '{{range .Mounts}}{{println .Source}}{{end}}' "$id")
+}
+
+check_not_mounted() {
+  local service="$1" subpath="$2" promise="$3" mounts relative source mounted=""
+  mounts="$(data_mounts "$service" "$promise")" || return
+  while read -r relative source; do
+    [ -n "$source" ] || continue
+    if [ -z "$subpath" ]; then
+      mounted="$mounted $source"
+    else
+      case "$relative" in
+        / | "$subpath" | "$subpath"/*) mounted="$mounted $source" ;;
+      esac
+    fi
+  done <<<"$mounts"
   if [ -n "$mounted" ]; then
     fail "$service" "mounts$mounted, expected that it $promise"
   else
     pass "$service" "$promise"
+  fi
+}
+
+check_mounts_only() {
+  local service="$1" mounts relative source allowed path stray=""
+  shift
+  mounts="$(data_mounts "$service" "mounts only $*")" || return
+  while read -r relative source; do
+    [ -n "$source" ] || continue
+    allowed=""
+    for path in "$@"; do
+      case "$relative" in
+        "$path" | "$path"/*) allowed=yes ;;
+      esac
+    done
+    [ -n "$allowed" ] || stray="$stray $source"
+  done <<<"$mounts"
+  if [ -n "$stray" ]; then
+    fail "$service" "mounts$stray, expected only $*"
+  else
+    pass "$service" "mounts only $*"
   fi
 }
 
@@ -304,7 +344,7 @@ check_exit_ip() {
       ;;
   esac
   home="$(curl --silent --max-time 10 https://api.ipify.org)"
-  vpn="$(docker compose exec -T "$service" curl --silent --max-time 10 https://api.ipify.org 2>/dev/null)"
+  vpn="$(fetch_in "$service" https://api.ipify.org 10)"
   if [ -z "$vpn" ]; then
     fail "$service" "cannot reach the internet through the VPN"
   elif [ -z "$home" ]; then
@@ -317,26 +357,43 @@ check_exit_ip() {
 }
 
 check_kill_switch() {
-  local service="$1"
-  enabled gluetun && enabled "$service" || return
-  case "$(container_state gluetun) $(container_state "$service")" in
-    running*" "running*) ;;
-    *)
-      fail "$service" "gluetun or $service is not running, cannot check the kill switch"
-      return
-      ;;
-  esac
+  local service probed=()
+  enabled gluetun || return
+  for service in "$@"; do
+    enabled "$service" || continue
+    case "$(container_state gluetun) $(container_state "$service")" in
+      running*" "running*) probed+=("$service") ;;
+      *) fail "$service" "gluetun or $service is not running, cannot check the kill switch" ;;
+    esac
+  done
+  [ "${#probed[@]}" -gt 0 ] || return
   if ! docker compose exec -T gluetun ip link set tun0 down >/dev/null 2>&1; then
     fail gluetun "cannot take the VPN interface tun0 down, cannot check the kill switch"
     return
   fi
-  docker compose exec -T "$service" curl --silent --output /dev/null --max-time 5 http://1.1.1.1 2>/dev/null
-  case "$?" in
-    0) fail "$service" "reaches the internet with the VPN down" ;;
-    6 | 7 | 28) pass "$service" "has no connectivity with the VPN down" ;;
-    *) fail "$service" "cannot probe its connectivity with curl" ;;
-  esac
-  docker compose restart gluetun "$service" >/dev/null 2>&1
+  for service in "${probed[@]}"; do
+    fetch_in "$service" http://1.1.1.1 5 >/dev/null
+    case "$?" in
+      0) fail "$service" "reaches the internet with the VPN down" ;;
+      6 | 7 | 28) pass "$service" "has no connectivity with the VPN down" ;;
+      *) fail "$service" "cannot probe its connectivity with curl or wget" ;;
+    esac
+  done
+  docker compose restart gluetun "${probed[@]}" >/dev/null 2>&1
+}
+
+check_slskd_port() {
+  local port forwarded
+  enabled slskd || return
+  port="$(env_value SLSKD_LISTEN_PORT)"
+  port="${port:-50300}"
+  forwarded="$(env_value VPN_FORWARDED_PORT)"
+  forwarded="${forwarded// /}"
+  if [[ "$forwarded" == *,* && ",${forwarded#*,}," == *",$port,"* ]]; then
+    pass slskd "listens on $port, a port Gluetun opens from VPN_FORWARDED_PORT"
+  else
+    fail slskd "listens on $port, not one of VPN_FORWARDED_PORT after the qBittorrent one, other Soulseek users cannot reach it"
+  fi
 }
 
 caddy_running() {
@@ -423,6 +480,10 @@ check_no_media_mount caddy
 check_no_media_mount gluetun
 check_no_torrents_mount jellyfin
 check_no_media_tree qbittorrent
+check_mounts_only lidarr media/music torrents
+check_mounts_only slskd media/music torrents/soulseek
+check_read_only slskd /data/media/music
+check_slskd_port
 check_no_media_mount seerr
 check_no_media_mount prowlarr
 check_no_media_mount flaresolverr
@@ -448,6 +509,8 @@ check_login_required qbittorrent "https://qbittorrent.$lan:$https_port/api/v2/ap
 check_login_required prowlarr "https://prowlarr.$lan:$https_port/"
 check_login_required radarr "https://radarr.$lan:$https_port/"
 check_login_required sonarr "https://sonarr.$lan:$https_port/"
+check_login_required lidarr "https://lidarr.$lan:$https_port/"
+check_login_required slskd "https://slskd.$lan:$https_port/api/v0/application"
 check_login_required bazarr "https://bazarr.$lan:$https_port/bazarr.log"
 check_login_required tdarr "https://tdarr.$lan:$https_port/api/v2/get-nodes"
 check_login_required autobrr "https://autobrr.$lan:$https_port/api/config"
@@ -458,7 +521,8 @@ check_login_required dozzle "https://dozzle.$lan:$https_port/"
 check_login_required homepage "https://homepage.$lan:$https_port/api/services"
 check_api_key_required cross-seed "http://cross-seed:2468/api/status"
 check_exit_ip qbittorrent
-check_kill_switch qbittorrent
+check_exit_ip slskd
+check_kill_switch qbittorrent slskd
 check_public_hostname "$jellyfin_hostname"
 check_public_hostname "$seerr_hostname"
 check_public_hostname "${domain:+truenas.$lan}" "$host_ip"
