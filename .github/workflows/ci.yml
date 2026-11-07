@@ -100,4 +100,4 @@ jobs:
         with:
           persist-credentials: false
       - run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color
-      - run: pipx run zizmor==1.31.1 --persona=pedantic --min-severity=low .github/workflows
+      - run: pipx run zizmor==1.32.0 --persona=pedantic --min-severity=low .github/workflows
