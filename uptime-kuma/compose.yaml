@@ -1,0 +1,12 @@
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:2.5.9
+    container_name: uptime-kuma
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ${APPDATA_ROOT}/uptime-kuma:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro

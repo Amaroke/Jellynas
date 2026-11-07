@@ -418,6 +418,10 @@ check_no_media_mount autobrr
 check_no_media_tree cross-seed
 check_no_media_tree qbit_manage
 check_no_media_mount ratio
+check_no_media_mount beszel
+check_no_media_tree beszel-agent
+check_no_torrents_mount beszel-agent
+check_no_media_mount uptime-kuma
 check_no_media_mount dozzle
 check_published_ports
 check_no_new_privileges
@@ -430,6 +434,8 @@ check_login_required bazarr "https://bazarr.$lan:$https_port/bazarr.log"
 check_login_required tdarr "https://tdarr.$lan:$https_port/api/v2/get-nodes"
 check_login_required autobrr "https://autobrr.$lan:$https_port/api/config"
 check_login_required qbit_manage "https://qbit-manage.$lan:$https_port/"
+check_login_required beszel "https://beszel.$lan:$https_port/api/beszel/info"
+check_login_required uptime-kuma "https://uptime-kuma.$lan:$https_port/metrics"
 check_login_required dozzle "https://dozzle.$lan:$https_port/"
 check_api_key_required cross-seed "http://cross-seed:2468/api/status"
 check_exit_ip qbittorrent

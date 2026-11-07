@@ -17,4 +17,6 @@ include:
   - cross-seed/compose.yaml
   - qbit_manage/compose.yaml
   - ratio/compose.yaml
+  - beszel/compose.yaml
+  - uptime-kuma/compose.yaml
   - dozzle/compose.yaml
