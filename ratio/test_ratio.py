@@ -6,6 +6,8 @@ import os
 import tempfile
 import threading
 import unittest
+import urllib.error
+import urllib.request
 from unittest import mock
 
 from ratio import (
@@ -21,6 +23,7 @@ from ratio import (
     pick_hungry,
     run_once,
     save_state,
+    serve,
 )
 
 NOW = 1_800_000_000
@@ -583,6 +586,72 @@ class Report(unittest.TestCase):
         figures = report_of(state, "zen-hunt")
         self.assertEqual(figures["zen_days"], 2)
         self.assertEqual(figures["week_downloaded_gb"], 2)
+
+
+def summary_of(qbt, state=None, now=NOW, **changes):
+    state = state if state is not None else empty_state()
+    with contextlib.redirect_stdout(io.StringIO()):
+        return run_once(qbt, FakeProwlarr(), settings(**changes), state, now)
+
+
+class Summary(unittest.TestCase):
+    def test_the_ledger_counts_every_tracker_torrent_removed_ones_included(self):
+        qbt = FakeQBittorrent([
+            torrent("farmed", downloaded_gb=3, uploaded_gb=6),
+            torrent("kept", category="zen", size_gb=2, seeders=3, downloaded_gb=2, uploaded_gb=1),
+            torrent("movie", category="radarr", size_gb=4, seeders=100, downloaded_gb=4),
+            torrent("public", tracker="http://nyaa.tracker.wf/announce", downloaded_gb=9),
+        ])
+        summary = summary_of(qbt, empty_state(transfers={"gone": [GB, 0]}))
+        self.assertEqual(summary["ledger"], {
+            "torrents": 4, "downloaded_gb": 10, "uploaded_gb": 7, "ratio": 0.7, "surplus_gb": -3,
+            "week_downloaded_gb": 0, "week_uploaded_gb": 0, "week_ratio": None,
+        })
+
+    def test_the_farm_and_the_zen_reserve_show_their_fill(self):
+        qbt = FakeQBittorrent([
+            torrent("farmed", size_gb=3),
+            torrent("linked", category="cross-seed-link", size_gb=2, progress=0.5),
+            torrent("kept", category="zen", size_gb=4, seeders=3),
+        ])
+        summary = summary_of(qbt, indexers=[])
+        self.assertEqual(summary["farm"], {"torrents": 2, "downloading": 1, "size_gb": 5, "limit_gb": 100, "fill": 5.0})
+        self.assertEqual(summary["zen"], {"torrents": 1, "downloading": 0, "size_gb": 4, "limit_gb": 50, "fill": 8.0})
+
+    def test_the_grabs_of_the_day_and_the_pause_are_shown(self):
+        state = empty_state(grabbed={"a": NOW - 100, "b": NOW - 200}, paused=True)
+        summary = summary_of(FakeQBittorrent(), state, indexers=[])
+        self.assertEqual(summary["grabs"], {"today": 2, "per_day": 3, "paused": True})
+
+    def test_each_source_is_listed_by_name_with_its_figures(self):
+        qbt = FakeQBittorrent([torrent("movie", category="radarr", seeders=100, downloaded_gb=4, uploaded_gb=2)])
+        summary = summary_of(qbt)
+        self.assertEqual(summary["sources"], [
+            {"name": "Library download", "figures": "1 torrent, 2.0 / 4.0 GB, ratio 0.50"},
+        ])
+
+    def test_the_time_of_the_summary_is_an_iso_date(self):
+        self.assertEqual(summary_of(FakeQBittorrent())["updated_at"], "2027-01-15T08:00:00+00:00")
+
+
+class Server(unittest.TestCase):
+    def test_the_last_summary_is_served_as_json_and_nothing_else(self):
+        latest = {"summary": {"ledger": {"ratio": 1.5}}}
+        server = serve(latest, port=0)
+        try:
+            url = f"http://127.0.0.1:{server.server_port}"
+            with urllib.request.urlopen(f"{url}/summary") as response:
+                self.assertEqual(json.load(response), {"ledger": {"ratio": 1.5}})
+            latest["summary"] = {"ledger": {"ratio": 2}}
+            with urllib.request.urlopen(f"{url}/summary") as response:
+                self.assertEqual(json.load(response), {"ledger": {"ratio": 2}})
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(f"{url}/state")
+            self.assertEqual(error.exception.code, 404)
+            error.exception.close()
+        finally:
+            server.shutdown()
+            server.server_close()
 
 
 class Setup(unittest.TestCase):

@@ -1,9 +1,12 @@
+import datetime
 import email.utils
+import http.server
 import http.cookiejar
 import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -439,15 +442,19 @@ def share(uploaded, downloaded):
     return round(uploaded / downloaded, 2) if downloaded else None
 
 
-def figures_by_source(state):
-    totals = {}
+def ledger_lines(state):
     for infohash, (downloaded, uploaded) in state["transfers"].items():
         samples = state["history"].get(infohash)
         _, downloaded_before, uploaded_before = samples[0] if samples else [0, downloaded, uploaded]
         zen = state["zen"].get(infohash, [0, 0])[1]
-        line = [1, downloaded, uploaded, downloaded - downloaded_before, uploaded - uploaded_before, zen]
         source = state["sources"].get(infohash)
         source = source if source in SOURCES else "unknown"
+        yield source, [1, downloaded, uploaded, downloaded - downloaded_before, uploaded - uploaded_before, zen]
+
+
+def figures_by_source(state):
+    totals = {}
+    for source, line in ledger_lines(state):
         totals[source] = [a + b for a, b in zip(totals.get(source, [0] * len(line)), line)]
     figures = {}
     for source in [s for s in SOURCES if s in totals]:
@@ -480,6 +487,70 @@ def report(state, now):
             f"{f['uploaded_gb']:.1f} GB up, ratio {shown(f['ratio'])}, last 7 days {f['week_downloaded_gb']:.1f} GB down, "
             f"{f['week_uploaded_gb']:.1f} GB up, ratio {shown(f['week_ratio'])}, {f['zen_days']:.1f} days in the Zen reserve"
         )
+
+
+def fill_of(torrents, categories, limit):
+    held = [t for t in torrents.values() if t["category"] in categories]
+    size = sum(t["size"] for t in held)
+    return {
+        "torrents": len(held),
+        "downloading": sum(1 for t in held if t["progress"] < 1),
+        "size_gb": gigabytes(size),
+        "limit_gb": gigabytes(limit),
+        "fill": round(100 * size / limit, 1) if limit else 0,
+    }
+
+
+def summary(state, torrents, settings, now):
+    count, downloaded, uploaded, week_downloaded, week_uploaded, _ = [
+        sum(column) for column in zip(*(line for _, line in ledger_lines(state)), strict=True)
+    ] or [0] * 6
+    sources = [
+        {
+            "name": SOURCES[source],
+            "figures": f"{f['torrents']} torrent{'s' if f['torrents'] != 1 else ''}, "
+                       f"{f['uploaded_gb']:.1f} / {f['downloaded_gb']:.1f} GB, ratio {shown(f['ratio'])}",
+        }
+        for source, f in figures_by_source(state).items()
+    ]
+    return {
+        "updated_at": datetime.datetime.fromtimestamp(now, datetime.UTC).isoformat(),
+        "ledger": {
+            "torrents": count,
+            "downloaded_gb": gigabytes(downloaded),
+            "uploaded_gb": gigabytes(uploaded),
+            "ratio": share(uploaded, downloaded),
+            "surplus_gb": gigabytes(uploaded - downloaded),
+            "week_downloaded_gb": gigabytes(week_downloaded),
+            "week_uploaded_gb": gigabytes(week_uploaded),
+            "week_ratio": share(week_uploaded, week_downloaded),
+        },
+        "farm": fill_of(torrents, FARM, settings["farm_size"]),
+        "zen": fill_of(torrents, (ZEN,), settings["zen_size"]),
+        "grabs": {"today": len(state["grabbed"]), "per_day": settings["per_day"], "paused": state["paused"]},
+        "sources": sources,
+    }
+
+
+def serve(latest, port=8000):
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path != "/summary" or "summary" not in latest:
+                self.send_error(404)
+                return
+            body = json.dumps(latest["summary"]).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("", port), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
 
 
 def drop_twins(qbt, state, torrents):
@@ -743,6 +814,7 @@ def run_once(qbt, prowlarr, settings, state, now):
     adopt(qbt, settings, state, torrents)
     clean_zen(qbt, settings, torrents)
     grab(qbt, prowlarr, settings, state, torrents, now)
+    return summary(state, {t["hash"].lower(): {**t, "hash": t["hash"].lower()} for t in qbt.torrents()}, settings, now)
 
 
 def number(name, default=None):
@@ -805,11 +877,13 @@ def main():
     )
     state_path = "/state/state.json"
     state = load_state(state_path)
+    latest = {}
+    serve(latest)
     if not settings["indexers"]:
         print("RATIO_GRAB_INDEXER_IDS is empty, ratio grabs nothing and only cleans")
     while True:
         try:
-            run_once(qbt, prowlarr, settings, state, time.time())
+            latest["summary"] = run_once(qbt, prowlarr, settings, state, time.time())
         except Exception as error:
             print(f"Cannot run the farm and the Zen reserve: {error}")
         try:

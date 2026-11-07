@@ -1,7 +1,16 @@
+- datetime:
+    text_size: xl
+    format:
+      dateStyle: full
+      timeStyle: short
+      hourCycle: h23
 - resources:
     label: Host
     cpu: true
     memory: true
+    cputemp: true
+    uptime: true
+    units: metric
 - resources:
-    label: Data
+    label: Data disk
     disk: /data-disk

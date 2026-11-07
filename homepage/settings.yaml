@@ -1,26 +1,42 @@
 title: Jellynas
+description: The NAS of the Admin
 theme: dark
 color: slate
-headerStyle: clean
+background:
+  image: /images/background.svg
+cardBlur: md
+headerStyle: boxed
 statusStyle: dot
+iconStyle: gradient
+useEqualHeights: true
 hideVersion: true
 disableUpdateCheck: true
+quicklaunch:
+  searchDescriptions: true
+  hideInternetSearch: true
+  hideVisitURL: true
 layout:
   Watch:
+    icon: mdi-television-play
     style: row
-    columns: 3
+    columns: 2
   Downloads:
+    icon: mdi-download-network
     style: row
-    columns: 3
-  Automation:
+    columns: 2
+  Ratio:
+    icon: mdi-scale-balance
     style: row
     columns: 4
-  Ratio:
+  Automation:
+    icon: mdi-robot-outline
     style: row
     columns: 4
   Observation:
-    style: row
-    columns: 4
-  Hosting:
+    icon: mdi-eye-outline
     style: row
     columns: 3
+  Hosting:
+    icon: mdi-server-network
+    style: row
+    columns: 2

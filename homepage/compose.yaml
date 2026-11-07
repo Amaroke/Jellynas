@@ -33,6 +33,7 @@ services:
       - ./services.yaml:/app/config/services.yaml:ro
       - ./widgets.yaml:/app/config/widgets.yaml:ro
       - ./bookmarks.yaml:/app/config/bookmarks.yaml:ro
+      - ./background.svg:/app/public/images/background.svg:ro
       - ${DATA_ROOT}/.homepage:/data-disk:ro
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:3000/api/healthcheck"]
