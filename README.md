@@ -51,7 +51,7 @@ flowchart LR
     subgraph gitops["GitOps"]
         direction TB
         Renovate("Renovate<br/>image updates")
-        Deployer("deployer<br/>pulls main")
+        Deployer("doco-cd<br/>pulls main")
     end
 
     subgraph observation["Observation"]
@@ -204,7 +204,7 @@ flowchart LR
     subgraph gitops["GitOps"]
         direction TB
         Renovate("Renovate<br/>image updates")
-        Deployer("deployer<br/>pulls main")
+        Deployer("doco-cd<br/>pulls main")
     end
 
     subgraph observation["Observation"]
@@ -495,35 +495,48 @@ The line `certificate obtained successfully` shows up once for `*.<DOMAIN>` and 
 
 Requires [Fill in the settings](#fill-in-the-settings), [Create the data and appdata roots](#create-the-data-and-appdata-roots) and [Domain](#domain).
 
-The NAS follows the `main` branch of GitHub: a change merged into `main` reaches the NAS within minutes, and nothing else changes it. The NAS runs from its own clone of the repo, kept on `main` and never edited: the deployer refuses to deploy while a tracked file differs from git. Edit the repo in another folder and go through a pull request. `.env` stays in the NAS clone only, outside git.
+The NAS follows the `main` branch of GitHub: a change merged into `main` reaches the NAS within minutes, and nothing else changes it. The clone on the Host holds `.env`, outside git, and starts doco-cd, but the NAS never runs from it. Edit the repo in another folder and go through a pull request. Pull the clone before running a script of the repo:
+
+```sh
+git pull --ff-only
+```
+
+Never start the NAS with `docker compose up` from the clone: it would recreate the services from the clone, and doco-cd would recreate them again at its next poll. `docker compose logs`, `exec`, `stop`, `start` and `restart` are safe.
 
 The settings made in the web UIs of the services live in the appdata root, not in git, so the deploy never touches them. Back up the appdata root to keep them.
 
-### Deployer
+### doco-cd
 
-The deployer is a container, outside the NAS project, that runs `scripts/deploy.sh` every 5 minutes. Start it once from the clone, its first run starts the whole NAS:
-
-```sh
-docker compose -f deployer/compose.yaml up -d --build
-```
-
-Each run fast-forwards `main` to GitHub, then runs `docker compose up -d --build --remove-orphans`, which recreates the services whose compose file or image changed and removes the services commented out in `compose.yaml`. A service also restarts when another file of its folder changes, such as a script or a config file it mounts, since Docker would keep the old one. The deployer remembers the last deployed commit in `.git/jellynas-deployed` and does nothing until a new one is merged. A failed deploy is retried at the next run. When a change touches `deployer/Dockerfile` or `deployer/compose.yaml`, the deployer recreates itself.
-
-The deployer reaches Docker through its socket, which gives it full control of the machine, like any tool that runs Compose.
-
-Its logs name each deploy, and the reason of each failed run, repeated every 5 minutes until it is fixed:
+[doco-cd](https://doco.cd) is a container, outside the NAS project, that polls `main` every 3 minutes and deploys `compose.yaml` with `.env`, as set in `.doco-cd.yml`. [ADR 0010](docs/adr/0010-doco-cd-deploys-main.md) records why. Start it once from the clone, its first poll starts the whole NAS:
 
 ```sh
-docker logs jellynas-deployer
+docker compose -f doco-cd/compose.yaml up -d
 ```
 
-To deploy without waiting, restart it, it deploys as soon as it starts:
+Each deploy runs from a copy of the merged revision, kept in the data volume of doco-cd. It recreates the services whose compose definition or image changed, and those that mount a file of the repo that changed, such as `ratio/ratio_grab.py`. It rebuilds Caddy from its Dockerfile, and removes the services commented out in `compose.yaml`. A failed deploy is retried at the next poll.
+
+doco-cd reaches Docker through its socket, which gives it full control of the machine, like any tool that runs Compose.
+
+Its logs name each deploy, and the reason of each failed one:
 
 ```sh
-docker restart jellynas-deployer
+docker logs doco-cd
 ```
 
-Each service is one line in the root `compose.yaml`. To disable a service, comment its line in a pull request: once merged, the deployer removes it.
+A change of `.env` is no new revision. To apply it, or to deploy without waiting, restart doco-cd, it polls as soon as it starts:
+
+```sh
+docker restart doco-cd
+```
+
+Renovate opens the updates of doco-cd itself and never merges them. Once one is merged, pull the clone and recreate doco-cd:
+
+```sh
+git pull --ff-only
+docker compose -f doco-cd/compose.yaml up -d
+```
+
+Each service is one line in the root `compose.yaml`. To disable a service, comment its line in a pull request: once merged, doco-cd removes it.
 
 ### Renovate
 
@@ -621,7 +634,7 @@ Once you have a provider:
 5. Recreate Gluetun and qBittorrent:
 
    ```sh
-   docker compose up -d
+   docker restart doco-cd
    ```
 
 The line `Public IP address is` in `docker compose logs gluetun` shows the VPN address, never your home address. Gluetun then turns healthy.
@@ -633,7 +646,7 @@ The line `Public IP address is` in `docker compose logs gluetun` shows the VPN a
 3. In `.env`, set `VPN_SERVICE_PROVIDER` to `airvpn`, `VPN_TYPE` to `wireguard`, and either `SERVER_COUNTRIES` to a country such as `Netherlands` or `SERVER_REGIONS` to `Europe` to let Gluetun pick among every European server. The keys work with any server.
 4. From the config file, copy `PrivateKey` into `WIREGUARD_PRIVATE_KEY`, `PresharedKey` into `WIREGUARD_PRESHARED_KEY`, and only the IPv4 part of `Address` into `WIREGUARD_ADDRESSES`, for example `10.128.0.2/32`. Then delete the file, it holds your keys.
 5. On the [ports page](https://airvpn.org/ports/), reserve a port, leave its local port empty, and set `VPN_FORWARDED_PORT` to it.
-6. Recreate Gluetun and qBittorrent with `docker compose up -d`.
+6. Recreate Gluetun and qBittorrent with `docker restart doco-cd`.
 
 In qBittorrent, Tools > Options > Connection, set "Port used for incoming connections" to `VPN_FORWARDED_PORT` and uncheck "Use UPnP / NAT-PMP port forwarding from my router". Back on the ports page, the test button of the port then shows it as open while a torrent runs.
 
@@ -841,7 +854,7 @@ Each tool gets two profiles, built from the French profiles of the [TRaSH Guides
 In `.env`, set `RADARR_API_KEY` and `SONARR_API_KEY` to the keys copied from Settings > General > Security in each tool, then start Recyclarr:
 
 ```sh
-docker compose up -d
+docker restart doco-cd
 ```
 
 Sync right away instead of waiting for midnight:
@@ -898,7 +911,7 @@ Each import is a copy, so a downloaded file sits twice on the disk: once in the 
    echo "tapi_$(openssl rand -hex 16)"
    ```
 
-2. Start Tdarr with `docker compose up -d`. It creates the `admin` Account with that key as its password, and its internal node connects with the same key.
+2. Start Tdarr with `docker restart doco-cd`. It creates the `admin` Account with that key as its password, and its internal node connects with the same key.
 3. Open `https://tdarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the local network and sign in with `admin` and the key.
 4. In Tools > Account, click "Change Password" and set a strong password, distinct from the other tools, stored in your password manager. The key keeps working for the node.
 
@@ -1071,7 +1084,7 @@ cross-seed searches the private indexers of Prowlarr for torrents that hold the 
    openssl rand -hex 24
    ```
 
-2. Recreate cross-seed with `docker compose up -d`. Its logs end with `Server is running on port 2468` once it reaches qBittorrent and Prowlarr.
+2. Recreate cross-seed with `docker restart doco-cd`. Its logs end with `Server is running on port 2468` once it reaches qBittorrent and Prowlarr.
 
    ```sh
    docker compose logs cross-seed
@@ -1115,7 +1128,7 @@ ratio, `ratio/ratio.py`, runs every 10 minutes. It reads qBittorrent and Prowlar
 
 C411 counts each seeder twice in the peers it gives Prowlarr, 87 seeders and no leecher show up as 174 peers, so ratio takes the leechers of C411 as the peers minus twice the seeders, `RATIO_TRACKER_SEEDERS_IN_PEERS`. A torrent is rare when C411 counts at most 24 seeders for it under 1 GB, 50 up to 100 GB, and 199 beyond, the thresholds of the Swarm Keeper class. Each Zen is worth 1 GB of upload in the shop of C411, so the Zen reserve also builds the ratio.
 
-In `.env`, set the `RATIO_*` values, then recreate it with `docker compose up -d`. Its logs name each grab, move and removal:
+In `.env`, set the `RATIO_*` values, then recreate it with `docker restart doco-cd`. Its logs name each grab, move and removal:
 
 ```sh
 docker compose logs ratio

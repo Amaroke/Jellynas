@@ -1,5 +1,7 @@
 # The NAS pulls main
 
+Superseded by [ADR 0010](0010-doco-cd-deploys-main.md) for the deployer. Pull, not push, Renovate and the secrets in `.env` still hold.
+
 The NAS was updated by hand: the Admin pulled the repo and ran `docker compose up -d`, and Dependabot proposed image updates without ever deploying them. The repo becomes the source of truth of the NAS, so that a change merged into `main` is the change the NAS runs.
 
 ## Decision

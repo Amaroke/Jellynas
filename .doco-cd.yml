@@ -1,0 +1,6 @@
+name: jellynas
+compose_files:
+  - compose.yaml
+env_files:
+  - /jellynas/.env
+remove_orphans: true

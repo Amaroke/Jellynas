@@ -43,7 +43,7 @@ jobs:
           fi
           cp .env.example .env
           docker compose config --quiet
-          docker compose -f deployer/compose.yaml config --quiet
+          docker compose -f doco-cd/compose.yaml config --quiet
 
   yaml:
     name: YAML
@@ -64,16 +64,6 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 -m unittest discover -s ratio -v
-
-  deploy:
-    name: Deploy
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - run: bash scripts/test_deploy.sh
 
   markdown:
     name: Markdown
