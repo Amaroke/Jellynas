@@ -6,10 +6,12 @@ import os
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 from ratio import (
     DAY,
     GB,
+    Prowlarr,
     QBittorrent,
     bdecode,
     is_rare,
@@ -659,6 +661,23 @@ class Torznab(unittest.TestCase):
         self.assertEqual([r["infohash"] for r in releases], ["abc"])
         self.assertEqual(releases[0]["leechers"], 10)
         self.assertAlmostEqual(releases[0]["age_hours"], 1.0)
+
+
+class TorrentFiles(unittest.TestCase):
+    def fetched_url(self, release):
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = b"torrent"
+        with mock.patch("urllib.request.urlopen", return_value=response) as urlopen:
+            Prowlarr("http://prowlarr:9696", "key", 2).torrent(release)
+        return urlopen.call_args.args[0].full_url
+
+    def test_a_nyaa_torrent_downloads_straight_from_nyaa(self):
+        release = {"page": "https://nyaa.si/view/1234567", "link": "http://prowlarr:9696/9/download?apikey=key"}
+        self.assertEqual(self.fetched_url(release), "https://nyaa.si/download/1234567.torrent")
+
+    def test_any_other_torrent_downloads_through_prowlarr(self):
+        release = {"page": "https://c411.org/torrents/42", "link": "http://prowlarr:9696/3/download?apikey=key"}
+        self.assertEqual(self.fetched_url(release), "http://prowlarr:9696/3/download?apikey=key")
 
 
 class FakeServer(http.server.BaseHTTPRequestHandler):

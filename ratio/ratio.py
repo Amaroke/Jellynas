@@ -42,7 +42,7 @@ class QBittorrent:
         boundary = uuid.uuid4().hex
         fields = {"category": category}
         if save_path:
-            fields.update({"savepath": save_path, "autoTMM": "false", "stopped": "true", "paused": "true"})
+            fields.update({"savepath": save_path, "autoTMM": "false", "stopped": "true"})
         body = b"".join(
             [
                 *(
@@ -491,7 +491,7 @@ def drop_twins(qbt, state, torrents):
         seeding = torrents.get(original)
         if seeding is None or seeding["progress"] < 1:
             continue
-        if seeding["state"].startswith(("stopped", "paused")):
+        if seeding["state"].startswith("stopped"):
             qbt.start([original])
         if category == ZEN and seeding["category"] != ZEN:
             qbt.set_category([original], ZEN)
@@ -767,35 +767,34 @@ def settings_from_env():
         "cross_seed_key": os.environ.get("CROSS_SEED_API_KEY", ""),
         "farm_size": number("RATIO_MAX_SIZE_GB") * GB,
         "zen_size": number("RATIO_ZEN_MAX_SIZE_GB", 50) * GB,
-        "zen_min_torrents": int(number("RATIO_ZEN_MIN_TORRENTS", 15)),
+        "zen_min_torrents": 15,
         "zen_hunt_surplus": number("RATIO_ZEN_HUNT_MIN_SURPLUS_GB", 20) * GB,
         "min_seeding": number("RATIO_MIN_SEEDING_DAYS") * DAY,
-        "stale_after": number("RATIO_STALE_DAYS", 7) * DAY,
-        "stale_upload": number("RATIO_STALE_MIN_UPLOAD", 0.2),
+        "stale_after": 7 * DAY,
+        "stale_upload": 0.2,
         "max_deficit": number("RATIO_GRAB_MAX_DEFICIT_GB", 5) * GB,
-        "per_day": int(number("RATIO_GRAB_PER_DAY", 3)),
-        "max_downloading": int(number("RATIO_GRAB_MAX_DOWNLOADING", 2)),
-        "twin_lookups": int(number("RATIO_TWIN_LOOKUPS", 10)),
-        "twin_max_age_hours": number("RATIO_TWIN_MAX_AGE_HOURS", 24),
-        "twin_min_leechers": number("RATIO_TWIN_MIN_LEECHERS", 1),
-        "twin_recheck": number("RATIO_TWIN_RECHECK_HOURS", 2) * 3600,
-        "twin_seed_after": number("RATIO_TWIN_SEED_AFTER_MINUTES", 60) * 60,
-        "library_categories": tuple(c.strip() for c in (os.environ.get("RATIO_LIBRARY_CATEGORIES") or "radarr,tv-sonarr").split(",")),
-        "adopt_after": number("RATIO_ADOPT_AFTER_HOURS", 6) * 3600,
-        "tracker_seeders_in_peers": int(number("RATIO_TRACKER_SEEDERS_IN_PEERS", 2)),
+        "per_day": 3,
+        "max_downloading": 2,
+        "twin_lookups": 10,
+        "twin_max_age_hours": 24,
+        "twin_min_leechers": 1,
+        "twin_recheck": 2 * 3600,
+        "twin_seed_after": 3600,
+        "library_categories": ("radarr", "tv-sonarr"),
+        "adopt_after": 6 * 3600,
+        "tracker_seeders_in_peers": 2,
         "rules": {
-            "min_size": number("RATIO_GRAB_MIN_SIZE_GB", 1) * GB,
-            "max_size": number("RATIO_GRAB_MAX_SIZE_GB", 5) * GB,
-            "max_age_hours": number("RATIO_GRAB_MAX_AGE_HOURS", 1),
-            "min_leechers": number("RATIO_GRAB_MIN_LEECHERS", 10),
-            "min_leechers_per_seeder": number("RATIO_GRAB_MIN_LEECHERS_PER_SEEDER", 5),
+            "min_size": GB,
+            "max_size": 5 * GB,
+            "max_age_hours": 1,
+            "min_leechers": 10,
+            "min_leechers_per_seeder": 5,
         },
     }
 
 
 def main():
     settings = settings_from_env()
-    interval = int(number("RATIO_MINUTES", 10)) * 60
     qbt = QBittorrent(
         "http://gluetun:8080",
         os.environ.get("QBITTORRENT_USER", ""),
@@ -819,7 +818,7 @@ def main():
             save_state(state_path, state)
         except OSError as error:
             print(f"Cannot save {state_path}: {error}")
-        time.sleep(interval)
+        time.sleep(600)
 
 
 if __name__ == "__main__":
