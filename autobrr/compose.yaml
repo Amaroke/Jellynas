@@ -10,7 +10,6 @@ services:
     user: ${PUID}:${PGID}
     environment:
       TZ: ${TZ}
-      AUTOBRR__HOST: 0.0.0.0
     volumes:
       - ${APPDATA_ROOT}/autobrr:/config
     healthcheck:
