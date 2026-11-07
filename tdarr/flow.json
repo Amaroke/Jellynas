@@ -1,7 +1,7 @@
 {
   "_id": "jellynasNormalise",
   "name": "Jellynas normalise to MKV H265 1080p",
-  "description": "Embeds the subtitle files next to the video, keeps French and original audio and the subtitles for the original audio, encodes to H265 within 1920x1080 unless already compliant, replaces the original as MKV, deletes the embedded subtitle files and tells Radarr or Sonarr. See ADR 0001 and ADR 0004.",
+  "description": "Embeds the subtitle files next to the video, keeps French and original audio and the subtitles for the original audio, encodes to H265 within 1920x1080 unless already compliant, replaces the original as MKV, deletes the embedded subtitle files and tells Radarr or Sonarr. See ADR 0004.",
   "tags": "",
   "flowPlugins": [
     {

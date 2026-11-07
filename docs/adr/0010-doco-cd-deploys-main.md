@@ -1,5 +1,7 @@
 # doco-cd deploys main
 
+Supersedes ADR 0006 (the NAS pulls main).
+
 The repo is the source of truth of the NAS: a change merged into `main` is the change the NAS runs, and nothing else changes it. The NAS first ran a deployer of its own, a script in a container, because GitOps tools resolve the bind mounts of the repo from their own copy, and Docker Desktop, the first Host, named the Windows clone differently from Windows. Since [ADR 0007](0007-the-nas-runs-on-the-docker-of-truenas-scale.md), the Host is TrueNAS and its Docker runs on Linux, so that reason is gone.
 
 ## Decision
@@ -8,9 +10,9 @@ The repo is the source of truth of the NAS: a change merged into `main` is the c
 - **Pull, not push**: the NAS asks GitHub for changes, doco-cd publishes no port, and nothing opens on the router.
 - **One copy per revision**: doco-cd exports each revision of the repo into its data volume and deploys from there, so the bind mounts of the repo name a path the Docker of the Host sees. Every file the repo mounts into a service is read-only, so nothing the services write is lost from one revision to the next.
 - **What a deploy recreates**: a service is recreated when its compose definition or image changes, or when a file of the repo it mounts changes, such as `ratio/ratio.py` or `caddy/Caddyfile`. A service with a `build:`, Caddy, is rebuilt at each deploy from the Docker build cache. `remove_orphans` removes a service commented out in `compose.yaml`.
-- **Secrets stay in `.env` on the Host**: git never holds them. `.env` sits in the clone of the Admin on the Host, mounted read-only into doco-cd, which reads it to interpolate `compose.yaml`. The Admin updates it by hand when `.env.example` gains a variable.
-- **The clone of the Admin**: the Host keeps a clone of `main`, which holds `.env` and starts doco-cd. It deploys nothing: the Admin runs the scripts of the repo and `docker compose logs`, `exec` and `restart` from it, never `docker compose up`.
-- **doco-cd outside the NAS project**: doco-cd does not deploy itself. The Admin merges its updates and recreates it from the clone.
+- **Secrets stay in `.env` on the Host**: git never holds them. `.env` sits in the Clone on the Host, mounted read-only into doco-cd, which reads it to interpolate `compose.yaml`. The Admin updates it by hand when `.env.example` gains a variable.
+- **The Clone**: the Host keeps a clone of `main`, which holds `.env` and starts doco-cd. It deploys nothing: the Admin runs the scripts of the repo and `docker compose logs`, `exec` and `restart` from it, never `docker compose up`.
+- **doco-cd outside the NAS project**: doco-cd does not deploy itself. The Admin merges its updates and recreates it from the Clone.
 - **Renovate merges by itself**: minor and patch updates merge once the CI passes and the release is 3 days old. Major updates, and those of Gluetun, qBittorrent and doco-cd, wait for the Admin.
 
 ## Considered Options
