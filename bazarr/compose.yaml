@@ -16,7 +16,5 @@ services:
       - ./tdarr_requeue.py:/scripts/tdarr_requeue.py:ro
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:6767/api/system/ping"]
-      interval: 30s
       timeout: 10s
-      retries: 3
       start_period: 30s

@@ -21,7 +21,5 @@ services:
       - 0.0.0.0:${CADDY_HTTPS_PORT:-443}:443
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:2019/config/"]
-      interval: 30s
       timeout: 10s
-      retries: 3
       start_period: 30s
