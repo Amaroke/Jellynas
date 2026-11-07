@@ -1,4 +1,4 @@
-FROM python:3.14.5-slim-trixie
+FROM python:3.15.2-slim-trixie
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ffmpeg libopus0 \
     && rm -rf /var/lib/apt/lists/*
