@@ -1,6 +1,6 @@
 # Recyclarr prefers French H265 1080p releases
 
-Radarr and Sonarr pick the release to download from the profiles that Recyclarr syncs. The profiles favour releases that already match the Library format of ADR 0001, so that Tdarr rarely re-encodes, and they refuse what Tdarr cannot fix: a missing French audio track.
+Radarr and Sonarr pick the release to download from the profiles that Recyclarr syncs. The profiles favour releases that already match the Library format of [ADR 0004](0004-the-library-is-mkv-h265-with-embedded-subtitles.md), so that Tdarr rarely re-encodes, and they refuse what Tdarr cannot fix: a missing French audio track.
 
 ## Decision
 
