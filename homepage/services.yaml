@@ -258,6 +258,11 @@
         description: Logs of every container
         href: https://dozzle.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         siteMonitor: http://dozzle:8080/healthcheck
+    - Indexarr:
+        icon: mdi-file-table-box-multiple-#00897b
+        description: Catalog of the Library files, read-only
+        href: https://indexarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        siteMonitor: http://indexarr:8787/health
 
 - Hosting:
     - TrueNAS:
