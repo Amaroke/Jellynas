@@ -806,7 +806,7 @@ def main():
         os.environ.get("PROWLARR_API_KEY", ""),
         settings["tracker_seeders_in_peers"],
     )
-    state_path = "/state/ratio-grab.json"
+    state_path = "/state/state.json"
     state = load_state(state_path)
     if not settings["indexers"]:
         print("RATIO_GRAB_INDEXER_IDS is empty, ratio grabs nothing and only cleans")

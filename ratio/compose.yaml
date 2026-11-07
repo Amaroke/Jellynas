@@ -25,4 +25,4 @@ services:
       RATIO_ZEN_HUNT_MIN_SURPLUS_GB: ${RATIO_ZEN_HUNT_MIN_SURPLUS_GB:-}
     volumes:
       - ./ratio.py:/app/ratio.py:ro
-      - ${APPDATA_ROOT}/ratio-grab:/state
+      - ${APPDATA_ROOT}/ratio:/state
