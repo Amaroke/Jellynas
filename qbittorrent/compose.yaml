@@ -14,7 +14,6 @@ services:
       PUID: ${PUID}
       PGID: ${PGID}
       TZ: ${TZ}
-      WEBUI_PORT: 8080
     volumes:
       - ${APPDATA_ROOT}/qbittorrent:/config
       - ${DATA_ROOT}/torrents:/data/torrents
