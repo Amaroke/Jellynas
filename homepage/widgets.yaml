@@ -1,0 +1,7 @@
+- resources:
+    label: Host
+    cpu: true
+    memory: true
+- resources:
+    label: Data
+    disk: /data-disk

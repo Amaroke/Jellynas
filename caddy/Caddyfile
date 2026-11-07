@@ -73,6 +73,7 @@
 	import lan beszel beszel:8090
 	import lan uptime-kuma uptime-kuma:3001
 	import lan dozzle dozzle:8080
+	import lan homepage homepage:3000
 	handle {
 		abort
 	}

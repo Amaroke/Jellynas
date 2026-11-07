@@ -20,3 +20,4 @@ include:
   - beszel/compose.yaml
   - uptime-kuma/compose.yaml
   - dozzle/compose.yaml
+  - homepage/compose.yaml

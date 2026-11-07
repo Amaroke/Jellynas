@@ -1,0 +1,26 @@
+title: Jellynas
+theme: dark
+color: slate
+headerStyle: clean
+statusStyle: dot
+hideVersion: true
+disableUpdateCheck: true
+layout:
+  Watch:
+    style: row
+    columns: 3
+  Downloads:
+    style: row
+    columns: 3
+  Automation:
+    style: row
+    columns: 4
+  Ratio:
+    style: row
+    columns: 4
+  Observation:
+    style: row
+    columns: 4
+  Hosting:
+    style: row
+    columns: 3
