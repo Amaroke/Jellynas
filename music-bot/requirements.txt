@@ -1,2 +1,2 @@
 discord.py[voice]==2.7.1
-davey==0.2.0
+davey==0.1.7
