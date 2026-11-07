@@ -1,7 +1,5 @@
 .env
 .env.*
 !.env.example
-appdata/
-data/
-*.log
 __pycache__/
+.ruff_cache/
