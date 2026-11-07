@@ -588,7 +588,7 @@ class Report(unittest.TestCase):
 class Setup(unittest.TestCase):
     def test_categories_and_the_cross_seed_hook_are_set(self):
         qbt = FakeQBittorrent()
-        qbt.categories = lambda: {}
+        qbt.categories = dict
         run(qbt, cross_seed_key="secret")
         self.assertEqual(qbt.made, {"ratio": "/data/torrents/ratio", "zen": "/data/torrents/zen"})
         self.assertTrue(qbt.prefs["autorun_enabled"])
@@ -668,7 +668,6 @@ class TorrentFiles(unittest.TestCase):
 
 
 class FakeServer(http.server.BaseHTTPRequestHandler):
-    calls = []
     expire_once = False
 
     def log_message(self, *args):
