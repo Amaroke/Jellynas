@@ -1134,6 +1134,12 @@ In `.env`, set the `RATIO_*` values, then recreate it with `docker restart doco-
 docker compose logs ratio
 ```
 
+Once a day, the logs also hold one line per Source, how each C411 torrent came to the NAS: paid grab, Twin, freeleech, cross-seed of the Library, Library download, Zen hunt, or unknown for the torrents removed before ratio kept Sources. Each line gives the torrents, the GB downloaded and uploaded and their ratio, the same over the last 7 days, and the days seeded in the Zen reserve. A torrent keeps its Source when it moves to the Zen reserve or is removed. The state file holds the same figures under `report`, for a dashboard to read:
+
+```sh
+docker compose logs ratio | grep Source
+```
+
 To start the deficit over, for example once the ratio on the tracker has a buffer, stop ratio, delete its state file and start it again. ratio also reads `RATIO_TWIN_MAX_AGE_HOURS`, `RATIO_TWIN_SEED_AFTER_MINUTES`, `RATIO_TWIN_MIN_LEECHERS`, `RATIO_TWIN_RECHECK_HOURS`, `RATIO_LIBRARY_CATEGORIES`, `RATIO_ADOPT_AFTER_HOURS`, `RATIO_TRACKER_SEEDERS_IN_PEERS`, `RATIO_MINUTES`, `RATIO_STALE_DAYS`, `RATIO_STALE_MIN_UPLOAD`, `RATIO_ZEN_MIN_TORRENTS`, `RATIO_TWIN_LOOKUPS`, `RATIO_GRAB_MAX_AGE_HOURS`, `RATIO_GRAB_MIN_SIZE_GB`, `RATIO_GRAB_MAX_SIZE_GB`, `RATIO_GRAB_MIN_LEECHERS`, `RATIO_GRAB_MIN_LEECHERS_PER_SEEDER`, `RATIO_GRAB_PER_DAY` and `RATIO_GRAB_MAX_DOWNLOADING` to change the limits above, once added to its `environment` in `ratio/compose.yaml`.
 
 ## Verify the NAS

@@ -1,4 +1,6 @@
+import contextlib
 import http.server
+import io
 import json
 import os
 import tempfile
@@ -172,7 +174,10 @@ def settings(**changes):
 
 
 def empty_state(**changes):
-    return {"transfers": {}, "grabbed": {}, "twins": {}, "uploads": {}, "free": {}, "checked": {}, "paused": False, **changes}
+    return {
+        "transfers": {}, "grabbed": {}, "twins": {}, "uploads": {}, "free": {}, "checked": {}, "paused": False,
+        "sources": {}, "history": {}, "zen": {}, "report": {}, **changes,
+    }
 
 
 def run(qbt, prowlarr=None, state=None, now=NOW, **changes):
@@ -436,6 +441,159 @@ class Ledger(unittest.TestCase):
         ])
         state = run(qbt, state=empty_state(transfers={"gone": [2 * GB, 0]}))
         self.assertEqual(state["transfers"], {"c411": [6 * GB, 1 * GB], "gone": [2 * GB, 0]})
+
+
+def report_of(state, source):
+    return state["report"]["sources"].get(source)
+
+
+class Sources(unittest.TestCase):
+    def test_a_paid_grab_stays_a_paid_grab_in_the_zen_reserve_and_once_removed(self):
+        state = run(FakeQBittorrent(), FakeProwlarr([release("hungry")]))
+        self.assertEqual(state["sources"], {"hungry": "paid"})
+        run(FakeQBittorrent([torrent("hungry", category="zen", downloaded_gb=3, uploaded_gb=1)]), state=state, now=NOW + DAY)
+        run(FakeQBittorrent(), state=state, now=NOW + 2 * DAY)
+        self.assertEqual(state["sources"], {"hungry": "paid"})
+        self.assertEqual(report_of(state, "paid")["torrents"], 1)
+        self.assertEqual(report_of(state, "paid")["downloaded_gb"], 3)
+        self.assertEqual(report_of(state, "paid")["uploaded_gb"], 1)
+
+    def test_a_freeleech_grab_is_reported_as_freeleech(self):
+        state = run(FakeQBittorrent(), FakeProwlarr([release("free", free=True)]))
+        run(FakeQBittorrent([torrent("free", downloaded_gb=3, uploaded_gb=1)]), state=state, now=NOW + DAY)
+        self.assertEqual(state["sources"], {"free": "freeleech"})
+        self.assertEqual(report_of(state, "freeleech")["downloaded_gb"], 0)
+
+    def test_a_zen_hunt_is_reported_as_a_zen_hunt(self):
+        qbt = FakeQBittorrent([torrent("old", category="radarr", downloaded_gb=10, uploaded_gb=35)])
+        state = run(qbt, FakeProwlarr([release("rare", leechers=0, seeders=3)]), zen_min_torrents=15)
+        self.assertEqual(state["sources"]["rare"], "zen-hunt")
+        self.assertEqual(state["sources"]["old"], "library")
+
+    def test_the_tracker_copy_of_a_twin_is_a_twin_whoever_adds_it(self):
+        state = run(FakeQBittorrent(), FakeProwlarr([episode()], twins=[twin()]))
+        self.assertEqual(state["sources"], {"episode": "twin"})
+        qbt = FakeQBittorrent([
+            torrent("public", tracker="http://nyaa.tracker.wf/announce"),
+            torrent("episode", category="cross-seed-link", state="stoppedUP", tracker=""),
+        ])
+        run(qbt, state=state, now=NOW + 600)
+        self.assertEqual(state["twins"], {})
+        run(FakeQBittorrent([torrent("episode", category="cross-seed-link")]), state=state, now=NOW + 1200)
+        self.assertEqual(state["sources"], {"episode": "twin"})
+
+    def test_a_twin_of_the_previous_version_is_a_twin(self):
+        qbt = FakeQBittorrent([
+            torrent("public", tracker="http://nyaa.tracker.wf/announce"),
+            torrent("hungry", category="cross-seed-link"),
+        ])
+        state = run(qbt, state=empty_state(twins={"public": ["hungry", "ratio"]}))
+        self.assertEqual(state["sources"], {"hungry": "twin"})
+
+    def test_library_torrents_and_their_cross_seeds_are_told_apart(self):
+        qbt = FakeQBittorrent([
+            torrent("movie", category="radarr", seeders=100),
+            torrent("show", category="tv-sonarr", seeders=100),
+            torrent("linked", category="cross-seed-link"),
+            torrent("public", category="radarr", tracker="http://nyaa.tracker.wf/announce"),
+        ])
+        state = run(qbt)
+        self.assertEqual(state["sources"], {"movie": "library", "show": "library", "linked": "cross-seed"})
+
+    def test_a_state_of_the_previous_version_gets_sources_from_what_ratio_sees(self):
+        qbt = FakeQBittorrent([
+            torrent("farmed", downloaded_gb=4),
+            torrent("free", downloaded_gb=4),
+            torrent("kept", category="zen", seeders=3),
+            torrent("movie", category="radarr", seeders=100),
+        ])
+        transfers = {h: [GB, 0] for h in ("farmed", "free", "kept", "movie", "gone")}
+        state = run(qbt, state=empty_state(transfers=transfers, free={"free": NOW - 100}))
+        self.assertEqual(state["sources"], {
+            "farmed": "paid", "free": "freeleech", "kept": "zen-hunt", "movie": "library", "gone": "unknown",
+        })
+        self.assertEqual(report_of(state, "unknown")["downloaded_gb"], 1)
+
+    def test_a_pending_source_that_never_shows_up_is_forgotten(self):
+        state = run(FakeQBittorrent(), state=empty_state(sources={"lost": "paid"}))
+        self.assertEqual(state["sources"], {})
+
+
+class Report(unittest.TestCase):
+    def run_quietly(self, qbt, state, now):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            run(qbt, state=state, now=now)
+        return [line for line in out.getvalue().splitlines() if line.startswith("Source ")]
+
+    def test_the_report_is_logged_and_saved_once_a_day(self):
+        qbt = FakeQBittorrent([torrent("movie", category="radarr", seeders=100, downloaded_gb=4, uploaded_gb=2)])
+        state = empty_state()
+        lines = self.run_quietly(qbt, state, NOW)
+        self.assertEqual(len(lines), 1)
+        self.assertIn("Library download", lines[0])
+        self.assertEqual(state["report"]["at"], NOW)
+        self.assertEqual(report_of(state, "library")["ratio"], 0.5)
+        self.assertEqual(self.run_quietly(qbt, state, NOW + 600), [])
+        self.assertEqual(state["report"]["at"], NOW)
+        self.assertEqual(len(self.run_quietly(qbt, state, NOW + DAY)), 1)
+
+    def test_the_week_counts_only_the_last_seven_days(self):
+        state = empty_state(
+            transfers={"movie": [5 * GB, GB], "gone": [GB, GB]},
+            sources={"movie": "library", "gone": "library"},
+            history={
+                "movie": [[NOW - 9 * DAY, GB, 0], [NOW - 6.5 * DAY, 2 * GB, GB // 2]],
+                "gone": [[NOW - 8 * DAY, GB, GB]],
+            },
+        )
+        qbt = FakeQBittorrent([torrent("movie", category="radarr", seeders=100, downloaded_gb=6, uploaded_gb=3)])
+        self.run_quietly(qbt, state, NOW)
+        figures = report_of(state, "library")
+        self.assertEqual(figures["downloaded_gb"], 7)
+        self.assertEqual(figures["week_downloaded_gb"], 4)
+        self.assertEqual(figures["week_uploaded_gb"], 2.5)
+        self.assertEqual(state["history"]["movie"][0], [NOW - 6.5 * DAY, 2 * GB, GB // 2])
+        self.assertNotIn("gone", state["history"])
+
+    def test_a_new_torrent_counts_whole_in_the_week(self):
+        state = empty_state()
+        qbt = FakeQBittorrent([torrent("movie", category="radarr", seeders=100, seeding_days=2, downloaded_gb=6)])
+        self.run_quietly(qbt, state, NOW)
+        self.assertEqual(report_of(state, "library")["week_downloaded_gb"], 6)
+
+    def test_a_torrent_removed_this_week_still_counts(self):
+        state = empty_state()
+        qbt = FakeQBittorrent([torrent("movie", category="radarr", seeders=100, seeding_days=2, downloaded_gb=6)])
+        self.run_quietly(qbt, state, NOW)
+        self.run_quietly(FakeQBittorrent(), state, NOW + DAY)
+        self.assertEqual(report_of(state, "library")["week_downloaded_gb"], 6)
+        self.run_quietly(FakeQBittorrent(), state, NOW + 8 * DAY)
+        self.assertEqual(report_of(state, "library")["week_downloaded_gb"], 0)
+
+    def test_days_in_the_zen_reserve_count_from_the_move(self):
+        state = empty_state()
+        self.run_quietly(FakeQBittorrent([torrent("kept", category="zen", seeders=3, seeding_days=10)]), state, NOW)
+        self.run_quietly(FakeQBittorrent([torrent("kept", category="zen", seeders=3, seeding_days=13)]), state, NOW + 3 * DAY)
+        self.assertEqual(report_of(state, "zen-hunt")["zen_days"], 3)
+        self.run_quietly(FakeQBittorrent(), state, NOW + 4 * DAY)
+        self.assertEqual(report_of(state, "zen-hunt")["zen_days"], 3)
+
+    def test_a_zen_torrent_of_the_previous_version_counts_its_whole_seeding_time(self):
+        state = empty_state(transfers={"kept": [GB, 0]})
+        self.run_quietly(FakeQBittorrent([torrent("kept", category="zen", seeders=3, seeding_days=10)]), state, NOW)
+        self.assertEqual(report_of(state, "zen-hunt")["zen_days"], 10)
+
+    def test_a_torrent_added_again_starts_over_without_losing_what_it_did(self):
+        state = empty_state()
+        self.run_quietly(FakeQBittorrent([torrent("kept", category="zen", seeders=3, seeding_days=5, downloaded_gb=6)]), state, NOW)
+        self.run_quietly(FakeQBittorrent([torrent("kept", category="zen", seeders=3, seeding_days=6, downloaded_gb=6)]), state, NOW + DAY)
+        again = torrent("kept", category="zen", seeders=3, seeding_days=1, downloaded_gb=2)
+        again["added_on"] = NOW + DAY
+        self.run_quietly(FakeQBittorrent([again]), state, NOW + 2 * DAY)
+        figures = report_of(state, "zen-hunt")
+        self.assertEqual(figures["zen_days"], 2)
+        self.assertEqual(figures["week_downloaded_gb"], 2)
 
 
 class Setup(unittest.TestCase):

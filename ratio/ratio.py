@@ -13,8 +13,18 @@ import xml.etree.ElementTree as ET
 
 GB = 1024**3
 DAY = 86400
+WEEK = 7 * DAY
 FARM = ("ratio", "cross-seed-link")
 ZEN = "zen"
+SOURCES = {
+    "paid": "paid grab",
+    "twin": "Twin",
+    "freeleech": "freeleech",
+    "cross-seed": "cross-seed of the Library",
+    "library": "Library download",
+    "zen-hunt": "Zen hunt",
+    "unknown": "unknown",
+}
 TORZNAB = "{http://torznab.com/schemas/2015/feed}attr"
 
 
@@ -296,6 +306,10 @@ def load_state(path):
         "free": state.get("free", {}),
         "checked": state.get("checked", {}),
         "paused": state.get("paused", False),
+        "sources": state.get("sources", {}),
+        "history": state.get("history", {}),
+        "zen": state.get("zen", {}),
+        "report": state.get("report", {}),
     }
 
 
@@ -323,9 +337,78 @@ def prepare(qbt, settings):
         print("qBittorrent now tells cross-seed about every finished torrent")
 
 
+def twin_copies(state):
+    return {entry[0] for entry in state["twins"].values()}
+
+
+def source_of(state, settings, copies, t):
+    if t is None:
+        return "unknown"
+    if t["hash"] in copies:
+        return "twin"
+    if t["hash"] in state["free"]:
+        return "freeleech"
+    if t["category"] == "ratio":
+        return "paid"
+    if t["category"] == "cross-seed-link":
+        return "cross-seed"
+    if t["category"] in settings["library_categories"]:
+        return "library"
+    if t["category"] == ZEN:
+        return "zen-hunt"
+    return "unknown"
+
+
+def record_sources(state, torrents, settings):
+    copies = twin_copies(state)
+    for infohash in state["transfers"]:
+        if infohash not in state["sources"]:
+            state["sources"][infohash] = source_of(state, settings, copies, torrents.get(infohash))
+    for infohash in list(state["sources"]):
+        if infohash not in state["transfers"] and infohash not in torrents and infohash not in copies:
+            del state["sources"][infohash]
+
+
+def record_history(state, torrents, fresh, now):
+    for infohash, (downloaded, uploaded) in state["transfers"].items():
+        t = torrents.get(infohash)
+        samples = state["history"].get(infohash, [])
+        restarted = t is not None and samples and (downloaded < samples[-1][1] or uploaded < samples[-1][2])
+        if infohash in fresh or restarted:
+            state["history"][infohash] = [[t["added_on"], 0, 0]]
+        samples = state["history"].setdefault(infohash, [])
+        if t is not None and (not samples or now - samples[-1][0] >= DAY):
+            samples.append([now, downloaded, uploaded])
+        if t is None and samples and samples[-1][1:] != [downloaded, uploaded]:
+            samples.append([now, downloaded, uploaded])
+        samples[:] = [s for s in samples if s[0] >= now - WEEK]
+        if not samples:
+            del state["history"][infohash]
+
+
+def record_zen(state, torrents, upgrading):
+    for infohash in state["transfers"]:
+        t = torrents.get(infohash)
+        if t is None:
+            continue
+        seeding = t["seeding_time"]
+        entry = state["zen"].get(infohash)
+        if entry is None:
+            if t["category"] == ZEN:
+                state["zen"][infohash] = [seeding, seeding if upgrading else 0]
+            continue
+        if t["category"] == ZEN:
+            entry[1] += seeding - entry[0] if seeding >= entry[0] else seeding
+        entry[0] = seeding
+
+
 def record(state, torrents, settings, now):
+    upgrading = bool(state["transfers"]) and not state["sources"]
+    fresh = set()
     for t in torrents.values():
         if t["hash"] in state["transfers"] or settings["tracker"] in t["tracker"].lower():
+            if t["hash"] not in state["transfers"]:
+                fresh.add(t["hash"])
             downloaded = 0 if t["hash"] in state["free"] else t["downloaded"]
             state["transfers"][t["hash"]] = [downloaded, t["uploaded"]]
         if t["category"] in FARM:
@@ -344,6 +427,60 @@ def record(state, torrents, settings, now):
         del state["free"][infohash]
     for infohash in [h for h, at in state["checked"].items() if at < now - 2 * DAY]:
         del state["checked"][infohash]
+    record_sources(state, torrents, settings)
+    record_history(state, torrents, fresh, now)
+    record_zen(state, torrents, upgrading)
+
+
+def gigabytes(size):
+    return round(size / GB, 2)
+
+
+def share(uploaded, downloaded):
+    return round(uploaded / downloaded, 2) if downloaded else None
+
+
+def figures_by_source(state):
+    totals = {}
+    for infohash, (downloaded, uploaded) in state["transfers"].items():
+        samples = state["history"].get(infohash)
+        _, downloaded_before, uploaded_before = samples[0] if samples else [0, downloaded, uploaded]
+        zen = state["zen"].get(infohash, [0, 0])[1]
+        line = [1, downloaded, uploaded, downloaded - downloaded_before, uploaded - uploaded_before, zen]
+        source = state["sources"].get(infohash)
+        source = source if source in SOURCES else "unknown"
+        totals[source] = [a + b for a, b in zip(totals.get(source, [0] * len(line)), line)]
+    figures = {}
+    for source in [s for s in SOURCES if s in totals]:
+        count, downloaded, uploaded, week_downloaded, week_uploaded, zen = totals[source]
+        figures[source] = {
+            "torrents": count,
+            "downloaded_gb": gigabytes(downloaded),
+            "uploaded_gb": gigabytes(uploaded),
+            "ratio": share(uploaded, downloaded),
+            "week_downloaded_gb": gigabytes(week_downloaded),
+            "week_uploaded_gb": gigabytes(week_uploaded),
+            "week_ratio": share(week_uploaded, week_downloaded),
+            "zen_days": round(zen / DAY, 1),
+        }
+    return figures
+
+
+def shown(ratio):
+    return "-" if ratio is None else f"{ratio:.2f}"
+
+
+def report(state, now):
+    if now - state["report"].get("at", 0) < DAY:
+        return
+    figures = figures_by_source(state)
+    state["report"] = {"at": now, "sources": figures}
+    for source, f in figures.items():
+        print(
+            f"Source {SOURCES[source]}: {f['torrents']} torrents, {f['downloaded_gb']:.1f} GB down, "
+            f"{f['uploaded_gb']:.1f} GB up, ratio {shown(f['ratio'])}, last 7 days {f['week_downloaded_gb']:.1f} GB down, "
+            f"{f['week_uploaded_gb']:.1f} GB up, ratio {shown(f['week_ratio'])}, {f['zen_days']:.1f} days in the Zen reserve"
+        )
 
 
 def drop_twins(qbt, state, torrents):
@@ -522,13 +659,14 @@ def wishes(releases, known, settings, torrents):
     return hungry + rare
 
 
-def take(qbt, budget, known, release, torrent, category, source):
+def take(qbt, state, budget, known, release, torrent, category, source, via):
     qbt.add(torrent, category)
     known.add(release["infohash"])
+    state["sources"][release["infohash"]] = source
     budget[category] -= release["size"]
     budget["slots"] -= 1
     print(
-        f"Grabbed {release['title']} for the {'Zen reserve' if category == ZEN else 'farm'} from {source}, "
+        f"Grabbed {release['title']} for the {'Zen reserve' if category == ZEN else 'farm'} from {via}, "
         f"{release['seeders']} seeders, {release['leechers']} leechers, {release['size'] / GB:.1f} GB"
     )
 
@@ -555,7 +693,7 @@ def grab_twins(qbt, prowlarr, settings, state, releases, known, budget, now):
         try:
             twin = find_twin(prowlarr, settings, release, now, searches)
             if twin:
-                take(qbt, budget, known, release, twin["torrent"], "ratio", f"its public twin {twin['title']}")
+                take(qbt, state, budget, known, release, twin["torrent"], "ratio", "twin", f"its public twin {twin['title']}")
                 state["twins"][twin["infohash"]] = [release["infohash"], "ratio", now, release["link"]]
         except Exception as error:
             print(f"Cannot look for a twin of {release['title']}: {error}")
@@ -568,13 +706,13 @@ def grab_paid(qbt, prowlarr, settings, state, torrents, releases, known, budget,
         if release["infohash"] in known or release["size"] > budget[category]:
             continue
         if release["free"]:
-            source, ledger = "the tracker, freeleech", state["free"]
+            source, via, ledger = "freeleech", "the tracker, freeleech", state["free"]
         elif may_pay(state, settings, category):
-            source, ledger = "the tracker", state["grabbed"]
+            source, via, ledger = "zen-hunt" if category == ZEN else "paid", "the tracker", state["grabbed"]
         else:
             continue
         try:
-            take(qbt, budget, known, release, prowlarr.torrent(release), category, source)
+            take(qbt, state, budget, known, release, prowlarr.torrent(release), category, source, via)
         except Exception as error:
             print(f"Cannot grab {release['title']}: {error}")
             continue
@@ -590,7 +728,7 @@ def grab(qbt, prowlarr, settings, state, torrents, now):
     }
     if budget["slots"] <= 0 or not settings["indexers"]:
         return
-    known = set(torrents) | {entry[0] for entry in state["twins"].values()}
+    known = set(torrents) | twin_copies(state)
     releases = fetch_newest(prowlarr, settings, now)
     grab_twins(qbt, prowlarr, settings, state, releases, known, budget, now)
     grab_paid(qbt, prowlarr, settings, state, torrents, releases, known, budget, now)
@@ -600,6 +738,7 @@ def run_once(qbt, prowlarr, settings, state, now):
     prepare(qbt, settings)
     torrents = {t["hash"].lower(): {**t, "hash": t["hash"].lower()} for t in qbt.torrents()}
     record(state, torrents, settings, now)
+    report(state, now)
     drop_twins(qbt, state, torrents)
     seed_twins(qbt, prowlarr, settings, state, torrents, now)
     clean_farm(qbt, settings, state, torrents, now)
