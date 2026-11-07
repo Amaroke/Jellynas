@@ -1032,7 +1032,7 @@ The music bot plays the music of the Library in a voice channel of the Discord s
 
 1. On [the Discord developer portal](https://discord.com/developers/applications), click "New Application" and name it.
 2. In Bot, click "Reset Token" and copy the token into `DISCORD_TOKEN`.
-3. In OAuth2 > URL Generator, tick the scopes `bot` and `applications.commands`, then the permissions View Channels, Send Messages, Embed Links, Connect and Speak. Open the generated URL and add the bot to your server.
+3. In OAuth2 > URL Generator, tick the scopes `bot` and `applications.commands`, then the permissions View Channels, Send Messages, Embed Links, Change Nickname, Connect and Speak. Open the generated URL and add the bot to your server.
 4. In Discord, User Settings > Advanced, turn on Developer Mode. Right click the server, click "Copy Server ID" and paste it into `DISCORD_GUILD_ID`.
 5. In Server Settings > Roles, create the `MusicDJ` role and give it to each DJ.
 
