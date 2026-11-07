@@ -58,7 +58,8 @@ class FakeHub:
                     return self.reply(200, {"success": True})
                 if self.path == "/api/collections/user_settings/records":
                     body = self.body()
-                    hub.settings = {"id": "settings-1", **body}
+                    settings = {"chartTime": "1h", "emails": ["admin@example.com"]}
+                    hub.settings = {"id": "settings-1", "user": body["user"], "settings": settings}
                     return self.reply(200, hub.settings)
                 return self.reply(404, {})
 

@@ -945,15 +945,15 @@ Beszel shows the processor, the memory, the disks, the network and the temperatu
 
 ### Login and key
 
-1. In `.env`, set `BESZEL_EMAIL` and `BESZEL_PASSWORD`. Beszel creates this login at its first start only.
-2. Beszel creates its key at its first start. Print its public key:
+1. In `.env`, set `BESZEL_EMAIL` and `BESZEL_PASSWORD`. Beszel creates this login at its first start only. If it already started without them, it restarts in a loop with `users: cannot be blank` in its logs: stop it, delete `data.db` and `auxiliary.db` from its appdata folder, and start it again.
+2. Beszel creates its key at its first start. Print its public key. The pipe gets past the permissions of the dataset, which `ssh-keygen` finds too open on the file itself:
 
    ```bash
    . <(grep '^APPDATA_ROOT=' .env)
-   ssh-keygen -y -f "$APPDATA_ROOT"/beszel/id_ed25519
+   cat "$APPDATA_ROOT"/beszel/id_ed25519 | ssh-keygen -y -f /dev/stdin
    ```
 
-3. In `.env`, set `BESZEL_AGENT_KEY` to the line it prints, then restart doco-cd to apply `.env`.
+3. In `.env`, set `BESZEL_AGENT_KEY` to the line it prints, between double quotes since it holds a space, then restart doco-cd to apply `.env`.
 4. Open `https://beszel.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. The system `NAS`, set in `beszel/config.yml`, turns up within a minute, with a `Data` disk for the data root.
 
 ### Alerts
@@ -967,7 +967,7 @@ set +a
 python3 beszel/alerts.py "http://$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' beszel):8090"
 ```
 
-An alert fires once a value stays over its threshold for 10 minutes. Run the same command after changing one of these values. The disk alert watches the data disk and the disk of Docker, and fires for the fuller of both.
+An alert fires once a value stays over its threshold for 10 minutes. Run the same command after changing one of these values. The disk alert watches the data disk and the disk of Docker, and fires for the fuller of both. A virtual machine shows no temperature sensor to the agent, so the temperature alert only works with TrueNAS on its own machine.
 
 ## Uptime Kuma
 
