@@ -3,9 +3,9 @@ import unittest
 
 from player import Player, Track
 from rules import (
+    ACTIVITY_SIZE,
     ALONE_SECONDS,
     IDLE_SECONDS,
-    ACTIVITY_SIZE,
     activity,
     control_refusal,
     play_refusal,
