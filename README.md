@@ -1055,7 +1055,7 @@ Requires [Bazarr](#bazarr), [Private tracker ratio](#private-tracker-ratio), [Be
 
 Homepage is the start page of the Admin: one tile per service, grouped as in [Architecture](#architecture), with a link to its lan name and its live figures, such as the Requests waiting in Seerr, the queues of Radarr and Sonarr, the torrents of qBittorrent, the public IP and the country of the VPN, and the free space of the data disk. Homarr or Dashy can replace it.
 
-Its config is `homepage/settings.yaml`, `homepage/services.yaml` and `homepage/widgets.yaml`. They hold no key and no personal value: Homepage reads each one from `.env`, through the `HOMEPAGE_VAR_` variables of `homepage/compose.yaml`. Homepage calls the APIs itself, so no key ever reaches the browser. It sees no file of the data root, only the empty folder `<DATA_ROOT>/.homepage`, which gives it the free space of the data disk. `./scripts/verify.sh` checks that it mounts neither the media tree nor the torrents tree.
+Its config is `homepage/settings.yaml`, `homepage/services.yaml` and `homepage/widgets.yaml`. They hold no key and no personal value: Homepage reads each one from `.env`, through the `HOMEPAGE_VAR_` variables of `homepage/compose.yaml`. Homepage pastes each value into the YAML before reading it, so a value it reads must hold no single quote, or the whole page stays empty. This is why it reads qBittorrent with an API key rather than its password. Homepage calls the APIs itself, so no key ever reaches the browser. It sees no file of the data root, only the empty folder `<DATA_ROOT>/.homepage`, which gives it the free space of the data disk. `./scripts/verify.sh` checks that it mounts neither the media tree nor the torrents tree.
 
 ### Login
 
@@ -1073,7 +1073,7 @@ Most keys are already in `.env` from the sections of their service. Add the othe
 | --- | --- | --- |
 | Jellyfin | `JELLYFIN_API_KEY` | Dashboard > Advanced > API Keys, click "+" and name it `Homepage` |
 | Seerr | `SEERR_API_KEY` | Settings > General, "API Key" |
-| qBittorrent | `QBITTORRENT_USER`, `QBITTORRENT_PASSWORD` | Set in [Private tracker ratio](#private-tracker-ratio) |
+| qBittorrent | `QBITTORRENT_API_KEY` | Tools > Options > WebUI > Authentication, generate the API key |
 | Gluetun | `GLUETUN_API_KEY` | Generated, as below |
 | Prowlarr | `PROWLARR_API_KEY` | Set in [Prowlarr](#prowlarr) |
 | Radarr | `RADARR_API_KEY` | Set in [Radarr](#radarr) |

@@ -232,6 +232,21 @@ check_docker_socket_read_only() {
   fi
 }
 
+check_homepage_values() {
+  local name unsafe=""
+  enabled homepage || return
+  while read -r name; do
+    case "$(env_value "$name")" in
+      *"'"*) unsafe="$unsafe $name" ;;
+    esac
+  done < <(sed -n 's/^      HOMEPAGE_VAR_[A-Z_]*: [$][{]\([A-Z_]*\).*/\1/p' homepage/compose.yaml)
+  if [ -n "$unsafe" ]; then
+    fail homepage "a single quote in$unsafe breaks its config, the page stays empty"
+  else
+    pass homepage "no value it reads from .env holds a single quote"
+  fi
+}
+
 check_login_required() {
   local service="$1" url="$2" host result
   enabled "$service" || return
@@ -425,6 +440,7 @@ check_no_media_mount uptime-kuma
 check_no_media_mount dozzle
 check_no_media_tree homepage
 check_no_torrents_mount homepage
+check_homepage_values
 check_published_ports
 check_no_new_privileges
 check_docker_socket_read_only
