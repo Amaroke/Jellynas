@@ -618,9 +618,9 @@ class Evictions(unittest.TestCase):
 
 
 class State(unittest.TestCase):
-    def test_an_old_ratio_grab_file_still_loads(self):
+    def test_a_file_without_the_newer_keys_still_loads(self):
         with tempfile.TemporaryDirectory() as folder:
-            path = os.path.join(folder, "ratio-grab.json")
+            path = os.path.join(folder, "state.json")
             save_state(path, {"transfers": {"a": [6 * GB, GB]}, "grabbed": {"a": 100}})
             self.assertEqual(load_state(path), empty_state(transfers={"a": [6 * GB, GB]}, grabbed={"a": 100}))
 
