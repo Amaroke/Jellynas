@@ -1,0 +1,80 @@
+import re
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+HOMEPAGE = ROOT / "homepage"
+CONFIG_FILES = [HOMEPAGE / name for name in ("settings.yaml", "services.yaml", "widgets.yaml", "bookmarks.yaml")]
+WITHOUT_TILE = {"homepage", "beszelagent"}
+SECRET_FIELDS = {"key", "password", "username", "apikey", "token"}
+PLACEHOLDER = re.compile(r"\{\{(HOMEPAGE_[A-Z_]+)\}\}")
+
+
+def normalized(name):
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def included_compose_files():
+    text = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+    return [ROOT / path for path in re.findall(r"^  - ([^ #]*compose\.yaml)$", text, re.MULTILINE)]
+
+
+def compose_services(path):
+    services, section = [], None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        top = re.match(r"^([a-z_]+):", line)
+        if top:
+            section = top.group(1)
+            continue
+        service = re.match(r"^  ([a-z0-9_-]+):$", line)
+        if section == "services" and service:
+            services.append(service.group(1))
+    return services
+
+
+def tiles():
+    text = (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")
+    return re.findall(r"^    - ([^:]+):$", text, re.MULTILINE)
+
+
+def homepage_environment():
+    text = (HOMEPAGE / "compose.yaml").read_text(encoding="utf-8")
+    return set(re.findall(r"^      (HOMEPAGE_VAR_[A-Z_]+):", text, re.MULTILINE))
+
+
+class HomepageConfigTest(unittest.TestCase):
+    def test_homepage_is_included(self):
+        self.assertIn(HOMEPAGE / "compose.yaml", included_compose_files())
+
+    def test_every_service_has_a_tile(self):
+        services = {normalized(service) for path in included_compose_files() for service in compose_services(path)}
+        missing = services - WITHOUT_TILE - {normalized(tile) for tile in tiles()}
+        self.assertEqual(set(), missing)
+
+    def test_secret_fields_come_from_env(self):
+        for path in CONFIG_FILES:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                field = re.match(r"^\s*([A-Za-z]+):\s*(.*)$", line)
+                if field and field.group(1) in SECRET_FIELDS:
+                    self.assertRegex(field.group(2), r"^'\{\{HOMEPAGE_VAR_[A-Z_]+\}\}'$", f"{path.name}: {line.strip()}")
+
+    def test_no_personal_value_in_config(self):
+        for path in CONFIG_FILES:
+            text = path.read_text(encoding="utf-8")
+            self.assertNotRegex(text, r"\b\d{1,3}(\.\d{1,3}){3}\b", path.name)
+            for host in re.findall(r"https?://([^/\s]+)", text):
+                self.assertRegex(host, r"^([a-z0-9-]+\.)*\{\{HOMEPAGE_VAR_DOMAIN\}\}:|^[a-z0-9_-]+(:\d+)?$", path.name)
+
+    def test_every_placeholder_is_set_by_compose(self):
+        used = {name for path in CONFIG_FILES for name in PLACEHOLDER.findall(path.read_text(encoding="utf-8"))}
+        self.assertEqual(set(), used - homepage_environment())
+
+    def test_every_variable_is_documented(self):
+        documented = set(re.findall(r"^([A-Z_]+)=", (ROOT / ".env.example").read_text(encoding="utf-8"), re.MULTILINE))
+        for path in (HOMEPAGE / "compose.yaml", ROOT / "gluetun" / "compose.yaml"):
+            used = set(re.findall(r"\$\{([A-Z_]+)", path.read_text(encoding="utf-8")))
+            self.assertEqual(set(), used - documented, path.name)
+
+
+if __name__ == "__main__":
+    unittest.main()

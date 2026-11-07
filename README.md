@@ -27,8 +27,9 @@ Follow the sections in order. Each one starts with the sections it requires. Eve
 19. [Beszel](#beszel)
 20. [Uptime Kuma](#uptime-kuma)
 21. [Dozzle](#dozzle)
-22. [Verify the NAS](#verify-the-nas)
-23. [Contributing](#contributing)
+22. [Homepage](#homepage)
+23. [Verify the NAS](#verify-the-nas)
+24. [Contributing](#contributing)
 
 ## Architecture
 
@@ -92,6 +93,7 @@ flowchart LR
         Beszel("Beszel<br/>resources")
         UptimeKuma("Uptime Kuma<br/>checks")
         Dozzle("Dozzle<br/>logs, read-only")
+        Homepage("Homepage<br/>dashboard")
     end
 
     subgraph data["Data"]
@@ -154,7 +156,7 @@ flowchart LR
     class autobrr,crossseed,qbitmanage,ratioscript ratioNode
     style ratio fill:#fce4ec,stroke:#ec407a,stroke-width:2px,color:#1f2937
     classDef observationNode fill:#ffffff,stroke:#00897b,color:#1f2937,stroke-width:1.5px
-    class Beszel,UptimeKuma,Dozzle observationNode
+    class Beszel,UptimeKuma,Dozzle,Homepage observationNode
     style observation fill:#e0f2f1,stroke:#00897b,stroke-width:2px,color:#1f2937
     classDef dataNode fill:#ffffff,stroke:#78909c,color:#1f2937,stroke-width:1.5px
     class Torrents,Library dataNode
@@ -171,8 +173,10 @@ flowchart LR
 Each optional part is a set of services in `compose.yaml`. To leave one out, comment its lines in a pull request, and doco-cd removes them once merged:
 
 - Without a private tracker, comment `autobrr`, `cross-seed`, `qbit_manage` and `ratio`.
-- Without a VPN, comment `gluetun`, remove `network_mode` and `depends_on` from `qbittorrent/compose.yaml`, and replace `gluetun:8080` with `qbittorrent:8080` in `caddy/Caddyfile`, `cross-seed/config.js`, `qbit_manage/config.yml` and `ratio/ratio.py`.
+- Without a VPN, comment `gluetun`, remove `network_mode` and `depends_on` from `qbittorrent/compose.yaml`, and replace `gluetun:8080` with `qbittorrent:8080` in `caddy/Caddyfile`, `cross-seed/config.js`, `qbit_manage/config.yml`, `ratio/ratio.py` and `homepage/services.yaml`.
 - Without a domain, comment `caddy` and publish the port of each web UI in its own `compose.yaml`, reachable over plain HTTP on the local network only.
+
+Remove the tiles of the services left out from `homepage/services.yaml` too.
 
 `./scripts/verify.sh` only checks the services that `compose.yaml` still includes.
 
@@ -300,6 +304,7 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with `:<CA
 | Beszel | `https://beszel.lan.<DOMAIN>` | Local network |
 | Uptime Kuma | `https://uptime-kuma.lan.<DOMAIN>` | Local network |
 | Dozzle | `https://dozzle.lan.<DOMAIN>` | Local network |
+| Homepage | `https://homepage.lan.<DOMAIN>` | Local network |
 
 cross-seed has an API only, which the other containers reach at `http://cross-seed:2468`. The first certificates take a few minutes, follow them with:
 
@@ -1009,6 +1014,7 @@ Add one monitor per line, with the default interval of 60 seconds. An HTTP monit
 | cross-seed | HTTP(s) | `http://cross-seed:2468/api/ping` |
 | Beszel | HTTP(s) | `http://beszel:8090/api/health` |
 | Dozzle | HTTP(s) | `http://dozzle:8080/healthcheck` |
+| Homepage | HTTP(s) | `http://homepage:3000/api/healthcheck` |
 | Caddy | Docker Container | `caddy` |
 | Gluetun | Docker Container | `gluetun` |
 | qbit_manage | Docker Container | `qbit_manage` |
@@ -1042,6 +1048,62 @@ docker compose restart dozzle
 ```
 
 Open `https://dozzle.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in.
+
+## Homepage
+
+Requires [Bazarr](#bazarr), [Private tracker ratio](#private-tracker-ratio), [Beszel](#beszel) and [Uptime Kuma](#uptime-kuma).
+
+Homepage is the start page of the Admin: one tile per service, grouped as in [Architecture](#architecture), with a link to its lan name and its live figures, such as the Requests waiting in Seerr, the queues of Radarr and Sonarr, the torrents of qBittorrent, the public IP and the country of the VPN, and the free space of the data disk. Homarr or Dashy can replace it.
+
+Its config is `homepage/settings.yaml`, `homepage/services.yaml` and `homepage/widgets.yaml`. They hold no key and no personal value: Homepage reads each one from `.env`, through the `HOMEPAGE_VAR_` variables of `homepage/compose.yaml`. Homepage calls the APIs itself, so no key ever reaches the browser. It sees no file of the data root, only the empty folder `<DATA_ROOT>/.homepage`, which gives it the free space of the data disk. `./scripts/verify.sh` checks that it mounts neither the media tree nor the torrents tree.
+
+### Login
+
+Homepage asks for a password only, set in `.env`. In `.env`, set `HOMEPAGE_PASSWORD` to a strong password, distinct from the other tools, and `HOMEPAGE_AUTH_SECRET` to a new secret:
+
+```bash
+openssl rand -hex 32
+```
+
+### API keys
+
+Most keys are already in `.env` from the sections of their service. Add the others, then restart doco-cd to apply `.env`:
+
+| Service | Variable | Where to find it |
+| --- | --- | --- |
+| Jellyfin | `JELLYFIN_API_KEY` | Dashboard > Advanced > API Keys, click "+" and name it `Homepage` |
+| Seerr | `SEERR_API_KEY` | Settings > General, "API Key" |
+| qBittorrent | `QBITTORRENT_USER`, `QBITTORRENT_PASSWORD` | Set in [Private tracker ratio](#private-tracker-ratio) |
+| Gluetun | `GLUETUN_API_KEY` | Generated, as below |
+| Prowlarr | `PROWLARR_API_KEY` | Set in [Prowlarr](#prowlarr) |
+| Radarr | `RADARR_API_KEY` | Set in [Radarr](#radarr) |
+| Sonarr | `SONARR_API_KEY` | Set in [Sonarr](#sonarr) |
+| Bazarr | `BAZARR_API_KEY` | Settings > General > Security, "API Key" |
+| Tdarr | `TDARR_API_KEY` | Set in [Tdarr](#tdarr) |
+| autobrr | `AUTOBRR_API_KEY` | Settings > API Keys, click "Add new" and name it `Homepage` |
+| Beszel | `BESZEL_EMAIL`, `BESZEL_PASSWORD` | Set in [Beszel](#beszel) |
+
+```sh
+docker restart doco-cd
+```
+
+### Gluetun
+
+The control server of Gluetun refuses every request until it is given a key. Set `GLUETUN_API_KEY` to a new key:
+
+```bash
+openssl rand -hex 24
+```
+
+At each start, Gluetun allows that key on one route only, `GET /v1/publicip/ip`, which gives the public IP and the country of the VPN. The key cannot stop the VPN nor read its settings.
+
+### Uptime Kuma
+
+The Uptime Kuma tile counts the services up and down from a status page. In Uptime Kuma, Status Pages, click "New Status Page", enter `NAS` as the name and `nas` as the slug, add every monitor, and save. The status page is reachable on the lan name of Uptime Kuma without a login, so any device of the local network can read it.
+
+### Open
+
+Open `https://homepage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `HOMEPAGE_PASSWORD`. The playback controls of Jellyfin stay off, so Homepage only reads the services. A tile whose service is down, or whose key is wrong, shows an error in place of its figures. The tiles of Recyclarr, ratio and Caddy show no figures, since none of them has an API Homepage could read.
 
 ## Verify the NAS
 

@@ -1,0 +1,152 @@
+- Watch:
+    - Jellyfin:
+        icon: jellyfin.svg
+        description: Streams the Library
+        href: https://jellyfin.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        widget:
+          type: jellyfin
+          url: http://jellyfin:8096
+          key: '{{HOMEPAGE_VAR_JELLYFIN_API_KEY}}'
+          version: 2
+          enableBlocks: true
+          enableNowPlaying: true
+          enableMediaControl: false
+          fields: ["movies", "series", "episodes"]
+    - Seerr:
+        icon: jellyseerr.svg
+        description: Requests of the Friends
+        href: https://seerr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        widget:
+          type: seerr
+          url: http://seerr:5055
+          key: '{{HOMEPAGE_VAR_SEERR_API_KEY}}'
+          fields: ["pending", "processing", "available"]
+
+- Downloads:
+    - qBittorrent:
+        icon: qbittorrent.svg
+        description: Torrents, through the VPN only
+        href: https://qbittorrent.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        widget:
+          type: qbittorrent
+          url: http://gluetun:8080
+          username: '{{HOMEPAGE_VAR_QBITTORRENT_USER}}'
+          password: '{{HOMEPAGE_VAR_QBITTORRENT_PASSWORD}}'
+          enableLeechProgress: true
+    - Gluetun:
+        icon: gluetun.svg
+        description: VPN and kill switch of qBittorrent
+        widget:
+          type: gluetun
+          url: http://gluetun:8000
+          key: '{{HOMEPAGE_VAR_GLUETUN_API_KEY}}'
+          version: 2
+          fields: ["public_ip", "country"]
+
+- Automation:
+    - Prowlarr:
+        icon: prowlarr.svg
+        description: Indexers
+        href: https://prowlarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        widget:
+          type: prowlarr
+          url: http://prowlarr:9696
+          key: '{{HOMEPAGE_VAR_PROWLARR_API_KEY}}'
+    - Radarr:
+        icon: radarr.svg
+        description: Movies
+        href: https://radarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        widget:
+          type: radarr
+          url: http://radarr:7878
+          key: '{{HOMEPAGE_VAR_RADARR_API_KEY}}'
+          enableQueue: true
+    - Sonarr:
+        icon: sonarr.svg
+        description: Shows and anime
+        href: https://sonarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        widget:
+          type: sonarr
+          url: http://sonarr:8989
+          key: '{{HOMEPAGE_VAR_SONARR_API_KEY}}'
+          enableQueue: true
+    - Bazarr:
+        icon: bazarr.svg
+        description: Subtitles
+        href: https://bazarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        widget:
+          type: bazarr
+          url: http://bazarr:6767
+          key: '{{HOMEPAGE_VAR_BAZARR_API_KEY}}'
+    - Tdarr:
+        icon: tdarr.svg
+        description: MKV H265 1080p
+        href: https://tdarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        widget:
+          type: tdarr
+          url: http://tdarr:8265
+          key: '{{HOMEPAGE_VAR_TDARR_API_KEY}}'
+    - Recyclarr:
+        icon: recyclarr.svg
+        description: Quality profiles, synced every night
+    - FlareSolverr:
+        icon: flaresolverr.svg
+        description: Cloudflare for Prowlarr
+        siteMonitor: http://flaresolverr:8191/health
+
+- Ratio:
+    - autobrr:
+        icon: autobrr.svg
+        description: IRC announces
+        href: https://autobrr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        widget:
+          type: autobrr
+          url: http://autobrr:7474
+          key: '{{HOMEPAGE_VAR_AUTOBRR_API_KEY}}'
+    - cross-seed:
+        icon: cross-seed.svg
+        description: Seeds the same data on C411
+        siteMonitor: http://cross-seed:2468/api/ping
+    - qbit_manage:
+        icon: qbit-manage.svg
+        description: Tags torrents by tracker
+        href: https://qbit-manage.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+    - ratio:
+        icon: mdi-scale-balance
+        description: Farm and Zen reserve
+
+- Observation:
+    - Beszel:
+        icon: beszel.svg
+        description: Resources of the Host and the containers
+        href: https://beszel.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        widget:
+          type: beszel
+          url: http://beszel:8090
+          username: '{{HOMEPAGE_VAR_BESZEL_EMAIL}}'
+          password: '{{HOMEPAGE_VAR_BESZEL_PASSWORD}}'
+          version: 2
+          systemId: NAS
+          fields: ["status", "cpu", "memory", "network"]
+    - Uptime Kuma:
+        icon: uptime-kuma.svg
+        description: Checks of every service
+        href: https://uptime-kuma.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        widget:
+          type: uptimekuma
+          url: http://uptime-kuma:3001
+          slug: nas
+    - Dozzle:
+        icon: dozzle.svg
+        description: Logs of every container
+        href: https://dozzle.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        siteMonitor: http://dozzle:8080/healthcheck
+
+- Hosting:
+    - TrueNAS:
+        icon: truenas-scale.svg
+        description: Host, pool and datasets
+        href: https://truenas.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+    - Caddy:
+        icon: caddy.svg
+        description: HTTPS proxy, the only published port

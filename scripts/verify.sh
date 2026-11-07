@@ -252,7 +252,7 @@ check_login_required() {
     401" "* | 403" "*)
       pass "$service" "web UI requires a login (HTTP ${result%% *})"
       ;;
-    30?" "*/login*)
+    30?" "*/login* | 30?" "*/signin*)
       pass "$service" "web UI requires a login (redirects to its login page)"
       ;;
     *)
@@ -423,6 +423,8 @@ check_no_media_tree beszel-agent
 check_no_torrents_mount beszel-agent
 check_no_media_mount uptime-kuma
 check_no_media_mount dozzle
+check_no_media_tree homepage
+check_no_torrents_mount homepage
 check_published_ports
 check_no_new_privileges
 check_docker_socket_read_only
@@ -437,6 +439,7 @@ check_login_required qbit_manage "https://qbit-manage.$lan:$https_port/"
 check_login_required beszel "https://beszel.$lan:$https_port/api/beszel/info"
 check_login_required uptime-kuma "https://uptime-kuma.$lan:$https_port/metrics"
 check_login_required dozzle "https://dozzle.$lan:$https_port/"
+check_login_required homepage "https://homepage.$lan:$https_port/api/services"
 check_api_key_required cross-seed "http://cross-seed:2468/api/status"
 check_exit_ip qbittorrent
 check_kill_switch qbittorrent
@@ -446,8 +449,10 @@ check_public_hostname "${domain:+truenas.$lan}" "$host_ip"
 check_public_hostname "${domain:+jellyfin.$lan}" "$host_ip"
 check_public_hostname "${domain:+seerr.$lan}" "$host_ip"
 check_public_hostname "${domain:+qbittorrent.$lan}" "$host_ip"
+check_public_hostname "${domain:+homepage.$lan}" "$host_ip"
 check_lan_refused_outside "radarr.$lan"
 check_lan_refused_outside "truenas.$lan"
+check_lan_refused_outside "homepage.$lan"
 check_unknown_host_refused "$jellyfin_hostname"
 
 if [ -n "$jellyfin_hostname$seerr_hostname" ]; then
