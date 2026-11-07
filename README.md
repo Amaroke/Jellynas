@@ -218,7 +218,7 @@ Both roots live outside the repo, at the paths set in `DATA_ROOT` and `APPDATA_R
 Create both roots, the recycle bins of Radarr and Sonarr, and the appdata folders of the services that run as `PUID` from their first start:
 
 ```bash
-set -a && . ./.env && set +a
+. <(grep -E '^(DATA_ROOT|APPDATA_ROOT|PUID|PGID)=' .env)
 mkdir -p "$DATA_ROOT"/torrents/{ratio,zen,cross-seed} "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,recyclarr,autobrr,cross-seed,qbit_manage,ratio}
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
@@ -456,7 +456,7 @@ In qBittorrent, Tools > Options > Connection, set "Port used for incoming connec
 2. qBittorrent refuses its web UI behind Caddy until it trusts it as a reverse proxy, so turn on its reverse proxy support for the Docker networks, `172.16.0.0/12` on TrueNAS, while it is stopped:
 
    ```sh
-   set -a && . ./.env && set +a
+   . <(grep '^APPDATA_ROOT=' .env)
    docker compose stop qbittorrent
    sed -i '/^\[Preferences\]/a WebUI\\ReverseProxySupportEnabled=true\nWebUI\\TrustedReverseProxiesList=172.16.0.0/12' "$APPDATA_ROOT"/qbittorrent/qBittorrent/qBittorrent.conf
    docker compose start qbittorrent
@@ -650,7 +650,7 @@ Recyclarr creates the profiles but never assigns them.
 Interactive Search, in a movie or an episode, shows the score of each release and why any is refused. To score a release name without searching, use the parse endpoint of Radarr. The name must match a movie already in Radarr, here Your Name, otherwise no profile applies and the score stays at 0:
 
 ```bash
-set -a && . ./.env && set +a
+. <(grep -E '^(RADARR_API_KEY|DOMAIN|CADDY_HTTPS_PORT)=' .env)
 curl -s -G -H "X-Api-Key: $RADARR_API_KEY" --data-urlencode "title=Your.Name.2016.MULTi.1080p.WEB.x265-GROUP" "https://radarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/v3/parse"
 ```
 
@@ -854,7 +854,7 @@ qbit_manage tags every torrent by tracker every 10 minutes. ratio is the only to
 1. Copy it, replacing the file qbit_manage uses:
 
    ```bash
-   set -a && . ./.env && set +a
+   . <(grep '^APPDATA_ROOT=' .env)
    cp qbit_manage/config.yml "$APPDATA_ROOT"/qbit_manage/config.yml
    docker compose restart qbit_manage
    ```
