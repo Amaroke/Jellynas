@@ -6,10 +6,12 @@ import os
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 from ratio import (
     DAY,
     GB,
+    Prowlarr,
     QBittorrent,
     bdecode,
     is_rare,
@@ -245,7 +247,7 @@ class Twins(unittest.TestCase):
             torrent("public", tracker="http://nyaa.tracker.wf/announce"),
             torrent("hungry", category="cross-seed-link"),
         ])
-        state = run(qbt, state=empty_state(twins={"public": ["hungry", "ratio"]}))
+        state = run(qbt, state=empty_state(twins={"public": ["hungry", "ratio", NOW - 7200, "http://prowlarr/hungry.torrent"]}))
         self.assertEqual(qbt.deleted, ["public"])
         self.assertEqual(qbt.moved, [])
         self.assertEqual(state["twins"], {})
@@ -482,14 +484,6 @@ class Sources(unittest.TestCase):
         run(FakeQBittorrent([torrent("episode", category="cross-seed-link")]), state=state, now=NOW + 1200)
         self.assertEqual(state["sources"], {"episode": "twin"})
 
-    def test_a_twin_of_the_previous_version_is_a_twin(self):
-        qbt = FakeQBittorrent([
-            torrent("public", tracker="http://nyaa.tracker.wf/announce"),
-            torrent("hungry", category="cross-seed-link"),
-        ])
-        state = run(qbt, state=empty_state(twins={"public": ["hungry", "ratio"]}))
-        self.assertEqual(state["sources"], {"hungry": "twin"})
-
     def test_library_torrents_and_their_cross_seeds_are_told_apart(self):
         qbt = FakeQBittorrent([
             torrent("movie", category="radarr", seeders=100),
@@ -500,7 +494,7 @@ class Sources(unittest.TestCase):
         state = run(qbt)
         self.assertEqual(state["sources"], {"movie": "library", "show": "library", "linked": "cross-seed"})
 
-    def test_a_state_of_the_previous_version_gets_sources_from_what_ratio_sees(self):
+    def test_a_tracker_torrent_without_a_source_gets_one_from_what_ratio_sees(self):
         qbt = FakeQBittorrent([
             torrent("farmed", downloaded_gb=4),
             torrent("free", downloaded_gb=4),
@@ -579,11 +573,6 @@ class Report(unittest.TestCase):
         self.run_quietly(FakeQBittorrent(), state, NOW + 4 * DAY)
         self.assertEqual(report_of(state, "zen-hunt")["zen_days"], 3)
 
-    def test_a_zen_torrent_of_the_previous_version_counts_its_whole_seeding_time(self):
-        state = empty_state(transfers={"kept": [GB, 0]})
-        self.run_quietly(FakeQBittorrent([torrent("kept", category="zen", seeders=3, seeding_days=10)]), state, NOW)
-        self.assertEqual(report_of(state, "zen-hunt")["zen_days"], 10)
-
     def test_a_torrent_added_again_starts_over_without_losing_what_it_did(self):
         state = empty_state()
         self.run_quietly(FakeQBittorrent([torrent("kept", category="zen", seeders=3, seeding_days=5, downloaded_gb=6)]), state, NOW)
@@ -659,6 +648,23 @@ class Torznab(unittest.TestCase):
         self.assertEqual([r["infohash"] for r in releases], ["abc"])
         self.assertEqual(releases[0]["leechers"], 10)
         self.assertAlmostEqual(releases[0]["age_hours"], 1.0)
+
+
+class TorrentFiles(unittest.TestCase):
+    def fetched_url(self, release):
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = b"torrent"
+        with mock.patch("urllib.request.urlopen", return_value=response) as urlopen:
+            Prowlarr("http://prowlarr:9696", "key", 2).torrent(release)
+        return urlopen.call_args.args[0].full_url
+
+    def test_a_nyaa_torrent_downloads_straight_from_nyaa(self):
+        release = {"page": "https://nyaa.si/view/1234567", "link": "http://prowlarr:9696/9/download?apikey=key"}
+        self.assertEqual(self.fetched_url(release), "https://nyaa.si/download/1234567.torrent")
+
+    def test_any_other_torrent_downloads_through_prowlarr(self):
+        release = {"page": "https://c411.org/torrents/42", "link": "http://prowlarr:9696/3/download?apikey=key"}
+        self.assertEqual(self.fetched_url(release), "http://prowlarr:9696/3/download?apikey=key")
 
 
 class FakeServer(http.server.BaseHTTPRequestHandler):
