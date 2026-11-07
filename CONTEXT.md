@@ -16,7 +16,7 @@ _Avoid_: user, guest, relative
 
 **Account**:
 The single identity of a Friend or the Admin, valid both for watching and for making Requests.
-_Avoid_: login, profile
+_Avoid_: profile
 
 **Request**:
 A movie or show asked for by a Friend or the Admin, waiting to be added to the Library.
@@ -37,7 +37,7 @@ The folders of the data root where every torrent downloads and seeds, never read
 _Avoid_: downloads folder
 
 **Automation stack**:
-The services that find, download, rename and subtitle media to file them into the Library.
+The services that find, download, rename, subtitle and normalise media to file them into the Library.
 _Avoid_: arr, arr stack
 
 ### Ratio
@@ -47,7 +47,7 @@ The private tracker of the Admin, the only one the Farm and the Zen reserve work
 _Avoid_: the tracker
 
 **Hit and run**:
-A torrent of a private tracker removed before its minimum seeding time or ratio, which gets the Account banned.
+A torrent of a private tracker removed before its minimum seeding time or ratio, which gets the account on that tracker banned.
 _Avoid_: early removal
 
 **Farm**:
