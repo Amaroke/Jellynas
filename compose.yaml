@@ -12,6 +12,8 @@ include:
   - sonarr/compose.yaml
   - lidarr/compose.yaml
   - slskd/compose.yaml
+  - lazylibrarian/compose.yaml
+  - suwayomi/compose.yaml
   - recyclarr/compose.yaml
   - bazarr/compose.yaml
   - tdarr/compose.yaml

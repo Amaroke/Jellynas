@@ -484,6 +484,8 @@ check_mounts_only lidarr media/music torrents
 check_mounts_only slskd media/music torrents/soulseek
 check_read_only slskd /data/media/music
 check_slskd_port
+check_mounts_only lazylibrarian media/books torrents
+check_mounts_only suwayomi media/manga
 check_no_media_mount seerr
 check_no_media_mount prowlarr
 check_no_media_mount flaresolverr
@@ -510,6 +512,8 @@ check_login_required prowlarr "https://prowlarr.$lan:$https_port/"
 check_login_required radarr "https://radarr.$lan:$https_port/"
 check_login_required sonarr "https://sonarr.$lan:$https_port/"
 check_login_required lidarr "https://lidarr.$lan:$https_port/"
+check_login_required lazylibrarian "https://lazylibrarian.$lan:$https_port/home"
+check_login_required suwayomi "https://suwayomi.$lan:$https_port/api/graphql"
 check_login_required slskd "https://slskd.$lan:$https_port/api/v0/application"
 check_login_required bazarr "https://bazarr.$lan:$https_port/bazarr.log"
 check_login_required tdarr "https://tdarr.$lan:$https_port/api/v2/get-nodes"

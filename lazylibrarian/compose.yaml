@@ -1,0 +1,19 @@
+services:
+  lazylibrarian:
+    image: lscr.io/linuxserver/lazylibrarian:8b6ba443-ls392
+    container_name: lazylibrarian
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+    volumes:
+      - ${APPDATA_ROOT}/lazylibrarian:/config
+      - ${DATA_ROOT}/media/books:/data/media/books
+      - ${DATA_ROOT}/torrents:/data/torrents
+    healthcheck:
+      test: ["CMD", "curl", "--silent", "--output", "/dev/null", "http://localhost:5299/"]
+      timeout: 10s
+      start_period: 30s

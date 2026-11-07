@@ -75,6 +75,8 @@ flowchart LR
         Radarr("Radarr<br/>movies")
         Sonarr("Sonarr<br/>shows, anime")
         Lidarr("Lidarr<br/>music")
+        LazyLibrarian("LazyLibrarian<br/>books")
+        Suwayomi("Suwayomi<br/>manga")
         Bazarr("Bazarr<br/>subtitles")
         Tdarr("Tdarr<br/>MKV H265")
     end
@@ -130,6 +132,8 @@ flowchart LR
     Prowlarr -->|indexers| Radarr
     Prowlarr -->|indexers| Sonarr
     Prowlarr -->|indexers| Lidarr
+    Prowlarr -->|indexers| LazyLibrarian
+    FlareSolverr --- Suwayomi
     Recyclarr -->|profiles| Radarr
     Recyclarr -->|profiles| Sonarr
     Radarr -->|"new files"| Bazarr
@@ -154,7 +158,7 @@ flowchart LR
     class Jellyfin,Seerr watchNode
     style watch fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px,color:#1f2937
     classDef automationNode fill:#ffffff,stroke:#43a047,color:#1f2937,stroke-width:1.5px
-    class Prowlarr,Recyclarr,FlareSolverr,Radarr,Sonarr,Lidarr,Bazarr,Tdarr automationNode
+    class Prowlarr,Recyclarr,FlareSolverr,Radarr,Sonarr,Lidarr,LazyLibrarian,Suwayomi,Bazarr,Tdarr automationNode
     style automation fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#1f2937
     classDef vpnNode fill:#ffffff,stroke:#fb8c00,color:#1f2937,stroke-width:1.5px
     class qBittorrent,slskd vpnNode
@@ -249,7 +253,7 @@ Create both roots, the recycle bins of Radarr and Sonarr, and the appdata folder
 
 ```bash
 . <(grep -E '^(DATA_ROOT|APPDATA_ROOT|PUID|PGID)=' .env)
-mkdir -p "$DATA_ROOT"/torrents/{ratio,zen,cross-seed} "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,recyclarr,autobrr,cross-seed,qbit_manage,ratio,slskd}
+mkdir -p "$DATA_ROOT"/torrents/{ratio,zen,cross-seed} "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,recyclarr,autobrr,cross-seed,qbit_manage,ratio,slskd,suwayomi}
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
@@ -714,6 +718,73 @@ For slskd:
 
 In Library > Add New, search an artist, pick `/data/media/music` as the root folder and the albums to monitor, and check "Start search for missing albums". Lidarr searches the indexers and Soulseek, sends each album to qBittorrent or slskd, then copies it into the music folder, where the Music library of Jellyfin picks it up.
 
+## LazyLibrarian
+
+Requires [Prowlarr](#prowlarr).
+
+LazyLibrarian follows authors and books: a wanted book arrives in the Library on its own, from the indexers through qBittorrent. It sees only the books folder, under `/data/media/books`, and the torrents tree, under `/data/torrents`. Readarr is retired, and no other maintained open source tool finds and files books this way.
+
+### Login
+
+Open `https://lazylibrarian.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. In Config > Interface:
+
+1. Under WebServer Options, set "User" and "Pass" to a username and a strong password, distinct from the other tools.
+2. Leave "Enable user accounts" unchecked and set the authentication type to "Basic (Browser Popup)".
+3. Under API, check "Enable API" and generate the "API Full Access key", which Prowlarr uses.
+4. Click "Save changes" and restart LazyLibrarian from its menu.
+
+`./scripts/verify.sh` checks that the web UI then asks for the login.
+
+### Folders
+
+In Config > Processing, set "eBook Library Folder" to `/data/media/books` and check "Keep original files". Each import is then a copy, so the torrent keeps seeding from the torrents tree. Click "Save changes".
+
+### Download client
+
+1. In qBittorrent, add a category `lazylibrarian` with `/data/torrents/books` as the save path.
+2. In LazyLibrarian, Config > Downloaders, under Torrents, check qBitTorrent.
+3. Enter `gluetun` as "qBitTorrent Host", `8080` as "qBitTorrent Port", and the qBittorrent login.
+4. Set "qBitTorrent Label/Category" to `lazylibrarian` and "Download directory" to `/data/torrents/books`, which LazyLibrarian sees at the same path.
+5. Check "Keep seeding after processing" and "Do not delete if still seeding", so LazyLibrarian never removes a torrent before qBittorrent stops it at its seeding goal.
+6. Click "Test qBitTorrent", then "Save changes".
+
+### Indexers
+
+In Prowlarr, Settings > Apps, click "+" and pick LazyLibrarian. Set "Prowlarr Server" to `http://prowlarr:9696` and "LazyLibrarian Server" to `http://lazylibrarian:5299`, paste the API Full Access key, click "Test", then "Save". Every indexer with book categories then shows up in LazyLibrarian, Config > Providers.
+
+### Want a book
+
+In Authors, search a book or an author, add it and mark the book as Wanted. LazyLibrarian searches the indexers, sends the book to qBittorrent, then copies it into the books folder, where the Books library of Jellyfin picks it up. A Friend reads it in the Jellyfin app or downloads it to their phone.
+
+## Suwayomi
+
+Requires [Prowlarr](#prowlarr), for FlareSolverr.
+
+Suwayomi follows manga: it runs the Mihon extensions, which read manga sites, and downloads each new chapter of a manga in the library as a CBZ file into the manga folder of the Library, where Jellyfin reads it. It sees only the manga folder, mounted as its downloads folder, and its appdata folder. Kaizoku is archived and points to Suwayomi, and LazyLibrarian handles manga poorly. Manga sites behind Cloudflare go through FlareSolverr.
+
+### Login
+
+In `.env`, set `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD` to the login of its web UI, letters and digits only and distinct from the other tools, then restart doco-cd to apply `.env`:
+
+```sh
+docker restart doco-cd
+```
+
+Suwayomi asks for this login at every visit, and Homepage uses it to read its figures. `./scripts/verify.sh` checks that the web UI asks for it.
+
+### Extensions
+
+Open `https://suwayomi.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. In Settings > Browse, add the URL of a Mihon extension repository, then in Browse > Extensions, install the extension of each manga site you read.
+
+### Settings
+
+1. In Settings > Downloads, turn on the automatic download of new chapters, so each new chapter of a manga in the library is downloaded on its own. CBZ is already set from compose.
+2. In Settings > Library, set the automatic update interval, for example 12 hours, so Suwayomi checks the sites for new chapters.
+
+### Want a manga
+
+In Browse, pick a source, search a manga and add it to the library. Open it, select the chapters to keep and click "Download". Suwayomi files them under `mangas/<source>/<manga>` in the manga folder, where the Manga library of Jellyfin picks them up. New chapters follow on their own.
+
 ## Requests
 
 Requires [Seerr](#seerr), [Radarr](#radarr) and [Sonarr](#sonarr).
@@ -1124,6 +1195,8 @@ Add one monitor per line, with the default interval of 60 seconds. An HTTP monit
 | Gluetun | Docker Container | `gluetun` |
 | qbit_manage | Docker Container | `qbit_manage` |
 | Recyclarr | Docker Container | `recyclarr` |
+| LazyLibrarian | Docker Container | `lazylibrarian` |
+| Suwayomi | Docker Container | `suwayomi` |
 | ratio | Docker Container | `ratio` |
 | Beszel agent | Docker Container | `beszel-agent` |
 | Jellyfin public | HTTP(s) | `https://jellyfin.<DOMAIN>:<CADDY_HTTPS_PORT>/health` |
@@ -1156,9 +1229,9 @@ Open `https://dozzle.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in.
 
 ## Homepage
 
-Requires [Bazarr](#bazarr), [Private tracker ratio](#private-tracker-ratio), [Beszel](#beszel) and [Uptime Kuma](#uptime-kuma).
+Requires [Bazarr](#bazarr), [Suwayomi](#suwayomi), [Private tracker ratio](#private-tracker-ratio), [Beszel](#beszel) and [Uptime Kuma](#uptime-kuma).
 
-Homepage is the start page of the Admin: one tile per service, grouped as in [Architecture](#architecture), with a link to its lan name and its live figures, such as the Requests waiting in Seerr, the queues of Radarr, Sonarr and Lidarr, the torrents of qBittorrent, the public IP and the country of the VPN, and the free space of the data disk. Homarr or Dashy can replace it.
+Homepage is the start page of the Admin: one tile per service, grouped as in [Architecture](#architecture), with a link to its lan name and its live figures, such as the Requests waiting in Seerr, the queues of Radarr, Sonarr and Lidarr, the manga of Suwayomi, the torrents of qBittorrent, the public IP and the country of the VPN, and the free space of the data disk. Homarr or Dashy can replace it.
 
 Its config is `homepage/settings.yaml`, `homepage/services.yaml` and `homepage/widgets.yaml`. They hold no key and no personal value: Homepage reads each one from `.env`, through the `HOMEPAGE_VAR_` variables of `homepage/compose.yaml`. Homepage pastes each value into the YAML before reading it, so a value it reads must hold no single quote, or the whole page stays empty. This is why it reads qBittorrent with an API key rather than its password. Homepage calls the APIs itself, so no key ever reaches the browser. It sees no file of the data root, only the empty folder `<DATA_ROOT>/.homepage`, which gives it the free space of the data disk. `./scripts/verify.sh` checks that it mounts neither the media tree nor the torrents tree.
 
@@ -1185,6 +1258,7 @@ Most keys are already in `.env` from the sections of their service. Add the othe
 | Sonarr | `SONARR_API_KEY` | Set in [Sonarr](#sonarr) |
 | Lidarr | `LIDARR_API_KEY` | Set in [Lidarr](#lidarr) |
 | slskd | `SLSKD_API_KEY` | Set in [slskd](#slskd) |
+| Suwayomi | `SUWAYOMI_USERNAME`, `SUWAYOMI_PASSWORD` | Set in [Suwayomi](#suwayomi) |
 | Bazarr | `BAZARR_API_KEY` | Settings > General > Security, "API Key" |
 | Tdarr | `TDARR_API_KEY` | Set in [Tdarr](#tdarr) |
 | autobrr | `AUTOBRR_API_KEY` | Settings > API Keys, click "Add new" and name it `Homepage` |
@@ -1210,7 +1284,7 @@ The Uptime Kuma tile counts the services up and down from a status page. In Upti
 
 ### Open
 
-Open `https://homepage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `HOMEPAGE_PASSWORD`. The playback controls of Jellyfin stay off, so Homepage only reads the services. A tile whose service is down, or whose key is wrong, shows an error in place of its figures. The Ratio group shows the summary of ratio in four tiles: the Ledger, the Farm, the Zen reserve and the Sources. The tiles of Recyclarr and Caddy show no figures, since neither has an API Homepage could read.
+Open `https://homepage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `HOMEPAGE_PASSWORD`. The playback controls of Jellyfin stay off, so Homepage only reads the services. A tile whose service is down, or whose key is wrong, shows an error in place of its figures. The Ratio group shows the summary of ratio in four tiles: the Ledger, the Farm, the Zen reserve and the Sources. The tiles of Recyclarr, Caddy and LazyLibrarian show no figures, since Homepage has no widget for them.
 
 ## Verify the NAS
 

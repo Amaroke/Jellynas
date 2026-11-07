@@ -192,6 +192,20 @@
           url: http://lidarr:8686
           key: '{{HOMEPAGE_VAR_LIDARR_API_KEY}}'
           fields: ["artists", "wanted", "queued"]
+    - LazyLibrarian:
+        icon: lazylibrarian.svg
+        description: Books
+        href: https://lazylibrarian.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+    - Suwayomi:
+        icon: suwayomi.svg
+        description: Manga
+        href: https://suwayomi.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        widget:
+          type: suwayomi
+          url: http://suwayomi:4567
+          username: '{{HOMEPAGE_VAR_SUWAYOMI_USERNAME}}'
+          password: '{{HOMEPAGE_VAR_SUWAYOMI_PASSWORD}}'
+          fields: ["download", "nondownload", "read", "unread"]
     - Bazarr:
         icon: bazarr.svg
         description: Subtitles
