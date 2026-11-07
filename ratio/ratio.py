@@ -73,7 +73,9 @@ class QBittorrent:
             if f["name"] != name:
                 self.post("/api/v2/torrents/renameFile", {"hash": infohash, "oldPath": f["name"], "newPath": name})
         self.post("/api/v2/torrents/recheck", {"hashes": infohash})
-        self.post("/api/v2/torrents/start", {"hashes": infohash})
+
+    def start(self, hashes):
+        self.post("/api/v2/torrents/start", {"hashes": "|".join(hashes)})
 
     def set_category(self, hashes, category):
         self.post("/api/v2/torrents/setCategory", {"hashes": "|".join(hashes), "category": category})
@@ -352,6 +354,8 @@ def drop_twins(qbt, state, torrents):
         seeding = torrents.get(original)
         if seeding is None or seeding["progress"] < 1:
             continue
+        if seeding["state"].startswith(("stopped", "paused")):
+            qbt.start([original])
         if category == ZEN and seeding["category"] != ZEN:
             qbt.set_category([original], ZEN)
             seeding["category"] = ZEN
@@ -375,7 +379,7 @@ def seed_twins(qbt, prowlarr, settings, state, torrents, now):
         except Exception as error:
             print(f"Cannot seed the tracker copy of {public['name']}: {error}")
             continue
-        print(f"cross-seed missed {public['name']}, its tracker copy now seeds from the same files")
+        print(f"cross-seed missed {public['name']}, its tracker copy now checks the same files")
 
 
 def retire(qbt, settings, state, torrents, t, reason):

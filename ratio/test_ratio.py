@@ -24,10 +24,11 @@ TRACKER = "https://tracker.c411.org/announce"
 
 
 def torrent(hash, category="ratio", size_gb=3, seeding_days=10, uploaded_gb=0, downloaded_gb=0, progress=1,
-            seeders=100, tracker=TRACKER, completion_on=0, save_path=None):
+            seeders=100, tracker=TRACKER, completion_on=0, save_path=None, state="stalledUP"):
     return {
         "hash": hash,
         "save_path": save_path or f"/data/torrents/{category}",
+        "state": state,
         "name": f"Torrent {hash}",
         "category": category,
         "size": size_gb * GB,
@@ -66,6 +67,7 @@ class FakeQBittorrent:
         self.prefs = {}
         self.kept = []
         self.matched = []
+        self.started = []
 
     def torrents(self):
         return [dict(t) for t in self.list]
@@ -79,6 +81,9 @@ class FakeQBittorrent:
 
     def match_files(self, infohash, wanted):
         self.matched.append((infohash, wanted))
+
+    def start(self, hashes):
+        self.started += hashes
 
     def delete(self, hashes, delete_files=True):
         if not delete_files:
@@ -262,6 +267,14 @@ class Twins(unittest.TestCase):
         ])
         run(qbt, state=empty_state(twins={"public": ["hungry", "ratio", NOW - 7200, "http://prowlarr/hungry.torrent"]}))
         self.assertEqual(qbt.kept, ["public"])
+
+    def test_a_tracker_copy_left_stopped_after_its_check_is_started(self):
+        qbt = FakeQBittorrent([
+            torrent("public", tracker="http://nyaa.tracker.wf/announce"),
+            torrent("hungry", state="stoppedUP"),
+        ])
+        run(qbt, state=empty_state(twins={"public": ["hungry", "ratio", NOW - 7200, "http://prowlarr/hungry.torrent"]}))
+        self.assertEqual(qbt.started, ["hungry"])
 
 
 class Farm(unittest.TestCase):
@@ -556,7 +569,6 @@ class RealClient(unittest.TestCase):
             ("/api/v2/torrents/files?hash=abc", b""),
             ("/api/v2/torrents/renameFile", b"hash=abc&oldPath=c411%2FKeroro.mkv&newPath=Sgt+Frog.mkv"),
             ("/api/v2/torrents/recheck", b"hashes=abc"),
-            ("/api/v2/torrents/start", b"hashes=abc"),
         ])
 
     def test_an_expired_session_logs_in_again(self):
