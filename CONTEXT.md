@@ -47,8 +47,12 @@ The private tracker of the Admin, the only one the Farm and the Zen reserve work
 _Avoid_: the tracker
 
 **Hit and run**:
-A torrent of a private tracker removed before its minimum seeding time or ratio, which gets the account on that tracker banned.
+A torrent of a private tracker removed before its Seeding goal, which gets the account on that tracker banned.
 _Avoid_: early removal
+
+**Seeding goal**:
+The ratio or seeding time a torrent reaches before it may stop seeding, set per private tracker.
+_Avoid_: seed limit, share limit
 
 **Farm**:
 The torrents the NAS seeds only to earn upload on C411, kept while they upload.
