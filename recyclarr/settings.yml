@@ -4,8 +4,8 @@ resource_providers:
   - name: jellynas-radarr
     type: custom-formats
     service: radarr
-    path: /config/custom-formats/radarr
+    path: /config/custom-formats
   - name: jellynas-sonarr
     type: custom-formats
     service: sonarr
-    path: /config/custom-formats/sonarr
+    path: /config/custom-formats
