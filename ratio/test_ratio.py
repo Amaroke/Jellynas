@@ -247,7 +247,7 @@ class Twins(unittest.TestCase):
             torrent("public", tracker="http://nyaa.tracker.wf/announce"),
             torrent("hungry", category="cross-seed-link"),
         ])
-        state = run(qbt, state=empty_state(twins={"public": ["hungry", "ratio"]}))
+        state = run(qbt, state=empty_state(twins={"public": ["hungry", "ratio", NOW - 7200, "http://prowlarr/hungry.torrent"]}))
         self.assertEqual(qbt.deleted, ["public"])
         self.assertEqual(qbt.moved, [])
         self.assertEqual(state["twins"], {})
@@ -484,14 +484,6 @@ class Sources(unittest.TestCase):
         run(FakeQBittorrent([torrent("episode", category="cross-seed-link")]), state=state, now=NOW + 1200)
         self.assertEqual(state["sources"], {"episode": "twin"})
 
-    def test_a_twin_of_the_previous_version_is_a_twin(self):
-        qbt = FakeQBittorrent([
-            torrent("public", tracker="http://nyaa.tracker.wf/announce"),
-            torrent("hungry", category="cross-seed-link"),
-        ])
-        state = run(qbt, state=empty_state(twins={"public": ["hungry", "ratio"]}))
-        self.assertEqual(state["sources"], {"hungry": "twin"})
-
     def test_library_torrents_and_their_cross_seeds_are_told_apart(self):
         qbt = FakeQBittorrent([
             torrent("movie", category="radarr", seeders=100),
@@ -502,7 +494,7 @@ class Sources(unittest.TestCase):
         state = run(qbt)
         self.assertEqual(state["sources"], {"movie": "library", "show": "library", "linked": "cross-seed"})
 
-    def test_a_state_of_the_previous_version_gets_sources_from_what_ratio_sees(self):
+    def test_a_tracker_torrent_without_a_source_gets_one_from_what_ratio_sees(self):
         qbt = FakeQBittorrent([
             torrent("farmed", downloaded_gb=4),
             torrent("free", downloaded_gb=4),
@@ -580,11 +572,6 @@ class Report(unittest.TestCase):
         self.assertEqual(report_of(state, "zen-hunt")["zen_days"], 3)
         self.run_quietly(FakeQBittorrent(), state, NOW + 4 * DAY)
         self.assertEqual(report_of(state, "zen-hunt")["zen_days"], 3)
-
-    def test_a_zen_torrent_of_the_previous_version_counts_its_whole_seeding_time(self):
-        state = empty_state(transfers={"kept": [GB, 0]})
-        self.run_quietly(FakeQBittorrent([torrent("kept", category="zen", seeders=3, seeding_days=10)]), state, NOW)
-        self.assertEqual(report_of(state, "zen-hunt")["zen_days"], 10)
 
     def test_a_torrent_added_again_starts_over_without_losing_what_it_did(self):
         state = empty_state()

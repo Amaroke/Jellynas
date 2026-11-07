@@ -386,7 +386,7 @@ def record_history(state, torrents, fresh, now):
             del state["history"][infohash]
 
 
-def record_zen(state, torrents, upgrading):
+def record_zen(state, torrents):
     for infohash in state["transfers"]:
         t = torrents.get(infohash)
         if t is None:
@@ -395,7 +395,7 @@ def record_zen(state, torrents, upgrading):
         entry = state["zen"].get(infohash)
         if entry is None:
             if t["category"] == ZEN:
-                state["zen"][infohash] = [seeding, seeding if upgrading else 0]
+                state["zen"][infohash] = [seeding, 0]
             continue
         if t["category"] == ZEN:
             entry[1] += seeding - entry[0] if seeding >= entry[0] else seeding
@@ -403,7 +403,6 @@ def record_zen(state, torrents, upgrading):
 
 
 def record(state, torrents, settings, now):
-    upgrading = bool(state["transfers"]) and not state["sources"]
     fresh = set()
     for t in torrents.values():
         if t["hash"] in state["transfers"] or settings["tracker"] in t["tracker"].lower():
@@ -429,7 +428,7 @@ def record(state, torrents, settings, now):
         del state["checked"][infohash]
     record_sources(state, torrents, settings)
     record_history(state, torrents, fresh, now)
-    record_zen(state, torrents, upgrading)
+    record_zen(state, torrents)
 
 
 def gigabytes(size):
@@ -503,10 +502,9 @@ def drop_twins(qbt, state, torrents):
 
 
 def seed_twins(qbt, prowlarr, settings, state, torrents, now):
-    for twin, (original, category, *rest) in list(state["twins"].items()):
-        grabbed_at, link = (rest + [0, ""])[:2]
+    for twin, (original, category, grabbed_at, link) in list(state["twins"].items()):
         public = torrents.get(twin)
-        if not link or original in torrents or public is None or public["progress"] < 1:
+        if original in torrents or public is None or public["progress"] < 1:
             continue
         if now - grabbed_at < settings["twin_seed_after"]:
             continue
