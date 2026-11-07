@@ -1,0 +1,19 @@
+name: jellynas-doco-cd
+
+services:
+  doco-cd:
+    image: ghcr.io/kimdre/doco-cd:0.133.2
+    container_name: doco-cd
+    restart: unless-stopped
+    environment:
+      POLL_CONFIG: |
+        - url: https://github.com/Amaroke/Jellynas.git
+          reference: main
+          interval: 3m
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../.env:/jellynas/.env:ro
+      - data:/data
+
+volumes:
+  data:

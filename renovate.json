@@ -21,7 +21,11 @@
       "automerge": true
     },
     {
-      "matchPackageNames": ["ghcr.io/qdm12/gluetun", "lscr.io/linuxserver/qbittorrent"],
+      "matchPackageNames": [
+        "ghcr.io/qdm12/gluetun",
+        "lscr.io/linuxserver/qbittorrent",
+        "ghcr.io/kimdre/doco-cd"
+      ],
       "automerge": false
     },
     {
@@ -54,7 +58,7 @@
     },
     {
       "matchDatasources": ["docker"],
-      "matchPackageNames": ["jellynas-caddy", "jellynas-deployer"],
+      "matchPackageNames": ["jellynas-caddy"],
       "enabled": false
     }
   ]
