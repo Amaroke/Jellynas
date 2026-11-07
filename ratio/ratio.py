@@ -28,11 +28,17 @@ class QBittorrent:
     def torrents(self):
         return json.loads(self.send("/api/v2/torrents/info"))
 
-    def add(self, torrent, category):
+    def add(self, torrent, category, save_path=None):
         boundary = uuid.uuid4().hex
+        fields = {"category": category}
+        if save_path:
+            fields.update({"savepath": save_path, "autoTMM": "false", "stopped": "true", "paused": "true"})
         body = b"".join(
             [
-                f'--{boundary}\r\nContent-Disposition: form-data; name="category"\r\n\r\n{category}\r\n'.encode(),
+                *(
+                    f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode()
+                    for name, value in fields.items()
+                ),
                 f'--{boundary}\r\nContent-Disposition: form-data; name="torrents"; filename="grab.torrent"\r\n'
                 "Content-Type: application/x-bittorrent\r\n\r\n".encode()
                 + torrent
@@ -44,8 +50,30 @@ class QBittorrent:
         if answer.decode(errors="replace").strip() == "Fails.":
             raise RuntimeError("qBittorrent refused the torrent file")
 
-    def delete(self, hashes):
-        self.post("/api/v2/torrents/delete", {"hashes": "|".join(hashes), "deleteFiles": "true"})
+    def delete(self, hashes, delete_files=True):
+        self.post("/api/v2/torrents/delete", {"hashes": "|".join(hashes), "deleteFiles": str(delete_files).lower()})
+
+    def files(self, infohash):
+        return json.loads(self.send(f"/api/v2/torrents/files?hash={infohash}"))
+
+    def match_files(self, infohash, wanted):
+        files = []
+        for _ in range(10):
+            files = self.files(infohash)
+            if files:
+                break
+            time.sleep(1)
+        if not files:
+            raise RuntimeError("qBittorrent has not read the torrent file yet")
+        names = {}
+        for f in wanted:
+            names.setdefault(f["size"], []).append(f["name"])
+        for f in files:
+            name = names[f["size"]].pop(0)
+            if f["name"] != name:
+                self.post("/api/v2/torrents/renameFile", {"hash": infohash, "oldPath": f["name"], "newPath": name})
+        self.post("/api/v2/torrents/recheck", {"hashes": infohash})
+        self.post("/api/v2/torrents/start", {"hashes": infohash})
 
     def set_category(self, hashes, category):
         self.post("/api/v2/torrents/setCategory", {"hashes": "|".join(hashes), "category": category})
@@ -317,7 +345,7 @@ def record(state, torrents, settings, now):
 
 
 def drop_twins(qbt, state, torrents):
-    for twin, (original, category) in list(state["twins"].items()):
+    for twin, (original, category, *_) in list(state["twins"].items()):
         if twin not in torrents:
             del state["twins"][twin]
             continue
@@ -327,10 +355,27 @@ def drop_twins(qbt, state, torrents):
         if category == ZEN and seeding["category"] != ZEN:
             qbt.set_category([original], ZEN)
             seeding["category"] = ZEN
-        qbt.delete([twin])
+        qbt.delete([twin], seeding["save_path"] != torrents[twin]["save_path"])
         del torrents[twin]
         del state["twins"][twin]
         print(f"{seeding['name']} now seeds on the tracker, its public twin is gone")
+
+
+def seed_twins(qbt, prowlarr, settings, state, torrents, now):
+    for twin, (original, category, *rest) in list(state["twins"].items()):
+        grabbed_at, link = (rest + [0, ""])[:2]
+        public = torrents.get(twin)
+        if not link or original in torrents or public is None or public["progress"] < 1:
+            continue
+        if now - grabbed_at < settings["twin_seed_after"]:
+            continue
+        try:
+            qbt.add(prowlarr.torrent({"page": "", "link": link}), category, public["save_path"])
+            qbt.match_files(original, qbt.files(twin))
+        except Exception as error:
+            print(f"Cannot seed the tracker copy of {public['name']}: {error}")
+            continue
+        print(f"cross-seed missed {public['name']}, its tracker copy now seeds from the same files")
 
 
 def retire(qbt, settings, state, torrents, t, reason):
@@ -507,7 +552,7 @@ def grab_twins(qbt, prowlarr, settings, state, releases, known, budget, now):
             twin = find_twin(prowlarr, settings, release, now, searches)
             if twin:
                 take(qbt, budget, known, release, twin["torrent"], "ratio", f"its public twin {twin['title']}")
-                state["twins"][twin["infohash"]] = [release["infohash"], "ratio"]
+                state["twins"][twin["infohash"]] = [release["infohash"], "ratio", now, release["link"]]
         except Exception as error:
             print(f"Cannot look for a twin of {release['title']}: {error}")
 
@@ -541,7 +586,7 @@ def grab(qbt, prowlarr, settings, state, torrents, now):
     }
     if budget["slots"] <= 0 or not settings["indexers"]:
         return
-    known = set(torrents) | {original for original, _ in state["twins"].values()}
+    known = set(torrents) | {entry[0] for entry in state["twins"].values()}
     releases = fetch_newest(prowlarr, settings, now)
     grab_twins(qbt, prowlarr, settings, state, releases, known, budget, now)
     grab_paid(qbt, prowlarr, settings, state, torrents, releases, known, budget, now)
@@ -552,6 +597,7 @@ def run_once(qbt, prowlarr, settings, state, now):
     torrents = {t["hash"].lower(): {**t, "hash": t["hash"].lower()} for t in qbt.torrents()}
     record(state, torrents, settings, now)
     drop_twins(qbt, state, torrents)
+    seed_twins(qbt, prowlarr, settings, state, torrents, now)
     clean_farm(qbt, settings, state, torrents, now)
     adopt(qbt, settings, state, torrents)
     clean_zen(qbt, settings, torrents)
@@ -590,6 +636,7 @@ def settings_from_env():
         "twin_max_age_hours": number("RATIO_TWIN_MAX_AGE_HOURS", 24),
         "twin_min_leechers": number("RATIO_TWIN_MIN_LEECHERS", 1),
         "twin_recheck": number("RATIO_TWIN_RECHECK_HOURS", 2) * 3600,
+        "twin_seed_after": number("RATIO_TWIN_SEED_AFTER_MINUTES", 60) * 60,
         "library_categories": tuple(c.strip() for c in os.environ.get("RATIO_LIBRARY_CATEGORIES", "radarr,tv-sonarr").split(",")),
         "adopt_after": number("RATIO_ADOPT_AFTER_HOURS", 6) * 3600,
         "tracker_seeders_in_peers": int(number("RATIO_TRACKER_SEEDERS_IN_PEERS", 2)),

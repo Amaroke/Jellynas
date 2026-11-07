@@ -1,4 +1,5 @@
 import http.server
+import json
 import os
 import tempfile
 import threading
@@ -23,9 +24,10 @@ TRACKER = "https://tracker.c411.org/announce"
 
 
 def torrent(hash, category="ratio", size_gb=3, seeding_days=10, uploaded_gb=0, downloaded_gb=0, progress=1,
-            seeders=100, tracker=TRACKER, completion_on=0):
+            seeders=100, tracker=TRACKER, completion_on=0, save_path=None):
     return {
         "hash": hash,
+        "save_path": save_path or f"/data/torrents/{category}",
         "name": f"Torrent {hash}",
         "category": category,
         "size": size_gb * GB,
@@ -62,14 +64,25 @@ class FakeQBittorrent:
         self.moved = []
         self.made = {}
         self.prefs = {}
+        self.kept = []
+        self.matched = []
 
     def torrents(self):
         return [dict(t) for t in self.list]
 
-    def add(self, torrent, category):
-        self.added.append((bdecode(torrent)[0][b"info"][b"name"].decode(), category))
+    def add(self, torrent, category, save_path=None):
+        name = bdecode(torrent)[0][b"info"][b"name"].decode()
+        self.added.append((name, category) if save_path is None else (name, category, save_path))
 
-    def delete(self, hashes):
+    def files(self, infohash):
+        return [{"name": f"{infohash}.mkv", "size": 7}]
+
+    def match_files(self, infohash, wanted):
+        self.matched.append((infohash, wanted))
+
+    def delete(self, hashes, delete_files=True):
+        if not delete_files:
+            self.kept += hashes
         self.deleted += hashes
         self.list = [t for t in self.list if t["hash"] not in hashes]
 
@@ -112,7 +125,8 @@ class FakeProwlarr:
         return list(self.twins)
 
     def torrent(self, release):
-        return torrent_file(release["infohash"], self.files.get(release["infohash"], [7]))
+        infohash = release.get("infohash") or release["link"].rsplit("/", 1)[1].removesuffix(".torrent")
+        return torrent_file(infohash, self.files.get(infohash, [7]))
 
 
 SETTINGS = {
@@ -137,6 +151,7 @@ SETTINGS = {
     "twin_max_age_hours": 24,
     "twin_min_leechers": 1,
     "twin_recheck": 2 * 3600,
+    "twin_seed_after": 3600,
     "rules": {
         "min_size": 1 * GB,
         "max_size": 5 * GB,
@@ -180,7 +195,7 @@ class Twins(unittest.TestCase):
         state = run(qbt, prowlarr)
         self.assertEqual(prowlarr.queries, ["S03E06 VOSTFR"])
         self.assertEqual(qbt.added, [("public", "ratio")])
-        self.assertEqual(state["twins"], {"public": ["episode", "ratio"]})
+        self.assertEqual(state["twins"], {"public": ["episode", "ratio", NOW, "http://prowlarr/episode.torrent"]})
         self.assertEqual(state["grabbed"], {})
 
     def test_a_twin_is_grabbed_even_while_paused(self):
@@ -227,9 +242,26 @@ class Twins(unittest.TestCase):
 
     def test_the_twin_stays_until_cross_seed_adds_the_tracker_copy(self):
         qbt = FakeQBittorrent([torrent("public", tracker="http://nyaa.tracker.wf/announce")])
-        state = run(qbt, state=empty_state(twins={"public": ["hungry", "ratio"]}))
+        twins = {"public": ["hungry", "ratio", NOW - 1800, "http://prowlarr/hungry.torrent"]}
+        state = run(qbt, state=empty_state(twins=dict(twins)))
         self.assertEqual(qbt.deleted, [])
-        self.assertEqual(state["twins"], {"public": ["hungry", "ratio"]})
+        self.assertEqual(qbt.added, [])
+        self.assertEqual(state["twins"], twins)
+
+    def test_when_cross_seed_misses_the_tracker_copy_ratio_seeds_it_from_the_twin_files(self):
+        qbt = FakeQBittorrent([torrent("public", tracker="http://nyaa.tracker.wf/announce")])
+        twins = {"public": ["hungry", "ratio", NOW - 3600, "http://prowlarr/hungry.torrent"]}
+        run(qbt, state=empty_state(twins=twins))
+        self.assertEqual(qbt.added, [("hungry", "ratio", "/data/torrents/ratio")])
+        self.assertEqual(qbt.matched, [("hungry", [{"name": "public.mkv", "size": 7}])])
+
+    def test_a_twin_sharing_its_files_with_the_tracker_copy_leaves_them_on_disk(self):
+        qbt = FakeQBittorrent([
+            torrent("public", tracker="http://nyaa.tracker.wf/announce"),
+            torrent("hungry"),
+        ])
+        run(qbt, state=empty_state(twins={"public": ["hungry", "ratio", NOW - 7200, "http://prowlarr/hungry.torrent"]}))
+        self.assertEqual(qbt.kept, ["public"])
 
 
 class Farm(unittest.TestCase):
@@ -477,6 +509,10 @@ class FakeServer(http.server.BaseHTTPRequestHandler):
         else:
             self.answer(b"Ok.")
 
+    def do_GET(self):
+        FakeServer.calls.append((self.path, "", b""))
+        self.answer(json.dumps([{"name": "c411/Keroro.mkv", "size": 5}, {"name": "c411/x.nfo", "size": 1}]).encode())
+
     def answer(self, body, headers=None):
         self.send_response(200)
         for name, value in (headers or {}).items():
@@ -505,6 +541,23 @@ class RealClient(unittest.TestCase):
         self.assertTrue(content_type.startswith("multipart/form-data; boundary="))
         self.assertIn(b'name="category"\r\n\r\nzen\r\n', body)
         self.assertIn(b"d8:announce", body)
+
+    def test_a_tracker_copy_is_added_stopped_in_the_twin_folder(self):
+        self.qbt.add(b"d8:announce", "ratio", "/data/torrents/ratio")
+        _, _, body = FakeServer.calls[-1]
+        self.assertIn(b'name="savepath"\r\n\r\n/data/torrents/ratio\r\n', body)
+        self.assertIn(b'name="autoTMM"\r\n\r\nfalse\r\n', body)
+        self.assertIn(b'name="stopped"\r\n\r\ntrue\r\n', body)
+
+    def test_the_tracker_copy_takes_the_twin_file_names_then_checks_them(self):
+        self.qbt.match_files("abc", [{"name": "Sgt Frog.mkv", "size": 5}, {"name": "c411/x.nfo", "size": 1}])
+        calls = [(path, body) for path, _, body in FakeServer.calls if path != "/api/v2/auth/login"]
+        self.assertEqual(calls, [
+            ("/api/v2/torrents/files?hash=abc", b""),
+            ("/api/v2/torrents/renameFile", b"hash=abc&oldPath=c411%2FKeroro.mkv&newPath=Sgt+Frog.mkv"),
+            ("/api/v2/torrents/recheck", b"hashes=abc"),
+            ("/api/v2/torrents/start", b"hashes=abc"),
+        ])
 
     def test_an_expired_session_logs_in_again(self):
         self.qbt.delete(["a"])
