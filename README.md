@@ -47,6 +47,7 @@ flowchart LR
     GitHub{{"GitHub"}}
     Trackers{{"Trackers and peers"}}
     Soulseek{{"Soulseek"}}
+    Manga{{"Manga sites"}}
     ntfy{{"ntfy.sh"}}
 
     subgraph exposure["Exposure"]
@@ -76,7 +77,6 @@ flowchart LR
         Sonarr("Sonarr<br/>shows, anime")
         Lidarr("Lidarr<br/>music")
         LazyLibrarian("LazyLibrarian<br/>books")
-        Suwayomi("Suwayomi<br/>manga")
         Bazarr("Bazarr<br/>subtitles")
         Tdarr("Tdarr<br/>MKV H265")
     end
@@ -85,6 +85,7 @@ flowchart LR
         direction TB
         qBittorrent("qBittorrent<br/>torrents")
         slskd("slskd<br/>Soulseek")
+        Suwayomi("Suwayomi<br/>manga")
     end
 
     subgraph ratio["Ratio"]
@@ -118,6 +119,7 @@ flowchart LR
     automation -->|search| Trackers
     vpn -->|"tunnel only"| Trackers
     vpn -->|"tunnel only"| Soulseek
+    vpn -->|"tunnel only"| Manga
     vpn -->|download| data
     automation -->|"import, subtitles, MKV H265"| data
     watch -->|"read-only"| data
@@ -133,7 +135,6 @@ flowchart LR
     Prowlarr -->|indexers| Sonarr
     Prowlarr -->|indexers| Lidarr
     Prowlarr -->|indexers| LazyLibrarian
-    FlareSolverr --- Suwayomi
     Recyclarr -->|profiles| Radarr
     Recyclarr -->|profiles| Sonarr
     Radarr -->|"new files"| Bazarr
@@ -147,7 +148,7 @@ flowchart LR
     classDef person fill:#37474f,stroke:#263238,color:#ffffff,stroke-width:2px
     classDef external fill:#ffffff,stroke:#607d8b,color:#1f2937,stroke-width:1.5px
     class Friend,Admin person
-    class GitHub,Trackers,Soulseek,ntfy external
+    class GitHub,Trackers,Soulseek,Manga,ntfy external
     classDef exposureNode fill:#ffffff,stroke:#1e88e5,color:#1f2937,stroke-width:1.5px
     class OVH,Caddy exposureNode
     style exposure fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#1f2937
@@ -158,10 +159,10 @@ flowchart LR
     class Jellyfin,Seerr watchNode
     style watch fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px,color:#1f2937
     classDef automationNode fill:#ffffff,stroke:#43a047,color:#1f2937,stroke-width:1.5px
-    class Prowlarr,Recyclarr,FlareSolverr,Radarr,Sonarr,Lidarr,LazyLibrarian,Suwayomi,Bazarr,Tdarr automationNode
+    class Prowlarr,Recyclarr,FlareSolverr,Radarr,Sonarr,Lidarr,LazyLibrarian,Bazarr,Tdarr automationNode
     style automation fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#1f2937
     classDef vpnNode fill:#ffffff,stroke:#fb8c00,color:#1f2937,stroke-width:1.5px
-    class qBittorrent,slskd vpnNode
+    class qBittorrent,slskd,Suwayomi vpnNode
     style vpn fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#1f2937
     classDef ratioNode fill:#ffffff,stroke:#ec407a,color:#1f2937,stroke-width:1.5px
     class autobrr,crossseed,qbitmanage,ratioscript ratioNode
@@ -184,7 +185,7 @@ flowchart LR
 Each optional part is a set of services in `compose.yaml`. To leave one out, comment its lines in a pull request, and doco-cd removes them once merged:
 
 - Without a private tracker, comment `autobrr`, `cross-seed`, `qbit_manage` and `ratio`.
-- Without a VPN, comment `gluetun` and `slskd`, remove `network_mode` and `depends_on` from `qbittorrent/compose.yaml`, and replace `gluetun:8080` with `qbittorrent:8080` in `caddy/Caddyfile`, `cross-seed/config.js`, `qbit_manage/config.yml`, `ratio/ratio.py` and `homepage/services.yaml`. Soulseek shows the IP of each user to the others, so slskd never runs without the VPN.
+- Without a VPN, comment `gluetun`, `slskd` and `suwayomi`, remove `network_mode` and `depends_on` from `qbittorrent/compose.yaml`, and replace `gluetun:8080` with `qbittorrent:8080` in `caddy/Caddyfile`, `cross-seed/config.js`, `qbit_manage/config.yml`, `ratio/ratio.py` and `homepage/services.yaml`. Soulseek shows the IP of each user to the others, so slskd never runs without the VPN, and Suwayomi never fetches a manga site from the home IP.
 - Without a domain, comment `caddy` and publish the port of each web UI in its own `compose.yaml`, reachable over plain HTTP on the local network only.
 
 Remove the tiles of the services left out from `homepage/services.yaml` too.
@@ -758,9 +759,9 @@ In Authors, search a book or an author, add it and mark the book as Wanted. Lazy
 
 ## Suwayomi
 
-Requires [Prowlarr](#prowlarr), for FlareSolverr.
+Requires [qBittorrent](#qbittorrent).
 
-Suwayomi follows manga: it runs the Mihon extensions, which read manga sites, and downloads each new chapter of a manga in the library as a CBZ file into the manga folder of the Library, where Jellyfin reads it. It sees only the manga folder, mounted as its downloads folder, and its appdata folder. Kaizoku is archived and points to Suwayomi, and LazyLibrarian handles manga poorly. Manga sites behind Cloudflare go through FlareSolverr.
+Suwayomi follows manga: it runs the Mihon extensions, which read manga sites, and downloads each new chapter of a manga in the library as a CBZ file into the manga folder of the Library, where Jellyfin reads it. It shares the network of Gluetun, like qBittorrent: manga sites see the IP of the VPN, and when the VPN is down, it has no connectivity at all. It sees only the manga folder, mounted as its downloads folder, and its appdata folder. Kaizoku is archived and points to Suwayomi, and LazyLibrarian handles manga poorly. Suwayomi passes the Cloudflare challenge of a site with its own built-in browser. A site that refuses the IPs of the VPN stays out of reach.
 
 ### Login
 
@@ -1296,7 +1297,7 @@ Run the verification script from the Clone:
 ./scripts/verify.sh
 ```
 
-It checks the NAS from the outside and prints one line per promise, for the services `compose.yaml` includes. To prove the kill switch, it cuts the VPN for a few seconds and then restarts Gluetun, qBittorrent and slskd. A failing line names the service that broke it, and the script exits with an error if any check fails.
+It checks the NAS from the outside and prints one line per promise, for the services `compose.yaml` includes. To prove the kill switch, it cuts the VPN for a few seconds and then restarts Gluetun, qBittorrent, slskd and Suwayomi. A failing line names the service that broke it, and the script exits with an error if any check fails.
 
 The script ends with the public addresses to test yourself. Open each one on a phone on 4G with wifi off: it must load over HTTPS without a certificate warning.
 

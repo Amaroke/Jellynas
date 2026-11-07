@@ -526,7 +526,8 @@ check_login_required homepage "https://homepage.$lan:$https_port/api/services"
 check_api_key_required cross-seed "http://cross-seed:2468/api/status"
 check_exit_ip qbittorrent
 check_exit_ip slskd
-check_kill_switch qbittorrent slskd
+check_exit_ip suwayomi
+check_kill_switch qbittorrent slskd suwayomi
 check_public_hostname "$jellyfin_hostname"
 check_public_hostname "$seerr_hostname"
 check_public_hostname "${domain:+truenas.$lan}" "$host_ip"

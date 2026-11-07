@@ -75,7 +75,8 @@
     {
       "matchDatasources": ["docker"],
       "matchPackageNames": ["lscr.io/linuxserver/lazylibrarian"],
-      "versioning": "regex:^[0-9a-f]+-ls(?<major>\\d+)$"
+      "versioning": "regex:^[0-9a-f]+-ls(?<major>\\d+)$",
+      "automerge": true
     },
     {
       "matchDatasources": ["docker"],

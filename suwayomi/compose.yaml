@@ -8,14 +8,17 @@ services:
     cap_drop:
       - ALL
     user: ${PUID}:${PGID}
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_started
+        restart: true
     environment:
       TZ: ${TZ}
       AUTH_MODE: basic_auth
       AUTH_USERNAME: ${SUWAYOMI_USERNAME}
       AUTH_PASSWORD: ${SUWAYOMI_PASSWORD}
       DOWNLOAD_AS_CBZ: "true"
-      FLARESOLVERR_ENABLED: "true"
-      FLARESOLVERR_URL: http://flaresolverr:8191
     volumes:
       - ${DATA_ROOT}/media/manga:/home/suwayomi/.local/share/Tachidesk/downloads
       - ${APPDATA_ROOT}/suwayomi:/home/suwayomi/.local/share/Tachidesk
