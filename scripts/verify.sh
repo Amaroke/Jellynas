@@ -105,6 +105,16 @@ check_containers_up() {
   done
 }
 
+check_doco_cd() {
+  local state
+  state="$(docker inspect -f '{{.State.Status}}' doco-cd 2>/dev/null)"
+  if [ "$state" = running ]; then
+    pass doco-cd "container is running, the NAS follows main"
+  else
+    fail doco-cd "container is ${state:-missing}, the NAS no longer follows main"
+  fi
+}
+
 check_read_only() {
   local service="$1" path="$2" probe
   enabled "$service" || return
@@ -366,8 +376,8 @@ services="$(docker compose config --services 2>/dev/null)"
 domain="$(env_value DOMAIN)"
 lan_subnet="$(env_value LAN_SUBNET)"
 lan="lan.$domain"
-jellyfin_hostname="jellyfin.$domain"
-seerr_hostname="seerr.$domain"
+jellyfin_hostname="${domain:+jellyfin.$domain}"
+seerr_hostname="${domain:+seerr.$domain}"
 vpn_provider="$(env_value VPN_SERVICE_PROVIDER)"
 host_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
 https_port="$(env_value CADDY_HTTPS_PORT)"
@@ -379,6 +389,7 @@ check_compose_renders
 check_env_filled
 check_containers_up
 check_read_only jellyfin /data/media
+check_doco_cd
 check_no_media_mount caddy
 check_no_media_mount gluetun
 check_no_torrents_mount jellyfin
@@ -408,10 +419,10 @@ check_exit_ip qbittorrent
 check_kill_switch qbittorrent
 check_public_hostname "$jellyfin_hostname"
 check_public_hostname "$seerr_hostname"
-check_public_hostname "truenas.$lan" "$host_ip"
-check_public_hostname "jellyfin.$lan" "$host_ip"
-check_public_hostname "seerr.$lan" "$host_ip"
-check_public_hostname "qbittorrent.$lan" "$host_ip"
+check_public_hostname "${domain:+truenas.$lan}" "$host_ip"
+check_public_hostname "${domain:+jellyfin.$lan}" "$host_ip"
+check_public_hostname "${domain:+seerr.$lan}" "$host_ip"
+check_public_hostname "${domain:+qbittorrent.$lan}" "$host_ip"
 check_lan_refused_outside "radarr.$lan"
 check_lan_refused_outside "truenas.$lan"
 check_unknown_host_refused "$jellyfin_hostname"

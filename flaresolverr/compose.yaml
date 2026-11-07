@@ -9,7 +9,6 @@ services:
       - ALL
     environment:
       TZ: ${TZ}
-      LOG_LEVEL: info
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8191/health"]
       timeout: 10s

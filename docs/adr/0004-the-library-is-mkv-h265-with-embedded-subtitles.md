@@ -1,5 +1,7 @@
 # The Library is MKV H265 1080p with its subtitles embedded
 
+Supersedes ADR 0001 (Tdarr normalises to MKV H265), ADR 0003 (Bazarr subtitle languages) and the first ADR 0004 (Tdarr picks tracks from the file).
+
 Every video of the Library is normalised by Tdarr to one compact format that most devices play directly, offline on a phone included, with its subtitles inside the file. Recyclarr makes most downloads compliant already ([ADR 0002](0002-recyclarr-prefers-french-h265-1080p.md)), Bazarr fetches the missing subtitles, and Tdarr fixes the rest.
 
 ## Decision
