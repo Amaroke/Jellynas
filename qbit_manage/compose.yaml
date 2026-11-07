@@ -1,6 +1,6 @@
 services:
   qbit_manage:
-    image: ghcr.io/stuffanthings/qbit_manage:v4.14.0
+    image: ghcr.io/stuffanthings/qbit_manage:v4.15.0
     container_name: qbit_manage
     restart: unless-stopped
     environment:
