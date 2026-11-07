@@ -17,6 +17,6 @@ services:
     labels:
       kuma.backup.docker.name: Backup
     volumes:
-      - ${APPDATA_ROOT}:/backup/appdata:ro
-      - ${BACKUP_ROOT}:/archive
+      - ${APPDATA_ROOT}/:/backup/appdata:ro
+      - ${BACKUP_ROOT}/:/archive
       - /var/run/docker.sock:/var/run/docker.sock:ro

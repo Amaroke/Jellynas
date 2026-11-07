@@ -61,10 +61,10 @@ class BackupTest(unittest.TestCase):
         self.assertIn(BACKUP, included_compose_files())
 
     def test_backup_mounts_the_appdata_read_only(self):
-        self.assertIn("${APPDATA_ROOT}:/backup/appdata:ro", volumes(self.backup()))
+        self.assertIn("${APPDATA_ROOT}/:/backup/appdata:ro", volumes(self.backup()))
 
     def test_archives_land_in_the_backup_root(self):
-        self.assertIn("${BACKUP_ROOT}:/archive", volumes(self.backup()))
+        self.assertIn("${BACKUP_ROOT}/:/archive", volumes(self.backup()))
 
     def test_backup_mounts_no_data(self):
         self.assertFalse([volume for volume in volumes(self.backup()) if volume.startswith("${DATA_ROOT}")])
