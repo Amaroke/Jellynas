@@ -273,22 +273,22 @@ sonarr:
         score: 0
         assign_scores_to: *sonarr_profiles
       - trash_ids:
-          - 2657724652a9b13922929394c1b68819
+          - 580b413a4955043e64cd93869dbc49ca
         score: -10000
         assign_scores_to: *sonarr_profiles
       - trash_ids:
-          - 01cd3476210501abe454cd7cb0ab8bdb
+          - eeeb577be6aa6b004982e07bc1c9c844
         score: -10000
         assign_scores_to:
           - name: MULTi 1080p
       - trash_ids:
           - 07a32f77690263bb9fda1842db7e273f
-          - 1e2981d54505e82806b3ed82c816acbe
+          - 84c4decf96e90e52b51b027964242225
         score: 4000
         assign_scores_to:
           - name: Anime 1080p
       - trash_ids:
-          - 312c7aae7ed0459cca4572a0310e8669
+          - 317ae62d88f248a42f17f925720d1f18
         score: -10000
         assign_scores_to:
           - name: Anime 1080p
