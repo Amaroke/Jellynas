@@ -51,11 +51,10 @@ def apply_alerts(hub_url, env):
     existing = request("GET", f"{api}/collections/user_settings/records?{query}", token=token)["items"]
     if existing:
         record = existing[0]
-        request("PATCH", f"{api}/collections/user_settings/records/{record['id']}",
-                {"settings": with_topic(record.get("settings") or {}, topic)}, token)
     else:
-        request("POST", f"{api}/collections/user_settings/records",
-                {"user": user, "settings": with_topic({}, topic)}, token)
+        record = request("POST", f"{api}/collections/user_settings/records", {"user": user}, token)
+    request("PATCH", f"{api}/collections/user_settings/records/{record['id']}",
+            {"settings": with_topic(record.get("settings") or {}, topic)}, token)
 
     systems = [system["id"] for system in
                request("GET", f"{api}/collections/systems/records?perPage=500", token=token)["items"]]
