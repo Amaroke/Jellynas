@@ -6,6 +6,9 @@
   "minimumReleaseAge": "3 days",
   "internalChecksFilter": "none",
   "automergeStrategy": "squash",
+  "pre-commit": {
+    "enabled": true
+  },
   "customManagers": [
     {
       "customType": "regex",
@@ -13,11 +16,33 @@
       "matchStrings": ["renovate@(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       "depNameTemplate": "renovate",
       "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
+      "matchStrings": ["(?<depName>ghcr\\.io/gitleaks/gitleaks|rhysd/actionlint):(?<currentValue>v?\\d+\\.\\d+\\.\\d+)"],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
+      "matchStrings": ["pipx run (?<depName>[a-z-]+)==(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^caddy/Dockerfile$/"],
+      "matchStrings": ["--with (?<depName>\\S+)@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      "datasourceTemplate": "go"
     }
   ],
   "packageRules": [
     {
-      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
+      "matchPackageNames": ["/gitleaks/"],
+      "groupName": "gitleaks"
+    },
+    {
+      "matchUpdateTypes": ["minor", "patch", "digest"],
       "automerge": true
     },
     {
@@ -55,11 +80,6 @@
       "matchDatasources": ["docker"],
       "matchPackageNames": ["lscr.io/linuxserver/qbittorrent"],
       "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)_v(?<compatibility>\\d+)\\.\\d+\\.\\d+-ls(?<build>\\d+)$"
-    },
-    {
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["jellynas-caddy"],
-      "enabled": false
     }
   ]
 }
