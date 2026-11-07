@@ -850,7 +850,7 @@ def settings_from_env():
         "twin_min_leechers": 1,
         "twin_recheck": 2 * 3600,
         "twin_seed_after": 3600,
-        "library_categories": ("radarr", "tv-sonarr", "lidarr"),
+        "library_categories": ("radarr", "tv-sonarr", "lidarr", "lazylibrarian"),
         "adopt_after": 6 * 3600,
         "tracker_seeders_in_peers": 2,
         "rules": {

@@ -20,6 +20,7 @@ cat:
   radarr: /data/torrents/movies
   tv-sonarr: /data/torrents/shows
   lidarr: /data/torrents/music
+  lazylibrarian: /data/torrents/books
   ratio: /data/torrents/ratio
   zen: /data/torrents/zen
   cross-seed-link: /data/torrents/cross-seed/*

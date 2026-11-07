@@ -74,6 +74,17 @@
     },
     {
       "matchDatasources": ["docker"],
+      "matchPackageNames": ["lscr.io/linuxserver/lazylibrarian"],
+      "versioning": "regex:^[0-9a-f]+-ls(?<major>\\d+)$",
+      "automerge": true
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/suwayomi/suwayomi-server"],
+      "versioning": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-stable$"
+    },
+    {
+      "matchDatasources": ["docker"],
       "matchPackageNames": ["lscr.io/linuxserver/jellyfin"],
       "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)(?:\\.(?<patch>\\d+))?ubu(?<compatibility>\\d+)-ls(?<build>\\d+)$"
     },
