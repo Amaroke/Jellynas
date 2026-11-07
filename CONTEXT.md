@@ -47,3 +47,7 @@ _Avoid_: rare pool, bonus torrents
 **Twin**:
 The same release, byte for byte, on a public tracker, downloaded there so that its private copy costs no download on the private tracker.
 _Avoid_: mirror, duplicate
+
+**Source**:
+How a torrent of the private tracker came to the NAS: a paid grab, a Twin, a freeleech grab, a cross-seed of the Library, a Library download from the tracker, or a rare torrent hunted for the Zen reserve. It never changes, even when the torrent later moves to the Zen reserve.
+_Avoid_: origin, kind, pool
