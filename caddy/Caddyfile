@@ -72,6 +72,7 @@
 	import lan suwayomi gluetun:4567
 	import lan bazarr bazarr:6767
 	import lan tdarr tdarr:8265
+	import lan indexarr indexarr:8787
 	import lan autobrr autobrr:7474
 	import lan qbit-manage qbit_manage:8181
 	import lan beszel beszel:8090

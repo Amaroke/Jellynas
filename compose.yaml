@@ -17,6 +17,7 @@ include:
   - recyclarr/compose.yaml
   - bazarr/compose.yaml
   - tdarr/compose.yaml
+  - indexarr/compose.yaml
   - autobrr/compose.yaml
   - cross-seed/compose.yaml
   - qbit_manage/compose.yaml

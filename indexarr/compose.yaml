@@ -1,0 +1,37 @@
+services:
+  indexarr:
+    image: ghcr.io/techn0phil/indexarr:1.1.1
+    container_name: indexarr
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges
+    environment:
+      UID: ${PUID}
+      GID: ${PGID}
+      TZ: ${TZ}
+      AUTH_MODE: simple
+      AUTH_ADMIN_USERNAME: ${INDEXARR_USERNAME}
+      AUTH_ADMIN_PASSWORD: ${INDEXARR_PASSWORD}
+      AUTH_SESSION_SECRET: ${INDEXARR_SESSION_SECRET}
+      MOVIES_LIBRARY_PATHS: /data/media/movies
+      SERIES_LIBRARY_PATHS: /data/media/shows,/data/media/anime
+      RADARR_URL: http://radarr:7878
+      RADARR_API_KEY: ${RADARR_API_KEY}
+      SONARR_URL: http://sonarr:8989
+      SONARR_API_KEY: ${SONARR_API_KEY}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      TVDB_API_KEY: ${TVDB_API_KEY:-}
+      DETECTION_LANGUAGE: fr
+      METADATA_LANGUAGE: fr
+    labels:
+      kuma.indexarr.http.name: Indexarr
+      kuma.indexarr.http.url: http://indexarr:8787/health
+    volumes:
+      - ${APPDATA_ROOT}/indexarr:/app/data
+      - ${DATA_ROOT}/media/movies:/data/media/movies:ro
+      - ${DATA_ROOT}/media/shows:/data/media/shows:ro
+      - ${DATA_ROOT}/media/anime:/data/media/anime:ro
+    healthcheck:
+      test: ["CMD", "busybox", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://127.0.0.1:8787/health"]
+      timeout: 10s
+      start_period: 30s
