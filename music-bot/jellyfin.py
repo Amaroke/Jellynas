@@ -1,4 +1,5 @@
 import json
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -7,6 +8,7 @@ from player import Track
 
 KINDS = ("MusicArtist", "MusicAlbum", "Playlist", "Audio")
 MENU_SIZE = 25
+COVER_SIZE = 300
 
 
 @dataclass(frozen=True)
@@ -23,7 +25,9 @@ def artist_of(item):
 
 
 def track_of(item):
-    return Track(item["Id"], item.get("Name", ""), artist_of(item), item.get("Album", ""), item["Path"])
+    return Track(
+        item["Id"], item.get("Name", ""), artist_of(item), item.get("Album", ""), item["Path"], item.get("AlbumId", "")
+    )
 
 
 def hit_of(kind, item):
@@ -44,13 +48,27 @@ class Jellyfin:
         self.url = url.rstrip("/")
         self.key = key
 
-    def get(self, path, **params):
+    def fetch(self, path, **params):
         query = urllib.parse.urlencode(params)
         request = urllib.request.Request(
             f"{self.url}{path}?{query}", headers={"Authorization": f'MediaBrowser Token="{self.key}"'}
         )
         with urllib.request.urlopen(request, timeout=30) as response:
-            return json.load(response)
+            return response.read()
+
+    def get(self, path, **params):
+        return json.loads(self.fetch(path, **params))
+
+    def cover(self, track):
+        for item_id in (track.id, track.album_id):
+            if not item_id:
+                continue
+            try:
+                return self.fetch(f"/Items/{item_id}/Images/Primary", maxWidth=COVER_SIZE, format="Jpg")
+            except urllib.error.HTTPError as error:
+                if error.code != 404:
+                    raise
+        return None
 
     def items(self, path, **params):
         return self.get(path, **params).get("Items") or []

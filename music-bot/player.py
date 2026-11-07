@@ -10,6 +10,7 @@ class Track:
     artist: str
     album: str
     path: str
+    album_id: str = ""
 
     @property
     def label(self):

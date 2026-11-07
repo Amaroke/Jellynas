@@ -1,4 +1,5 @@
 import asyncio
+import io
 import logging
 import os
 import sys
@@ -7,7 +8,7 @@ import time
 import discord
 from discord import app_commands
 from player import Player
-from rules import ROLE, control_refusal, nickname, play_refusal, should_leave
+from rules import NICKNAME, ROLE, activity, control_refusal, play_refusal, should_leave
 from status import Status, serve, summary
 
 from jellyfin import Jellyfin
@@ -57,7 +58,6 @@ class MusicBot(discord.Client):
         self.volume = 0.5
         self.text_channel = None
         self.now_playing = None
-        self.nickname = ""
         self.alone_since = None
         self.idle_since = None
         self.lock = asyncio.Lock()
@@ -124,19 +124,32 @@ class MusicBot(discord.Client):
             log.error("Playback failed: %s", error)
         asyncio.run_coroutine_threadsafe(self.play_next(), self.loop)
 
-    async def rename(self, track):
-        name = nickname(track)
+    async def rename(self):
         guild = self.get_guild(self.guild.id)
-        if name == self.nickname or guild is None:
+        if guild is None or guild.me.nick == NICKNAME:
             return
         try:
-            await guild.me.edit(nick=name)
-            self.nickname = name
+            await guild.me.edit(nick=NICKNAME)
         except discord.HTTPException:
             log.exception("Could not rename the music bot")
 
+    async def listen(self, track):
+        name = activity(track)
+        listening = discord.Activity(type=discord.ActivityType.listening, name=name) if name else None
+        try:
+            await self.change_presence(activity=listening)
+        except Exception:
+            log.exception("Could not set the status of the music bot")
+
+    async def cover(self, track):
+        try:
+            return await asyncio.to_thread(self.jellyfin.cover, track)
+        except Exception:
+            log.exception("Jellyfin did not give the cover of %s", track.id)
+            return None
+
     async def show(self, track):
-        await self.rename(track)
+        await self.listen(track)
         if self.now_playing:
             try:
                 await self.now_playing.delete()
@@ -149,8 +162,13 @@ class MusicBot(discord.Client):
                 embed.set_footer(text=track.album)
             source = "Queue" if self.player.queue or not self.player.shuffle else "Shuffle"
             embed.set_author(name=f"Now playing, from the {source}")
+            image = await self.cover(track)
+            files = []
+            if image:
+                files.append(discord.File(io.BytesIO(image), filename="cover.jpg"))
+                embed.set_thumbnail(url="attachment://cover.jpg")
             try:
-                self.now_playing = await self.text_channel.send(embed=embed, view=Controls(self))
+                self.now_playing = await self.text_channel.send(embed=embed, files=files, view=Controls(self))
             except discord.HTTPException:
                 log.exception("Could not post the track now playing")
 
@@ -164,6 +182,7 @@ class MusicBot(discord.Client):
         self.alone_since = None
         self.idle_since = None
         await self.show(None)
+        await self.rename()
 
     async def toggle_pause(self):
         if self.voice.is_paused():

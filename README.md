@@ -1031,7 +1031,7 @@ The music bot plays the music of the Library in a voice channel of the Discord s
 ### Discord application
 
 1. On [the Discord developer portal](https://discord.com/developers/applications), click "New Application" and name it.
-2. In Bot, click "Reset Token" and copy the token into `DISCORD_TOKEN`.
+2. In Bot, upload the profile picture under Icon, click "Reset Token" and copy the token into `DISCORD_TOKEN`.
 3. In OAuth2 > URL Generator, tick the scopes `bot` and `applications.commands`, then the permissions View Channels, Send Messages, Embed Links, Change Nickname, Connect and Speak. Open the generated URL and add the bot to your server.
 4. In Discord, User Settings > Advanced, turn on Developer Mode. Right click the server, click "Copy Server ID" and paste it into `DISCORD_GUILD_ID`.
 5. In Server Settings > Roles, create the `MusicDJ` role and give it to each DJ.
@@ -1058,7 +1058,7 @@ A DJ joins a voice channel, then:
 | `/queue` | Shows the track playing and the Queue |
 | `/volume <0-100>` | Sets the volume |
 
-Each track posts a message with Pause, Skip and Stop buttons. Every command but `/queue` needs the DJ in the voice channel of the music bot, and a `/play` from another voice channel waits until it stops there. It leaves a voice channel after one minute alone or five minutes without playing.
+Each track posts a message with its cover and Pause, Skip and Stop buttons, and shows as the status of the music bot, Listening to the track. Each time it leaves a voice channel, it takes back the nickname `MusicBot by Amaroke`. Every command but `/queue` needs the DJ in the voice channel of the music bot, and a `/play` from another voice channel waits until it stops there. It leaves a voice channel after one minute alone or five minutes without playing.
 
 ## Private tracker ratio
 
