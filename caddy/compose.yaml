@@ -1,11 +1,14 @@
 services:
   caddy:
     build: .
-    image: jellynas-caddy
     container_name: caddy
     restart: unless-stopped
     security_opt:
       - no-new-privileges
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
     environment:
       DOMAIN: ${DOMAIN}
       LAN_SUBNET: ${LAN_SUBNET}

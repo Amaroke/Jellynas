@@ -6,42 +6,29 @@ Every tool here is maintained open source software, picked by the Admin, and the
 
 Follow the sections in order. Each one starts with the sections it requires. Every command runs on TrueNAS, as root, from the Clone, as [TrueNAS](#truenas) sets out.
 
-1. [Prerequisites](#prerequisites)
-2. [TrueNAS](#truenas)
-3. [Settings](#settings)
-4. [Domain](#domain)
-5. [Deploy](#deploy)
-6. [Jellyfin](#jellyfin)
-7. [Seerr](#seerr)
-8. [qBittorrent](#qbittorrent)
-9. [Prowlarr](#prowlarr)
-10. [Radarr](#radarr)
-11. [Sonarr](#sonarr)
-12. [Requests](#requests)
-13. [Recyclarr](#recyclarr)
-14. [Tdarr](#tdarr)
-15. [Bazarr](#bazarr)
-16. [Private tracker ratio](#private-tracker-ratio)
-17. [Verify the NAS](#verify-the-nas)
-
-## Prerequisites
-
-- **Required**: [TrueNAS SCALE](https://www.truenas.com/download-truenas-community-edition/) installed, on a machine or a virtual machine, with a pool. [ADR 0007](docs/adr/0007-the-nas-runs-on-the-docker-of-truenas-scale.md) records why. Any Linux host with Docker Compose works too, with its own paths and ids in `.env`.
-- **Recommended**: a VPN with port forwarding, here AirVPN. ProtonVPN, Mullvad or any provider Gluetun supports work too. Without a VPN, a seedbox such as Ultra.cc, Seedhost or Whatbox can download in place of the NAS, or the NAS downloads with the home IP, at your own risk.
-- **Optional**: a domain, here at OVH. Cloudflare, Gandi, Porkbun or any registrar with an API that [caddy-dns](https://github.com/caddy-dns) supports work too. Without a domain, a free dynamic DNS subdomain from DuckDNS, deSEC or dynv6 does the same job, or the NAS stays on the local network only.
-- **Optional**: an Account on a private tracker, here C411. Any private tracker works, minus the Zen reserve, which only C411 pays for.
-
-Each optional part is a set of services in `compose.yaml`. To leave one out, comment its lines in a pull request, and doco-cd removes them once merged:
-
-- Without a private tracker, comment `autobrr`, `cross-seed`, `qbit_manage` and `ratio`.
-- Without a VPN, comment `gluetun`, remove `network_mode` and `depends_on` from `qbittorrent/compose.yaml`, and replace `gluetun:8080` with `qbittorrent:8080` in `caddy/Caddyfile`, `cross-seed/config.js`, `qbit_manage/config.yml` and `ratio/ratio.py`.
-- Without a domain, comment `caddy` and publish the port of each web UI in its own `compose.yaml`, reachable over plain HTTP on the local network only.
-
-`./scripts/verify.sh` only checks the services that `compose.yaml` still includes.
+1. [Architecture](#architecture)
+2. [Prerequisites](#prerequisites)
+3. [TrueNAS](#truenas)
+4. [Settings](#settings)
+5. [Domain](#domain)
+6. [Deploy](#deploy)
+7. [Jellyfin](#jellyfin)
+8. [Seerr](#seerr)
+9. [qBittorrent](#qbittorrent)
+10. [Prowlarr](#prowlarr)
+11. [Radarr](#radarr)
+12. [Sonarr](#sonarr)
+13. [Requests](#requests)
+14. [Recyclarr](#recyclarr)
+15. [Tdarr](#tdarr)
+16. [Bazarr](#bazarr)
+17. [Private tracker ratio](#private-tracker-ratio)
+18. [Verify the NAS](#verify-the-nas)
+19. [Contributing](#contributing)
 
 ## Architecture
 
-Dark circles are people, hexagons are services outside the NAS, rounded boxes are containers, cylinders are storage. Dashed grey boxes and links are planned and not running yet.
+Dark circles are people, hexagons are services outside the NAS, rounded boxes are containers, cylinders are storage.
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"fontSize": "15px", "primaryTextColor": "#1f2937", "lineColor": "#78909c", "edgeLabelBackground": "#ffffff", "clusterBkg": "#ffffff", "background": "#ffffff"}}}%%
@@ -51,10 +38,7 @@ flowchart LR
     Friend(("Friend"))
     Admin(("Admin"))
     GitHub{{"GitHub"}}
-    ntfy{{"ntfy.sh"}}
     Trackers{{"Trackers and peers"}}
-    Soulseek{{"Soulseek"}}
-    MangaSources{{"Manga sources"}}
 
     subgraph exposure["Exposure"]
         direction LR
@@ -66,16 +50,6 @@ flowchart LR
         direction TB
         Renovate("Renovate<br/>image updates")
         Deployer("doco-cd<br/>pulls main")
-    end
-
-    subgraph observation["Observation"]
-        direction TB
-        Homepage("Homepage<br/>dashboard")
-        Beszel("Beszel<br/>resources")
-        UptimeKuma("Uptime Kuma<br/>uptime")
-        Dozzle("Dozzle<br/>logs")
-        Indexarr("Indexarr<br/>file catalog")
-        Backup("Backup<br/>appdata")
     end
 
     subgraph watch["Watch and request"]
@@ -91,9 +65,6 @@ flowchart LR
         FlareSolverr("FlareSolverr<br/>Cloudflare")
         Radarr("Radarr<br/>movies")
         Sonarr("Sonarr<br/>shows, anime")
-        Lidarr("Lidarr<br/>music")
-        LazyLibrarian("LazyLibrarian<br/>books")
-        Suwayomi("Suwayomi<br/>manga")
         Bazarr("Bazarr<br/>subtitles")
         Tdarr("Tdarr<br/>MKV H265")
     end
@@ -101,7 +72,6 @@ flowchart LR
     subgraph vpn["Gluetun VPN, kill switch"]
         direction TB
         qBittorrent("qBittorrent<br/>torrents")
-        slskd("slskd<br/>Soulseek")
     end
 
     subgraph ratio["Ratio"]
@@ -116,7 +86,6 @@ flowchart LR
         direction TB
         Torrents[("Torrents")]
         Library[("Library")]
-        Backups[("Backups")]
     end
     end
 
@@ -142,28 +111,13 @@ flowchart LR
     Radarr -->|"new files"| Bazarr
     Sonarr -->|"new files"| Bazarr
     Bazarr -->|requeue| Tdarr
-    Prowlarr -->|indexers| Lidarr
-    Prowlarr -->|indexers| LazyLibrarian
-    MangaSources -->|"manga chapters"| automation
-    vpn -->|"tunnel only"| Soulseek
-    Admin -->|LAN| observation
-    observation -.->|"tiles, logs, checks"| automation
-    observation -.->|"tiles, logs, checks"| vpn
-    observation -.->|"tiles, logs, checks"| ratio
-    observation -->|"read-only, nightly backup"| data
-    observation -->|alerts| ntfy
-    ntfy -.->|push| Admin
-    Homepage ~~~ Beszel ~~~ UptimeKuma
-    Dozzle ~~~ Indexarr ~~~ Backup
     autobrr ~~~ crossseed ~~~ qbitmanage
     qbitmanage ~~~ ratioscript
-    Prowlarr ~~~ Suwayomi
 
     style canvas fill:#ffffff,stroke:#e5e7eb,stroke-width:1px
     linkStyle default stroke:#78909c,color:#374151
     classDef person fill:#37474f,stroke:#263238,color:#ffffff,stroke-width:2px
     classDef external fill:#ffffff,stroke:#607d8b,color:#1f2937,stroke-width:1.5px
-    classDef planned fill:#ffffff,stroke:#9e9e9e,stroke-dasharray:4 4,color:#9e9e9e
     class Friend,Admin person
     class GitHub,Trackers external
     classDef exposureNode fill:#ffffff,stroke:#1e88e5,color:#1f2937,stroke-width:1.5px
@@ -172,8 +126,6 @@ flowchart LR
     classDef gitopsNode fill:#ffffff,stroke:#7e57c2,color:#1f2937,stroke-width:1.5px
     class Renovate,Deployer gitopsNode
     style gitops fill:#ede7f6,stroke:#7e57c2,stroke-width:2px,color:#1f2937
-    classDef observationNode fill:#ffffff,stroke:#00acc1,color:#1f2937,stroke-width:1.5px
-    style observation fill:#fafafa,stroke:#9e9e9e,stroke-dasharray:4 4,color:#9e9e9e
     classDef watchNode fill:#ffffff,stroke:#ab47bc,color:#1f2937,stroke-width:1.5px
     class Jellyfin,Seerr watchNode
     style watch fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px,color:#1f2937
@@ -189,9 +141,22 @@ flowchart LR
     classDef dataNode fill:#ffffff,stroke:#78909c,color:#1f2937,stroke-width:1.5px
     class Torrents,Library dataNode
     style data fill:#eceff1,stroke:#78909c,stroke-width:2px,color:#1f2937
-    class Backup,Backups,Beszel,Dozzle,Homepage,Indexarr,LazyLibrarian,Lidarr,MangaSources,Soulseek,Suwayomi,UptimeKuma,ntfy,slskd planned
-    linkStyle 22,23,24,25,26,27,28,29,30,31,32 stroke:#9e9e9e,stroke-width:1px,stroke-dasharray:4 4,color:#9e9e9e
 ```
+
+## Prerequisites
+
+- **Required**: [TrueNAS SCALE](https://www.truenas.com/download-truenas-community-edition/) installed, on a machine or a virtual machine, with a pool. [ADR 0007](docs/adr/0007-the-nas-runs-on-the-docker-of-truenas-scale.md) records why. Any Linux host with Docker Compose works too, with its own paths and ids in `.env`.
+- **Recommended**: a VPN with port forwarding, here AirVPN. ProtonVPN, Mullvad or any provider Gluetun supports work too. Without a VPN, a seedbox such as Ultra.cc, Seedhost or Whatbox can download in place of the NAS, or the NAS downloads with the home IP, at your own risk.
+- **Optional**: a domain, here at OVH. Cloudflare, Gandi, Porkbun or any registrar with an API that [caddy-dns](https://github.com/caddy-dns) supports work too. Without a domain, a free dynamic DNS subdomain from DuckDNS, deSEC or dynv6 does the same job, or the NAS stays on the local network only.
+- **Optional**: an account on a private tracker, here C411. Any private tracker works, minus the Zen reserve, which only C411 pays for.
+
+Each optional part is a set of services in `compose.yaml`. To leave one out, comment its lines in a pull request, and doco-cd removes them once merged:
+
+- Without a private tracker, comment `autobrr`, `cross-seed`, `qbit_manage` and `ratio`.
+- Without a VPN, comment `gluetun`, remove `network_mode` and `depends_on` from `qbittorrent/compose.yaml`, and replace `gluetun:8080` with `qbittorrent:8080` in `caddy/Caddyfile`, `cross-seed/config.js`, `qbit_manage/config.yml` and `ratio/ratio.py`.
+- Without a domain, comment `caddy` and publish the port of each web UI in its own `compose.yaml`, reachable over plain HTTP on the local network only.
+
+`./scripts/verify.sh` only checks the services that `compose.yaml` still includes.
 
 ## TrueNAS
 
@@ -272,7 +237,7 @@ In the [OVH Control Panel](https://www.ovh.com/manager/), open Web Cloud > Domai
 
 ### API keys
 
-1. Open [eu.api.ovh.com/createToken](https://eu.api.ovh.com/createToken/) and sign in with the OVH Account that holds the domain.
+1. Open [eu.api.ovh.com/createToken](https://eu.api.ovh.com/createToken/) and sign in with the OVH account that holds the domain.
 2. Enter `Jellynas Caddy` as the name and description, and pick "Unlimited" as the validity.
 3. Add these rights, with `<DOMAIN>` written out, so the keys can only change the records of the zone:
 
@@ -368,7 +333,7 @@ docker compose -f doco-cd/compose.yaml up -d
 
 ### Renovate
 
-[Renovate](https://github.com/apps/renovate) keeps the images and the GitHub Actions up to date, where Dependabot could not compare most linuxserver tags. Install the app on the repo only, then merge the onboarding pull request it opens if it still opens one. Its settings are in `renovate.json`:
+[Renovate](https://github.com/apps/renovate) keeps the images, the GitHub Actions and the CI tools up to date, where Dependabot could not compare most linuxserver tags. Install the app on the repo only, then merge the onboarding pull request it opens if it still opens one. Its settings are in `renovate.json`:
 
 - It opens its pull requests as soon as a release is published, and merges an update only once its release is 3 days old.
 - It merges a minor or patch update by itself once the CI passes, and the NAS deploys it.
@@ -480,7 +445,7 @@ The line `Public IP address is` in `docker compose logs gluetun` shows the VPN a
 
 In qBittorrent, Tools > Options > Connection, set "Port used for incoming connections" to `VPN_FORWARDED_PORT` and uncheck "Use UPnP / NAT-PMP port forwarding from my router". Back on the ports page, the test button of the port then shows it as open while a torrent runs.
 
-### Account
+### Login
 
 1. Read the temporary password qBittorrent printed at its first start:
 
@@ -533,7 +498,7 @@ Requires [qBittorrent](#qbittorrent).
 
 Prowlarr holds the indexers once and pushes them to Radarr, Sonarr and the other tools. FlareSolverr opens indexers protected by Cloudflare for it. Neither sees any media file. Jackett can replace Prowlarr, without the push.
 
-### Account
+### Login
 
 1. Open `https://prowlarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the local network.
 2. Prowlarr asks for an authentication method at the first visit. Pick "Forms (Login Page)", set "Authentication Required" to "Enabled", never "Disabled for Local Addresses", and enter a username and a strong password, distinct from the other tools, stored in your password manager.
@@ -546,11 +511,11 @@ In Settings > Indexers, click "+" and pick FlareSolverr. Enter `flaresolverr` as
 
 ### Indexers
 
-In Indexers, click "Add Indexer", pick a tracker and fill in what it asks for, an Account for a private one. For an indexer behind Cloudflare, add the `flaresolverr` tag so its requests go through FlareSolverr. Click "Test", then "Save".
+In Indexers, click "Add Indexer", pick a tracker and fill in what it asks for, an account for a private one. For an indexer behind Cloudflare, add the `flaresolverr` tag so its requests go through FlareSolverr. Click "Test", then "Save".
 
 ### Seeding goals of private trackers
 
-A private tracker bans an Account for a hit and run. For each private indexer, in Indexers, edit it, click "Show Advanced", and set "Seed Ratio" and "Seed Time" in minutes to the minimums of its rules page. Prowlarr syncs them to Radarr and Sonarr, which hand them to qBittorrent with each torrent, so "Remove Completed" never removes a private torrent before the tracker allows it. An indexer left empty uses the global seeding limits of qBittorrent.
+A private tracker bans an account for a hit and run. For each private indexer, in Indexers, edit it, click "Show Advanced", and set "Seed Ratio" and "Seed Time" in minutes to the minimums of its rules page. Prowlarr syncs them to Radarr and Sonarr, which hand them to qBittorrent with each torrent, so "Remove Completed" never removes a private torrent before the tracker allows it. An indexer left empty uses the global seeding limits of qBittorrent.
 
 ## Radarr
 
@@ -558,7 +523,7 @@ Requires [Prowlarr](#prowlarr).
 
 Radarr fulfils movie Requests: it searches the indexers, sends the torrent to qBittorrent, then copies the finished movie into the Library. No other maintained open source tool covers movies as well. It sees only the movies folder, under `/data/media/movies`, and the torrents tree, under `/data/torrents`.
 
-### Account
+### Login
 
 Open `https://radarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication the same way as Prowlarr, with its own username and password. Copy the API key from Settings > General > Security into `RADARR_API_KEY` in `.env`.
 
@@ -575,7 +540,7 @@ In Settings > Media Management, click "Show Advanced" at the top, then:
 
 1. In qBittorrent, right-click "Categories" in the left panel, pick "Add category", and enter `radarr` as the category and `/data/torrents/movies` as the save path.
 2. In Radarr, Settings > Download Clients, click "+" and pick qBittorrent.
-3. Enter `gluetun` as the host, since qBittorrent shares its network, `8080` as the port, and the qBittorrent Account.
+3. Enter `gluetun` as the host, since qBittorrent shares its network, `8080` as the port, and the qBittorrent login.
 4. Set "Category" to `radarr`.
 5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding goal, Radarr removes it and its files from the torrents tree, and the movie stays in the Library.
 6. Click "Test", then "Save".
@@ -595,7 +560,7 @@ Requires [Prowlarr](#prowlarr).
 
 Sonarr fulfils show Requests and fetches new episodes on its own: it searches the indexers, sends the torrent to qBittorrent, then copies each finished episode into the Library. It sees only the shows and anime folders, under `/data/media/shows` and `/data/media/anime`, and the torrents tree, under `/data/torrents`. Medusa or SickChill can replace it.
 
-### Account
+### Login
 
 Open `https://sonarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication the same way as Prowlarr, with its own username and password. Copy the API key from Settings > General > Security into `SONARR_API_KEY` in `.env`.
 
@@ -612,7 +577,7 @@ In Settings > Media Management, click "Show Advanced" at the top, then:
 
 1. In qBittorrent, add a category `tv-sonarr` with `/data/torrents/shows` as the save path.
 2. In Sonarr, Settings > Download Clients, click "+" and pick qBittorrent.
-3. Enter `gluetun` as the host, `8080` as the port, and the qBittorrent Account.
+3. Enter `gluetun` as the host, `8080` as the port, and the qBittorrent login.
 4. Set "Category" to `tv-sonarr`.
 5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding goal, Sonarr removes it and its files from the torrents tree, and the episodes stay in the Library.
 6. Click "Test", then "Save".
@@ -697,15 +662,9 @@ Requires [Radarr](#radarr) and [Sonarr](#sonarr).
 
 Tdarr normalises every video of the Library to MKV H265 within 1920x1080, as [ADR 0004](docs/adr/0004-the-library-is-mkv-h265-with-embedded-subtitles.md) sets out. Unmanic or FileFlows can replace it. It sees only the movies, shows and anime folders, under the same paths as Radarr and Sonarr, and never the torrents tree, so a torrent still seeding is never touched. Its work files go to `<APPDATA_ROOT>/tdarr/cache`.
 
-The flow, `tdarr/flow.json`, decides from the tracks of each file:
+The flow, `tdarr/flow.json`, picks the tracks of each file, embeds the subtitle files of Bazarr, replaces the original as MKV and asks Radarr or Sonarr to rescan its folder, following the rules of ADR 0004.
 
-- It keeps French audio and the original audio, the language of the first audio track that is not French.
-- It keeps the French and English subtitles of the release, or French and Japanese ones when the original audio is Japanese, forced subtitles included.
-- A file already in H265 within 1920x1080 keeps its video as is, only its extra tracks are removed. Any other video is encoded to H265 and scaled down to fit within 1920x1080, keeping its aspect ratio, never scaled up.
-- It embeds every subtitle file that Bazarr saved next to the video, such as `.fr.srt` or `.ja.forced.ass`, whatever its language, since Bazarr already picked it, and deletes the files once the new file is in place.
-- The new MKV replaces the original file. Tdarr then asks Radarr for movies, or Sonarr for shows and anime, to rescan the folder, so they and Bazarr know the new file right away.
-
-### Account
+### Login
 
 1. In `.env`, set `TDARR_API_KEY` before the first start of Tdarr, to `tapi_` followed by random letters and digits:
 
@@ -713,7 +672,7 @@ The flow, `tdarr/flow.json`, decides from the tracks of each file:
    echo "tapi_$(openssl rand -hex 16)"
    ```
 
-2. Start Tdarr with `docker restart doco-cd`. It creates the `admin` Account with that key as its password, and its internal node connects with the same key.
+2. Start Tdarr with `docker restart doco-cd`. It creates the `admin` login with that key as its password, and its internal node connects with the same key.
 3. Open `https://tdarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the local network and sign in with `admin` and the key.
 4. In Tools > Account, click "Change Password" and set a strong password, distinct from the other tools, stored in your password manager. The key keeps working for the node.
 
@@ -751,7 +710,7 @@ Requires [Recyclarr](#recyclarr) and [Tdarr](#tdarr).
 
 Bazarr finds the subtitles for watching in the original audio. It learns about each file from Radarr and Sonarr, then saves the subtitles next to it in the Library, where Tdarr embeds them into the video and deletes the subtitle files. It sees only the movies, shows and anime folders, under the same paths as Radarr and Sonarr, so no path mapping is needed. Jellyfin can also fetch subtitles on demand with its OpenSubtitles plugin, without embedding them.
 
-### Account
+### Login
 
 1. Open `https://bazarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the local network.
 2. In Settings > General > Security, set "Authentication" to "Form", enter a username and a strong password, distinct from the other tools, stored in your password manager, and save.
@@ -783,12 +742,12 @@ A subtitle track already inside the file counts as found, so a `MULTi` release w
 
 In Settings > Providers, click "+" for each provider, fill in what it asks for, and save:
 
-| Provider | Account | Covers |
+| Provider | Sign-up | Covers |
 | --- | --- | --- |
-| OpenSubtitles.com | Free Account on [opensubtitles.com](https://www.opensubtitles.com), with a daily download limit | Movies and shows, the widest French catalogue |
+| OpenSubtitles.com | Free account on [opensubtitles.com](https://www.opensubtitles.com), with a daily download limit | Movies and shows, the widest French catalogue |
 | Podnapisi | None | Movies and shows |
 | Gestdown | None | Shows, from the Addic7ed catalogue |
-| Jimaku.cc | Free Account on [jimaku.cc](https://jimaku.cc), then an API key from its account page | Anime, the Japanese subtitles |
+| Jimaku.cc | Free account on [jimaku.cc](https://jimaku.cc), then an API key from its account page | Anime, the Japanese subtitles |
 
 Jimaku.cc needs the AniDB integration first: register an API client on [anidb.net](https://anidb.net/software/add), with the HTTP API, not UDP, then in Settings > Providers, Metadata tab, click "+" under "Metadata Providers" and add AniDB with that client name and version.
 
@@ -830,13 +789,13 @@ Radarr and Sonarr only import their own category, so a torrent of the Farm or th
 
 ### Risks
 
-- A private tracker bans an Account for a hit and run. Set the seeding goals of each tracker in Prowlarr and in `RATIO_MIN_SEEDING_DAYS` before grabbing anything.
-- Ratio faking tools, which report uploads that never happened, get Accounts banned and are detected by every private tracker. Never use one.
+- A private tracker bans an account for a hit and run. Set the seeding goals of each tracker in Prowlarr and in `RATIO_MIN_SEEDING_DAYS` before grabbing anything.
+- Ratio faking tools, which report uploads that never happened, get accounts banned and are detected by every private tracker. Never use one.
 - Read the rules page of each tracker before enabling autobrr, cross-seed or Twins on it. Some forbid automated grabbing, or cross-seeding from a public tracker, or limit how many torrents you may download at once.
 
-### Account
+### Login
 
-In `.env`, set `QBITTORRENT_USER` and `QBITTORRENT_PASSWORD` to the qBittorrent Account. cross-seed, qbit_manage and ratio use it. ratio creates the `ratio` and `zen` categories in qBittorrent by itself.
+In `.env`, set `QBITTORRENT_USER` and `QBITTORRENT_PASSWORD` to the qBittorrent login. cross-seed, qbit_manage and ratio use it. ratio creates the `ratio` and `zen` categories in qBittorrent by itself.
 
 ### Public tracker for Twins
 
@@ -852,8 +811,8 @@ Prowlarr syncs Nyaa to Radarr and Sonarr like any indexer. It returns almost onl
 
 autobrr joins the IRC announce channel of each tracker and grabs a release the moment it is announced. C411 announces on no channel autobrr knows, so it grabs nothing until another tracker joins.
 
-1. Open `https://autobrr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and create the Account at the first visit, with its own username and a strong password stored in your password manager.
-2. In Settings > Clients, click "Add new", pick qBittorrent, enter `http://gluetun:8080` as the host and the qBittorrent Account. Under "Rules", check "Enabled" and set "Max active downloads" to `2`, so autobrr never fills the queue of Radarr and Sonarr. Save.
+1. Open `https://autobrr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and create the login at the first visit, with its own username and a strong password stored in your password manager.
+2. In Settings > Clients, click "Add new", pick qBittorrent, enter `http://gluetun:8080` as the host and the qBittorrent login. Under "Rules", check "Enabled" and set "Max active downloads" to `2`, so autobrr never fills the queue of Radarr and Sonarr. Save.
 3. In Settings > Indexers, click "Add new", pick the tracker, and fill in its passkey or API key and your IRC nick. autobrr adds its IRC network in Settings > IRC with the channel and the invite command of the tracker. Wait for the network to show as connected, some trackers need an IRC password or a NickServ registration first.
 4. In Filters, click "Add new" once per tracker, name it after the tracker, and pick the indexer. Set:
 
@@ -908,7 +867,7 @@ qbit_manage tags every torrent by tracker every 10 minutes. ratio is the only to
 
 ratio, `ratio/ratio.py`, runs every 10 minutes. It reads qBittorrent and Prowlarr, then:
 
-1. **Counts.** It keeps the Ledger in `${APPDATA_ROOT}/ratio/state.json`, which gives the Deficit or the Surplus of the Account. A torrent belongs to C411 when its announce URL holds `RATIO_TRACKER`.
+1. **Counts.** It keeps the Ledger in `${APPDATA_ROOT}/ratio/state.json`, which gives the Deficit or the Surplus of the C411 account. A torrent belongs to C411 when its announce URL holds `RATIO_TRACKER`.
 2. **Drops Twins.** Once cross-seed seeds the C411 copy of a Twin, it removes the Nyaa copy. The hardlink of cross-seed keeps the data. cross-seed searches C411 by the Nyaa title, so it misses a Twin that C411 lists under another title, such as Sgt Frog for Sergent Keroro. One hour after the grab, when the C411 copy is still missing, ratio adds the C411 torrent itself, stopped, in the folder of the Nyaa copy, gives its files the Nyaa names and checks it. Once the check is complete, ratio starts the C411 copy and removes the Nyaa copy without its files, which the C411 copy now seeds.
 3. **Cleans the Farm.** The Farm is the `ratio` and `cross-seed-link` categories. A torrent that uploaded less than 0.2 times its size in the last 7 days leaves it. So do the torrents that upload the least for their seeding time once the Farm holds more than `RATIO_MAX_SIZE_GB`. A C411 torrent that leaves and is still Rare moves to the Zen reserve when it has room, any other is removed with its files. No torrent leaves before `RATIO_MIN_SEEDING_DAYS`.
 4. **Adopts Library torrents.** A C411 torrent of Radarr or Sonarr that finished at least 6 hours ago, so it is imported, and is still Rare moves to the Zen reserve when it has room. Radarr and Sonarr only watch their own category, so they no longer remove it, and it seeds for Zen without any new download. Its file then takes its space twice, once in the Library and once in the torrents tree.
@@ -934,7 +893,7 @@ Once a day, the logs also hold one line per Source: paid grab, Twin, freeleech, 
 docker compose logs ratio | grep Source
 ```
 
-To start the Deficit over, for example once the ratio on the tracker has a buffer, stop ratio, delete its state file and start it again. Every other limit above has a default in `settings_from_env` of `ratio/ratio.py`, and changes once its variable is added to the `environment` of `ratio/compose.yaml`.
+To start the Deficit over, for example once the ratio on the tracker has a buffer, stop ratio, delete its state file and start it again. Every other limit above is fixed in `settings_from_env` of `ratio/ratio.py`.
 
 ## Verify the NAS
 

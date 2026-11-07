@@ -1,6 +1,8 @@
 # ratio farms C411 from Twins and keeps a Zen reserve
 
-The Admin seeds on C411, the only private tracker of the Admin, to keep the ratio of the Account, with torrents grabbed only to seed. Those torrents must never reach the Library, the long seeding times must not fill the disk, and every paid grab costs ratio on an Account that sits at its edge. C411 also pays Zen, worth 1 GB of upload each, for long seeding, with a class bonus for rare torrents. One script of the repo, `ratio/ratio.py`, with the standard library of Python only, runs both pools every 10 minutes.
+Supersedes ADR 0005 (ratio torrents stay in the torrents tree).
+
+The Admin seeds on C411, the only private tracker of the Admin, to keep the ratio of its C411 account, with torrents grabbed only to seed. Those torrents must never reach the Library, the long seeding times must not fill the disk, and every paid grab costs ratio on an account that sits at its edge. C411 also pays Zen, worth 1 GB of upload each, for long seeding, with a class bonus for rare torrents. One script of the repo, `ratio/ratio.py`, with the standard library of Python only, runs both pools every 10 minutes.
 
 ## Decision
 
@@ -14,7 +16,7 @@ The Admin seeds on C411, the only private tracker of the Admin, to keep the rati
 - **The Zen reserve**: rare C411 torrents kept for Zen whatever they upload, for the Swarm Keeper class, first until it holds 15 torrents, its best bonus. It fills from torrents leaving the Farm, from Twins, from Library torrents of Radarr and Sonarr once imported, and from C411 itself only above a surplus.
 - **Freeleech is free**: a C411 release with a `downloadvolumefactor` of 0 is grabbed outside quota and pause, and never counts in the ledger.
 - **C411 peers**: C411 counts each seeder twice in the peers it gives Prowlarr, so ratio reads its leechers as the peers minus twice the seeders.
-- **One ledger for the tracker**: the deficit counts every torrent whose announce URL holds `RATIO_TRACKER`, Library ones included, and keeps the torrents removed since, so it follows the real ratio of the Account.
+- **One ledger for the tracker**: the deficit counts every torrent whose announce URL holds `RATIO_TRACKER`, Library ones included, and keeps the torrents removed since, so it follows the real ratio of the C411 account.
 
 ## Considered Options
 
@@ -24,7 +26,7 @@ The Admin seeds on C411, the only private tracker of the Admin, to keep the rati
 - **qbit_manage removing**: rejected. Two removers in the same categories would race, its share limits would throw away the rare torrents the Zen reserve keeps, and it has no limit on the size of a folder.
 - **The Tanker class**: rejected. Its best bonus needs 750 torrents seeding at once.
 - **ratio checking and linking the C411 copy of every Twin itself**: rejected. cross-seed already does it, ratio only steps in when cross-seed misses the title.
-- **Hunting rare torrents on C411 whatever the ratio**: rejected while the Account sits at the edge of its ratio.
+- **Hunting rare torrents on C411 whatever the ratio**: rejected while the C411 account sits at the edge of its ratio.
 
 ## Consequences
 

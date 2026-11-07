@@ -6,7 +6,7 @@ The NAS runs on TrueNAS SCALE, on a machine or a virtual machine, so that its da
 
 - **The Docker of TrueNAS**: the Host is TrueNAS SCALE itself. doco-cd starts the NAS through the Docker socket of TrueNAS, and TrueNAS lists the services as apps it does not manage.
 - **One pool, three datasets**: `data` holds the torrents tree and the media tree as plain folders, `appdata` holds the folder of each service, `jellynas` holds the Clone and `.env`. The torrents and media trees are never child datasets, since a child dataset is another file system and would break the hardlinks of cross-seed.
-- **The apps user**: every service runs as the `apps` user of TrueNAS, 568:568, which owns the three datasets.
+- **The apps user**: every service runs as the `apps` user of TrueNAS, 568:568, which owns the three datasets, except Gluetun, Caddy and doco-cd, which need root for the tunnel, port 443 and the Docker socket.
 
 ## Considered Options
 
