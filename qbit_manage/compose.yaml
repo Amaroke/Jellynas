@@ -3,6 +3,8 @@ services:
     image: ghcr.io/stuffanthings/qbit_manage:v4.15.0
     container_name: qbit_manage
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges
     environment:
       PUID: ${PUID}
       PGID: ${PGID}

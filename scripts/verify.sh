@@ -194,6 +194,20 @@ check_published_ports() {
   fi
 }
 
+check_no_new_privileges() {
+  local service id missing=""
+  for service in $services; do
+    id="$(docker compose ps -q "$service" 2>/dev/null | head -n 1)"
+    [ -n "$id" ] || continue
+    docker inspect -f '{{.HostConfig.SecurityOpt}}' "$id" | grep -q no-new-privileges || missing="$missing $service"
+  done
+  if [ -n "$missing" ]; then
+    fail compose "may gain privileges, no-new-privileges is missing on:$missing"
+  else
+    pass compose "every service runs with no-new-privileges"
+  fi
+}
+
 check_login_required() {
   local service="$1" url="$2" host result
   enabled "$service" || return
@@ -380,6 +394,7 @@ check_no_media_tree cross-seed
 check_no_media_tree qbit_manage
 check_no_media_mount ratio
 check_published_ports
+check_no_new_privileges
 check_login_required qbittorrent "https://qbittorrent.$lan:$https_port/api/v2/app/version"
 check_login_required prowlarr "https://prowlarr.$lan:$https_port/"
 check_login_required radarr "https://radarr.$lan:$https_port/"

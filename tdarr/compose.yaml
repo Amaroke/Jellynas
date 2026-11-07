@@ -3,6 +3,8 @@ services:
     image: ghcr.io/haveagitgat/tdarr:3.06.00
     container_name: tdarr
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges
     environment:
       PUID: ${PUID}
       PGID: ${PGID}

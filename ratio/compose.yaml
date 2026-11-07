@@ -3,6 +3,10 @@ services:
     image: python:3.14.5-alpine3.22
     container_name: ratio
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
     user: ${PUID}:${PGID}
     command: ["python", "-u", "/app/ratio.py"]
     environment:

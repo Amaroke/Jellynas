@@ -3,6 +3,10 @@ services:
     image: ghcr.io/recyclarr/recyclarr:8.8.1
     container_name: recyclarr
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
     user: ${PUID}:${PGID}
     environment:
       TZ: ${TZ}

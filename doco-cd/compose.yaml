@@ -5,6 +5,8 @@ services:
     image: ghcr.io/kimdre/doco-cd:0.133.2
     container_name: doco-cd
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges
     environment:
       POLL_CONFIG: |
         - url: https://github.com/Amaroke/Jellynas.git
