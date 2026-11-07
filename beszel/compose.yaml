@@ -12,6 +12,7 @@ services:
     labels:
       kuma.beszel.http.name: Beszel
       kuma.beszel.http.url: http://beszel:8090/api/health
+      docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/beszel:/beszel_data
       - ./config.yml:/beszel_data/config.yml:ro

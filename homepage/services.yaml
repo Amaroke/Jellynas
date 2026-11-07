@@ -258,6 +258,9 @@
         description: Logs of every container
         href: https://dozzle.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         siteMonitor: http://dozzle:8080/healthcheck
+    - Backup:
+        icon: mdi-archive-arrow-down-#00897b
+        description: Archive of the appdata, every night
     - Indexarr:
         icon: mdi-file-table-box-multiple-#00897b
         description: Catalog of the Library files, read-only

@@ -21,6 +21,7 @@ services:
       DOWNLOAD_AS_CBZ: "true"
     labels:
       kuma.suwayomi.docker.name: Suwayomi
+      docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${DATA_ROOT}/media/manga:/home/suwayomi/.local/share/Tachidesk/downloads
       - ${APPDATA_ROOT}/suwayomi:/home/suwayomi/.local/share/Tachidesk

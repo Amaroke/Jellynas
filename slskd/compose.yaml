@@ -25,6 +25,7 @@ services:
     labels:
       kuma.slskd.http.name: slskd
       kuma.slskd.http.url: http://gluetun:5030/health
+      docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/slskd:/app
       - ${DATA_ROOT}/torrents/soulseek:/data/torrents/soulseek

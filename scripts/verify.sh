@@ -405,6 +405,29 @@ check_slskd_port() {
   fi
 }
 
+check_backup_root() {
+  local backup_root name root
+  enabled backup || return
+  backup_root="$(env_value BACKUP_ROOT)"
+  if [ ! -d "$backup_root" ]; then
+    fail backup "BACKUP_ROOT is not a folder of the Host, the archives have nowhere to go"
+    return
+  fi
+  for name in DATA_ROOT APPDATA_ROOT; do
+    root="$(env_value "$name")"
+    root="${root%/}"
+    if [ ! -d "$root" ]; then
+      fail backup "$name is not a folder of the Host, cannot check that BACKUP_ROOT is on another dataset"
+    elif [ "${backup_root%/}" = "$root" ] || [[ "$backup_root" == "$root"/* ]]; then
+      fail backup "BACKUP_ROOT is inside $name, the archives would land in what they back up"
+    elif [ "$(stat -c %d "$backup_root")" = "$(stat -c %d "$root")" ]; then
+      fail backup "BACKUP_ROOT is on the same dataset as $name, one loss takes both"
+    else
+      pass backup "BACKUP_ROOT is on another dataset than $name"
+    fi
+  done
+}
+
 caddy_running() {
   enabled caddy || return 1
   case "$(container_state caddy)" in
@@ -517,6 +540,9 @@ check_no_media_mount autokuma
 check_no_media_mount dozzle
 check_no_media_tree homepage
 check_no_torrents_mount homepage
+check_no_media_mount backup
+check_read_only backup /backup/appdata
+check_backup_root
 check_homepage_values
 check_published_ports
 check_no_new_privileges
