@@ -11,7 +11,7 @@ services:
       BACKUP_FILENAME: appdata-%Y-%m-%dT%H-%M-%S.tar.gz
       BACKUP_PRUNING_PREFIX: appdata-
       BACKUP_RETENTION_DAYS: "30"
-      BACKUP_EXCLUDE_REGEXP: ^/backup/appdata/(jellyfin/cache|tdarr/cache|tdarr/logs)/
+      BACKUP_EXCLUDE_REGEXP: ^/backup/appdata/(jellyfin/cache|jellyfin/data/metadata|jellyfin/data/transcodes|tdarr/cache|tdarr/logs)/
       NOTIFICATION_URLS: ntfy://ntfy.sh/${NTFY_TOPIC}
       NOTIFICATION_LEVEL: error
     labels:
