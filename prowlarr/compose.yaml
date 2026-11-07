@@ -9,6 +9,9 @@ services:
       PUID: ${PUID}
       PGID: ${PGID}
       TZ: ${TZ}
+    labels:
+      kuma.prowlarr.http.name: Prowlarr
+      kuma.prowlarr.http.url: http://prowlarr:9696/ping
     volumes:
       - ${APPDATA_ROOT}/prowlarr:/config
     healthcheck:

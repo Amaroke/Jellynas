@@ -59,6 +59,7 @@ jobs:
       - run: python3 -m unittest discover -s ratio -v
       - run: python3 -m unittest discover -s beszel -v
       - run: python3 -m unittest discover -s homepage -v
+      - run: python3 -m unittest discover -s uptime-kuma -v
 
   lint:
     name: Lint

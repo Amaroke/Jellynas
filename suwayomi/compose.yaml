@@ -19,6 +19,8 @@ services:
       AUTH_USERNAME: ${SUWAYOMI_USERNAME}
       AUTH_PASSWORD: ${SUWAYOMI_PASSWORD}
       DOWNLOAD_AS_CBZ: "true"
+    labels:
+      kuma.suwayomi.docker.name: Suwayomi
     volumes:
       - ${DATA_ROOT}/media/manga:/home/suwayomi/.local/share/Tachidesk/downloads
       - ${APPDATA_ROOT}/suwayomi:/home/suwayomi/.local/share/Tachidesk

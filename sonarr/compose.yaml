@@ -9,6 +9,9 @@ services:
       PUID: ${PUID}
       PGID: ${PGID}
       TZ: ${TZ}
+    labels:
+      kuma.sonarr.http.name: Sonarr
+      kuma.sonarr.http.url: http://sonarr:8989/ping
     volumes:
       - ${APPDATA_ROOT}/sonarr:/config
       - ${DATA_ROOT}/media/shows:/data/media/shows

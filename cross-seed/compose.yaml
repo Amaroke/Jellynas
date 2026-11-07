@@ -18,6 +18,9 @@ services:
       SONARR_API_KEY: ${SONARR_API_KEY}
       QBITTORRENT_USER: ${QBITTORRENT_USER}
       QBITTORRENT_PASSWORD: ${QBITTORRENT_PASSWORD}
+    labels:
+      kuma.cross-seed.http.name: cross-seed
+      kuma.cross-seed.http.url: http://cross-seed:2468/api/ping
     volumes:
       - ${APPDATA_ROOT}/cross-seed:/config
       - ./config.js:/config/config.js:ro

@@ -22,6 +22,9 @@ services:
       SLSKD_DOWNLOADS_DIR: /data/torrents/soulseek/downloads
       SLSKD_INCOMPLETE_DIR: /data/torrents/soulseek/incomplete
       SLSKD_SHARED_DIR: /data/media/music
+    labels:
+      kuma.slskd.http.name: slskd
+      kuma.slskd.http.url: http://gluetun:5030/health
     volumes:
       - ${APPDATA_ROOT}/slskd:/app
       - ${DATA_ROOT}/torrents/soulseek:/data/torrents/soulseek

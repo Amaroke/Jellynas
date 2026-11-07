@@ -9,6 +9,9 @@ services:
       PUID: ${PUID}
       PGID: ${PGID}
       TZ: ${TZ}
+    labels:
+      kuma.radarr.http.name: Radarr
+      kuma.radarr.http.url: http://radarr:7878/ping
     volumes:
       - ${APPDATA_ROOT}/radarr:/config
       - ${DATA_ROOT}/media/movies:/data/media/movies

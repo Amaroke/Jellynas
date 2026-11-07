@@ -14,6 +14,8 @@ services:
       QBT_WEB_SERVER: "true"
       QBT_SCHEDULE: 10
       QBT_CONFIG_DIR: /config
+    labels:
+      kuma.qbit-manage.docker.name: qbit_manage
     volumes:
       - ${APPDATA_ROOT}/qbit_manage:/config
       - ${DATA_ROOT}/torrents:/data/torrents

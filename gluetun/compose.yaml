@@ -23,6 +23,8 @@ services:
       SERVER_REGIONS: ${SERVER_REGIONS:-}
       FIREWALL_VPN_INPUT_PORTS: ${VPN_FORWARDED_PORT:-}
       GLUETUN_API_KEY: ${GLUETUN_API_KEY:-}
+    labels:
+      kuma.gluetun.docker.name: Gluetun
     volumes:
       - ./entrypoint.sh:/jellynas-entrypoint.sh:ro
       - ${APPDATA_ROOT}/gluetun:/gluetun

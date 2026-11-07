@@ -8,6 +8,9 @@ services:
     environment:
       DOZZLE_AUTH_PROVIDER: simple
       DOZZLE_NO_ANALYTICS: "true"
+    labels:
+      kuma.dozzle.http.name: Dozzle
+      kuma.dozzle.http.url: http://dozzle:8080/healthcheck
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${APPDATA_ROOT}/dozzle:/data

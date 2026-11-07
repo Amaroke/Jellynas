@@ -23,6 +23,8 @@ services:
       RATIO_GRAB_MAX_DEFICIT_GB: ${RATIO_GRAB_MAX_DEFICIT_GB:-}
       RATIO_ZEN_MAX_SIZE_GB: ${RATIO_ZEN_MAX_SIZE_GB:-}
       RATIO_ZEN_HUNT_MIN_SURPLUS_GB: ${RATIO_ZEN_HUNT_MIN_SURPLUS_GB:-}
+    labels:
+      kuma.ratio.docker.name: ratio
     volumes:
       - ./ratio.py:/app/ratio.py:ro
       - ${APPDATA_ROOT}/ratio:/state

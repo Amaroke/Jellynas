@@ -509,6 +509,7 @@ check_no_media_mount beszel
 check_no_media_tree beszel-agent
 check_no_torrents_mount beszel-agent
 check_no_media_mount uptime-kuma
+check_no_media_mount autokuma
 check_no_media_mount dozzle
 check_no_media_tree homepage
 check_no_torrents_mount homepage
