@@ -531,7 +531,7 @@ Each finished torrent keeps seeding from the torrents tree for a while, to give 
 | Downloads | Append .!qB extension to incomplete files | Checked, so no tool imports a file that is still downloading |
 | BitTorrent | Privacy | DHT and PeX checked, Local Peer Discovery unchecked since the container has no local peers |
 | Connection | Connections Limits | 1000 connections in all and 200 per torrent, upload slots unchecked in all and per torrent, so no swarm waits for a free slot |
-| BitTorrent | Torrent Queueing | 3 active downloads, 30 active uploads, 35 active torrents, "Do not count slow torrents in these limits" checked so a dead torrent never holds a place |
+| BitTorrent | Torrent Queueing | Unchecked. A queued torrent never announces, so it uploads nothing and C411 pays it no Zen. ratio unchecks it itself. Each tool already limits its own downloads, ratio to 2 at a time for the Farm |
 | BitTorrent | Seeding Limits | All unchecked. ratio unchecks them itself, since it removes the public torrents and keeps the Farm seeding |
 | Advanced | Network interface | `tun0`, so qBittorrent only ever uses the VPN, on top of the Gluetun kill switch |
 | Advanced | Upload slots behavior | Upload rate based, so qBittorrent opens slots while upload bandwidth is left |
@@ -1077,7 +1077,7 @@ Radarr and Sonarr only import their own category, so a torrent of the Farm never
 
 ### Login
 
-In `.env`, set `QBITTORRENT_USER` and `QBITTORRENT_PASSWORD` to the qBittorrent login. cross-seed and ratio use it. ratio creates the `movies`, `shows`, `music`, `books` and `farm` categories in qBittorrent by itself.
+In `.env`, set `QBITTORRENT_USER` and `QBITTORRENT_PASSWORD` to the qBittorrent login. cross-seed and ratio use it. ratio creates the `movies`, `shows`, `music`, `books` and `farm` categories in qBittorrent by itself, and turns off its global share limits and its torrent queueing, so every torrent of the Farm seeds.
 
 ### Public tracker for Twins
 

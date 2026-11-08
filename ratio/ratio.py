@@ -473,6 +473,9 @@ def prepare(qbt, settings):
     if limits:
         qbt.set_preferences(limits)
         print("qBittorrent no longer stops torrents at its global share limits, ratio removes them")
+    if preferences.get("queueing_enabled"):
+        qbt.set_preferences({"queueing_enabled": False})
+        print("qBittorrent no longer queues torrents, so every torrent announces and seeds")
     if not settings["cross_seed_key"]:
         return
     hook = (
