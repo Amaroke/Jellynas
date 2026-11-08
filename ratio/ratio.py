@@ -132,6 +132,7 @@ class QBittorrent:
     def reset_share_limits(self, hashes):
         self.post("/api/v2/torrents/setShareLimits", {
             "hashes": "|".join(hashes), "ratioLimit": -2, "seedingTimeLimit": -2, "inactiveSeedingTimeLimit": -2,
+            "shareLimitAction": "Default", "shareLimitsMode": "Default",
         })
 
     def preferences(self):
