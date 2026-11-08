@@ -118,6 +118,18 @@
             - field: farm.downloading
               label: Downloading
               format: number
+    - Quests:
+        icon: mdi-trophy-#fbbf24
+        description: Next Quest of C411 and its progress
+        widget:
+          type: customapi
+          url: http://ratio:8000/summary
+          refreshInterval: 60000
+          mappings:
+            - field: quests.name
+              label: Next
+            - field: quests.shown
+              label: Progress
     - autobrr:
         icon: autobrr.svg
         description: IRC announces

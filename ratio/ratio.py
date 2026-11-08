@@ -40,6 +40,8 @@ SEEDING = ("uploading", "stalledUP", "queuedUP", "forcedUP")
 SHARE_LIMITS = ("max_ratio_enabled", "max_seeding_time_enabled", "max_inactive_seeding_time_enabled")
 SEEDING_STEPS = ((180, 0.5), (90, 0.35), (30, 0.25), (7, 0.1))
 RARE_STEP = 0.25
+BEST_NOTE = 1 + SEEDING_STEPS[0][1] + RARE_STEP
+GOOD_NOTE = 0.625
 SOURCES = {
     "paid": "paid grab",
     "twin": "Twin",
@@ -47,8 +49,19 @@ SOURCES = {
     "cross-seed": "cross-seed of the Library",
     "library": "Library download",
     "zen-hunt": "Zen hunt",
+    "volume-hunt": "Volume hunt",
     "unknown": "unknown",
 }
+FILMS = "Films & Vidéos"
+QUEST_CATEGORIES = {
+    FILMS: "102000,102010,102030,102050,102060,102070,102080,102090,105000,105060,105070,105080",
+    "Ebook": "107000,107010,107020,107030",
+    "Audio": "103000,103010,103030,103050",
+    "Emulation": "101000,101030,101040,101080,101090",
+    "Imprimante 3D": "108010",
+}
+ANIME = "102060,105070"
+KINDS = {"movies": FILMS, "shows": FILMS, "music": "Audio", "books": "Ebook"}
 TORZNAB = "{http://torznab.com/schemas/2015/feed}attr"
 
 
@@ -197,6 +210,9 @@ class Prowlarr:
     def newest(self, indexer, now):
         fields = {"t": "search", "cat": "2000,5000", "limit": 100}
         return self.query(indexer, fields, now, self.tracker_seeders_in_peers)
+
+    def category(self, indexer, cats, now):
+        return self.query(indexer, {"t": "search", "cat": cats, "limit": 100}, now, self.tracker_seeders_in_peers)
 
     def search(self, indexer, title, now):
         return self.query(indexer, {"t": "search", "q": re.sub(r"[._]+", " ", title), "limit": 100}, now, 1)
@@ -353,27 +369,34 @@ def pick_free(releases, known, max_size):
     return sorted(free, key=lambda r: -r["leechers"])
 
 
-def pick_rare(releases, known, rules):
-    rare = [
+def cost_of(release):
+    return 0 if release["free"] else release["size"]
+
+
+def pick_small(releases, known, max_size):
+    small = [
         r
         for r in releases
         if r["infohash"] not in known
-        and not r["free"]
-        and rules["min_size"] <= r["size"] <= rules["max_size"]
+        and r["size"] <= max_size
         and r["seeders"] >= 1
         and is_rare(r["size"], r["seeders"])
     ]
-    return sorted(rare, key=lambda r: (r["seeders"], -r["leechers"]))
+    return sorted(small, key=lambda r: (cost_of(r), r["size"], r["seeders"]))
 
 
-def nightly_zen(t):
+def note_of(t):
     days = t["seeding_time"] / DAY
     note = 1 + next((step for at, step in SEEDING_STEPS if days >= at), 0)
     if is_rare(t["size"], t["num_complete"]):
         note += RARE_STEP
+    return note
+
+
+def nightly_zen(t):
     size = t["size"] / 1e9
     weight = (0.25 + size) / 4.25
-    return note * (weight if size <= 4 else math.sqrt(weight)) / 7
+    return note_of(t) * (weight if size <= 4 else math.sqrt(weight)) / 7
 
 
 def zen_per_gb(t):
@@ -392,7 +415,7 @@ def load_state(path):
         state = {}
     return {
         "transfers": state.get("transfers", {}),
-        "grabbed": state.get("grabbed", {}),
+        "hunted": state.get("hunted", {}),
         "twins": state.get("twins", {}),
         "free": state.get("free", {}),
         "checked": state.get("checked", {}),
@@ -406,6 +429,8 @@ def load_state(path):
         "backoff_until": state.get("backoff_until", 0),
         "stuck": state.get("stuck", {}),
         "restore": state.get("restore", {}),
+        "kinds": state.get("kinds", {}),
+        "hunt_at": state.get("hunt_at", {}),
     }
 
 
@@ -530,15 +555,26 @@ def record(state, torrents, settings, now):
                 fresh.add(t["hash"])
             downloaded = 0 if t["hash"] in state["free"] else t["downloaded"]
             state["transfers"][t["hash"]] = [downloaded, t["uploaded"]]
-    for infohash in [h for h, at in state["grabbed"].items() if at < now - DAY]:
-        del state["grabbed"][infohash]
+    for infohash in [h for h, (at, _) in state["hunted"].items() if at < now - DAY]:
+        del state["hunted"][infohash]
     for infohash in [h for h in state["free"] if h not in torrents and h in state["transfers"]]:
         del state["free"][infohash]
     for infohash in [h for h, at in state["checked"].items() if at < now - 2 * DAY]:
         del state["checked"][infohash]
     record_sources(state, torrents, settings)
+    record_kinds(state, torrents, settings)
     record_history(state, torrents, fresh, now)
     record_zen(state, torrents)
+
+
+def record_kinds(state, torrents, settings):
+    for t in torrents.values():
+        kind = KINDS.get(LEGACY.get(t["category"], t["category"]))
+        if kind and t["hash"] not in state["kinds"] and is_c411(state, settings, t):
+            state["kinds"][t["hash"]] = kind
+    copies = twin_copies(state)
+    for infohash in [h for h in state["kinds"] if h not in torrents and h not in copies]:
+        del state["kinds"][infohash]
 
 
 def gigabytes(size):
@@ -609,6 +645,29 @@ def farm_of(state, settings, torrents):
     }
 
 
+def quest_steps(state, settings, torrents):
+    seeded = [t for t in torrents.values() if is_c411(state, settings, t) and is_seeding(t)]
+    kinds = [state["kinds"].get(t["hash"]) for t in seeded]
+    tops = sorted((kinds.count(name) for name in QUEST_CATEGORIES), reverse=True)
+    yield from ((f"Seed count {n}", len(seeded), n, "seeds") for n in (100, 150, 200, 250, 300))
+    for n, days in ((25, 7), (150, 90)):
+        yield f"{n} seeds for {days} days", sum(1 for t in seeded if t["seeding_time"] >= days * DAY), n, "seeds"
+    for k in range(1, len(QUEST_CATEGORIES) + 1):
+        name = f"25 seeds in {k} categor{'y' if k == 1 else 'ies'}"
+        yield name, sum(min(count, 25) for count in tops[:k]), 25 * k, "seeds"
+    yield from ((f"{n} seeds in one category", tops[0], n, "seeds") for n in (50, 100))
+    good = sum(1 for t in seeded if note_of(t) >= GOOD_NOTE * BEST_NOTE)
+    yield "50 torrents at 62.5 % of their best note", good, 50, "torrents"
+
+
+def quests_of(state, settings, torrents):
+    left = [step for step in quest_steps(state, settings, torrents) if step[1] < step[2]]
+    if not left:
+        return {"name": "every Quest reached", "progress": None, "target": None, "shown": "done"}
+    name, progress, target, unit = max(left, key=lambda step: step[1] / step[2])
+    return {"name": name, "progress": progress, "target": target, "shown": f"{progress} of {target} {unit}"}
+
+
 def read_account(c411, state, now):
     try:
         account = c411.account()
@@ -670,6 +729,7 @@ def summary(state, torrents, settings, account, now):
         },
         "account": account_of(account, state, settings, now),
         "farm": farm_of(state, settings, torrents),
+        "quests": quests_of(state, settings, torrents),
         "sources": sources,
     }
 
@@ -900,15 +960,15 @@ def find_twin(prowlarr, settings, release, now, cache):
     return None
 
 
-def fetch_newest(prowlarr, settings, now):
+def fetch(settings, read, what="indexer"):
     releases = []
     for indexer in settings["indexers"]:
         try:
-            releases += prowlarr.newest(indexer, now)
+            releases += read(indexer)
         except Throttled:
             raise
         except Exception as error:
-            print(f"Cannot read indexer {indexer} from Prowlarr: {error}")
+            print(f"Cannot read {what} {indexer} from Prowlarr: {error}")
     return releases
 
 
@@ -985,6 +1045,7 @@ def grab_twins(qbt, prowlarr, settings, state, releases, known, budget, now):
             if twin:
                 take(qbt, state, budget, known, release, twin["torrent"], "twin", f"its public twin {twin['title']}")
                 state["twins"][twin["infohash"]] = [release["infohash"], FARM, now, release["link"]]
+                state["kinds"][release["infohash"]] = FILMS
         except Throttled:
             raise
         except Exception as error:
@@ -1012,14 +1073,39 @@ def grab_free(qbt, prowlarr, settings, state, releases, known, budget, now):
             state["free"][release["infohash"]] = now
 
 
-def hunt_zen(qbt, prowlarr, settings, state, releases, known, budget, now):
-    for release in pick_rare(releases, known, settings["zen_hunt"]):
-        if budget["slots"] <= 0 or len(state["grabbed"]) >= settings["zen_hunt_per_day"]:
+def hunt_target(settings, state, counts, now):
+    short = [name for name in QUEST_CATEGORIES if counts[name] < settings["volume"]["per_category"]]
+    if not short:
+        return FILMS, ANIME, False
+    kind = min(short, key=lambda name: state["hunt_at"].get(name, 0))
+    return kind, QUEST_CATEGORIES[kind], True
+
+
+def hunt_volume(qbt, prowlarr, settings, state, torrents, known, budget, now):
+    rules = settings["volume"]
+    held = [state["kinds"].get(t["hash"]) for t in torrents.values() if is_c411(state, settings, t)]
+    counts = {name: held.count(name) for name in QUEST_CATEGORIES}
+    kind, cats, filling = hunt_target(settings, state, counts, now)
+    releases = fetch(settings, lambda indexer: prowlarr.category(indexer, cats, now), f"{kind} of indexer")
+    if filling:
+        state["hunt_at"][kind] = now
+    for release in pick_small(releases, known, rules["max_size"]):
+        if budget["slots"] <= 0 or (filling and counts[kind] >= rules["per_category"]):
             return
-        if release["infohash"] in known or release["size"] > min(budget[FARM], budget["download"]):
+        if release["infohash"] in known or release["size"] > budget[FARM]:
             continue
-        if take_from_tracker(qbt, prowlarr, state, budget, known, release, "zen-hunt", "the tracker"):
-            state["grabbed"][release["infohash"]] = now
+        if not release["free"] and release["size"] > budget["download"]:
+            continue
+        free = release["free"]
+        source, via = ("freeleech", "the tracker, freeleech") if free else ("volume-hunt", "the tracker")
+        if not take_from_tracker(qbt, prowlarr, state, budget, known, release, source, via):
+            continue
+        state["kinds"][release["infohash"]] = kind
+        counts[kind] += 1
+        if free:
+            state["free"][release["infohash"]] = now
+        else:
+            state["hunted"][release["infohash"]] = [now, release["size"]]
             budget["download"] -= release["size"]
 
 
@@ -1033,18 +1119,21 @@ def pending(state, torrents):
 
 def grab(qbt, prowlarr, settings, state, torrents, account, now):
     downloading = sum(1 for t in torrents.values() if t["category"] == FARM and t["progress"] < 1)
+    spent = sum(size for _, size in state["hunted"].values())
     budget = {
         "slots": settings["max_downloading"] - downloading,
         FARM: settings["farm_size"] - size_of(torrents, FARM),
-        "download": 0 if state["paused"] else download_left(account, settings) - pending(state, torrents),
+        "download": 0 if state["paused"] else min(
+            download_left(account, settings) - pending(state, torrents), settings["volume"]["daily"] - spent
+        ),
     }
     if budget["slots"] <= 0 or not settings["indexers"]:
         return
     known = set(torrents) | twin_copies(state)
-    releases = fetch_newest(prowlarr, settings, now)
+    releases = fetch(settings, lambda indexer: prowlarr.newest(indexer, now))
     grab_twins(qbt, prowlarr, settings, state, releases, known, budget, now)
     grab_free(qbt, prowlarr, settings, state, releases, known, budget, now)
-    hunt_zen(qbt, prowlarr, settings, state, releases, known, budget, now)
+    hunt_volume(qbt, prowlarr, settings, state, torrents, known, budget, now)
 
 
 def run_once(qbt, prowlarr, c411, settings, state, now):
@@ -1095,8 +1184,7 @@ def settings_from_env():
         "farm_size": positive("RATIO_MAX_SIZE_GB", 100) * GB,
         "floor": positive("RATIO_FLOOR", 1.2),
         "paused_profile": "Paused",
-        "zen_hunt_per_day": 3,
-        "zen_hunt": {"min_size": GB, "max_size": 5 * GB},
+        "volume": {"max_size": GB, "per_category": 25, "daily": number("RATIO_VOLUME_DAILY_GB", 2) * GB},
         "free_max_size": 5 * GB,
         "min_seeding": number("RATIO_MIN_SEEDING_DAYS") * DAY,
         "public_seeding": 14 * DAY,
