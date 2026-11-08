@@ -113,7 +113,7 @@ The same release, byte for byte, on a public tracker, downloaded there so that i
 _Avoid_: mirror, duplicate
 
 **Source**:
-How a C411 torrent came to the NAS: a paid grab, a Twin, a freeleech grab, a cross-seed of the Library, a Library download from C411, or a Volume hunt grab. It never changes, even when a Library torrent later moves to the Farm.
+How a C411 torrent came to the NAS: a paid grab, a free grab, a Library download from C411, or a Volume hunt grab. A free grab costs no download on C411: a Twin, a freeleech grab or a cross-seed of the Library. It never changes, even when a Library torrent later moves to the Farm.
 _Avoid_: origin, kind, pool
 
 **Ledger**:
