@@ -61,7 +61,7 @@ _Avoid_: random, radio
 ### Ratio
 
 **C411**:
-The private tracker of the Admin, the only one the Farm and the Zen reserve work for.
+The private tracker of the Admin, the only one the Farm works for.
 _Avoid_: the tracker
 
 **Hit and run**:
@@ -73,8 +73,12 @@ The ratio or seeding time a torrent reaches before it may stop seeding, set per 
 _Avoid_: seed limit, share limit
 
 **Farm**:
-The torrents the NAS seeds only to earn upload on C411, kept while they upload.
-_Avoid_: ratio, ratio folder, ratio torrents
+The C411 torrents the NAS seeds only for what they earn on C411, upload and Zen, whatever their Source, cross-seeds included. It holds them within one disk budget and, once that budget is full, lets go first of what pays the least Zen for its size.
+_Avoid_: ratio, ratio folder, ratio torrents, cross-seed torrents, Zen reserve
+
+**Public torrent**:
+A torrent of a public tracker. It seeds two weeks whatever its ratio, and leaves sooner once its C411 copy seeds the same files.
+_Avoid_: Nyaa torrent, free torrent
 
 **Zen**:
 The currency C411 pays for long seeding, traded for upload in its shop.
@@ -84,16 +88,32 @@ _Avoid_: bonus points
 Said of a C411 torrent whose seeders are few enough to count for the Swarm Keeper class of C411.
 _Avoid_: dead, unpopular
 
-**Zen reserve**:
-The Rare C411 torrents the NAS keeps seeding for the Zen they pay, whatever they upload.
-_Avoid_: rare pool, bonus torrents
+**Volume hunt**:
+The grabbing of small Rare C411 torrents into the Farm to raise the Seed count, spread over the categories of C411 the Quests count.
+_Avoid_: Zen hunt, rare hunt
+
+**Seed count**:
+How many C411 torrents the NAS seeds at once, whatever their size, which the Quests of C411 reward.
+_Avoid_: seeds, torrent count
+
+**Quest**:
+A one-off reward of C411, mostly Zen, paid when the Seed count, the seeding time or the categories of the seeded torrents reach a step.
+_Avoid_: challenge, achievement
+
+**Account ratio**:
+The ratio C411 shows for the account of the Admin, every torrent ever included, the upload credit bought with Zen counted as upload.
+_Avoid_: real ratio, tracker ratio
+
+**Ratio floor**:
+The Account ratio of 1.2 under which the NAS spends no download on C411, not even for the Library, freeleech and Twins aside.
+_Avoid_: margin, buffer
 
 **Twin**:
 The same release, byte for byte, on a public tracker, downloaded there so that its C411 copy costs no download on C411.
 _Avoid_: mirror, duplicate
 
 **Source**:
-How a C411 torrent came to the NAS: a paid grab, a Twin, a freeleech grab, a cross-seed of the Library, a Library download from C411, or a Rare torrent hunted for the Zen reserve. It never changes, even when the torrent later moves to the Zen reserve.
+How a C411 torrent came to the NAS: a paid grab, a Twin, a freeleech grab, a cross-seed of the Library, a Library download from C411, or a Volume hunt grab. It never changes, even when a Library torrent later moves to the Farm.
 _Avoid_: origin, kind, pool
 
 **Ledger**:

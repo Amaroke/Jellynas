@@ -1,5 +1,7 @@
 # ratio farms C411 from Twins and keeps a Zen reserve
 
+Superseded by ADR 0011 (the Farm earns Zen first under a Ratio floor).
+
 Supersedes ADR 0005 (ratio torrents stay in the torrents tree).
 
 The Admin seeds on C411, the only private tracker of the Admin, to keep the ratio of its C411 account, with torrents grabbed only to seed. Those torrents must never reach the Library, the long seeding times must not fill the disk, and every paid grab costs ratio on an account that sits at its edge. C411 also pays Zen, worth 1 GB of upload each, for long seeding, with a class bonus for rare torrents. One script of the repo, `ratio/ratio.py`, with the standard library of Python only, runs the Farm and the Zen reserve every 10 minutes.
