@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 HOMEPAGE = ROOT / "homepage"
 CONFIG_FILES = [HOMEPAGE / name for name in ("settings.yaml", "services.yaml", "widgets.yaml", "bookmarks.yaml")]
-WITHOUT_TILE = {"homepage", "beszelagent", "autokuma"}
+WITHOUT_TILE = {"homepage", "beszelagent", "autokuma", "ratio"}
 SECRET_FIELDS = {"key", "password", "username", "apikey", "token"}
 PLACEHOLDER = re.compile(r"\{\{(HOMEPAGE_[A-Z_]+)\}\}")
 
@@ -76,10 +76,20 @@ class HomepageConfigTest(unittest.TestCase):
         linked = set(re.findall(r"href: https://([a-z0-9-]+)\.lan\.", (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")))
         self.assertEqual(set(), linked - routed)
 
+    def test_the_account_tile_reads_the_account_block_of_ratio(self):
+        text = (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")
+        self.assertNotIn("Ratio", tiles())
+        account = re.search(r"^    - Account:$(.*?)(?=^    - )", text, re.MULTILINE | re.DOTALL)
+        self.assertIsNotNone(account)
+        self.assertIn("url: http://ratio:8000/summary", account.group(1))
+        fields = re.findall(r"- field: (\S+)", account.group(1))
+        self.assertEqual(fields, ["account.ratio", "account.zen", "account.week_uploaded_gb", "account.paused"])
+        self.assertNotIn("grabs.", text)
+
     def test_every_variable_is_documented(self):
-        documented = set(re.findall(r"^([A-Z_]+)=", (ROOT / ".env.example").read_text(encoding="utf-8"), re.MULTILINE))
+        documented = set(re.findall(r"^([A-Z][A-Z0-9_]*)=", (ROOT / ".env.example").read_text(encoding="utf-8"), re.MULTILINE))
         for path in included_compose_files():
-            used = set(re.findall(r"\$\{([A-Z_]+)", path.read_text(encoding="utf-8")))
+            used = set(re.findall(r"\$\{([A-Z][A-Z0-9_]*)", path.read_text(encoding="utf-8")))
             self.assertEqual(set(), used - documented, path.name)
 
 

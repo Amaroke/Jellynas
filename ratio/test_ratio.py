@@ -11,16 +11,17 @@ import urllib.request
 from unittest import mock
 
 from ratio import (
+    C411,
     DAY,
     GB,
     Prowlarr,
     QBittorrent,
+    Throttled,
     bdecode,
     is_rare,
     load_state,
     parse_torznab,
     pick_evictions,
-    pick_hungry,
     run_once,
     save_state,
     serve,
@@ -123,13 +124,22 @@ def torrent_file(name, lengths):
 
 
 class FakeProwlarr:
-    def __init__(self, newest=(), twins=(), files=None):
+    def __init__(self, newest=(), twins=(), files=None, throttle=None, broken=()):
         self.feed = list(newest)
         self.twins = list(twins)
         self.files = files or {}
+        self.throttle = throttle
+        self.broken = set(broken)
         self.queries = []
+        self.reads = 0
+        self.fetched = []
+        self.holds = []
+        self.restores = []
 
     def newest(self, indexer, now):
+        self.reads += 1
+        if self.throttle:
+            raise Throttled(self.throttle)
         return list(self.feed)
 
     def search(self, indexer, title, now):
@@ -138,7 +148,34 @@ class FakeProwlarr:
 
     def torrent(self, release):
         infohash = release.get("infohash") or release["link"].rsplit("/", 1)[1].removesuffix(".torrent")
+        self.fetched.append(infohash)
+        if infohash in self.broken:
+            raise RuntimeError("the tracker refused the torrent file")
         return torrent_file(infohash, self.files.get(infohash, [7]))
+
+    def hold(self, indexer, paused, profile, restore=None):
+        self.holds.append((indexer, paused, profile))
+        self.restores.append(restore)
+        return 7 if paused else None
+
+
+class FakeC411:
+    def __init__(self, uploaded_gb=60, downloaded_gb=30, zen=25, broken=False):
+        self.uploaded = uploaded_gb * GB
+        self.downloaded = downloaded_gb * GB
+        self.zen = zen
+        self.broken = broken
+        self.reads = 0
+
+    def account(self):
+        self.reads += 1
+        if self.broken:
+            raise RuntimeError("Site is currently restricted")
+        return {"uploaded": self.uploaded, "downloaded": self.downloaded, "zen": self.zen}
+
+
+def under_floor():
+    return FakeC411(uploaded_gb=30, downloaded_gb=30)
 
 
 SETTINGS = {
@@ -148,13 +185,14 @@ SETTINGS = {
     "cross_seed_key": "",
     "farm_size": 100 * GB,
     "zen_size": 50 * GB,
-    "zen_min_torrents": 0,
-    "zen_hunt_surplus": 20 * GB,
+    "floor": 1.2,
+    "paused_profile": "Paused",
+    "zen_hunt_per_day": 3,
+    "zen_hunt": {"min_size": 1 * GB, "max_size": 5 * GB},
+    "free_max_size": 5 * GB,
     "min_seeding": 3 * DAY,
     "stale_after": 7 * DAY,
     "stale_upload": 0.2,
-    "max_deficit": 5 * GB,
-    "per_day": 3,
     "max_downloading": 2,
     "twin_lookups": 10,
     "library_categories": ("radarr", "tv-sonarr"),
@@ -164,13 +202,6 @@ SETTINGS = {
     "twin_min_leechers": 1,
     "twin_recheck": 2 * 3600,
     "twin_seed_after": 3600,
-    "rules": {
-        "min_size": 1 * GB,
-        "max_size": 5 * GB,
-        "max_age_hours": 1,
-        "min_leechers": 10,
-        "min_leechers_per_seeder": 5,
-    },
 }
 
 
@@ -181,13 +212,14 @@ def settings(**changes):
 def empty_state(**changes):
     return {
         "transfers": {}, "grabbed": {}, "twins": {}, "uploads": {}, "free": {}, "checked": {}, "paused": False,
-        "sources": {}, "history": {}, "zen": {}, "report": {}, **changes,
+        "sources": {}, "history": {}, "zen": {}, "report": {}, "account": [], "held": None, "backoff_until": 0,
+        "stuck": {}, "restore": {}, **changes,
     }
 
 
-def run(qbt, prowlarr=None, state=None, now=NOW, **changes):
+def run(qbt, prowlarr=None, state=None, now=NOW, c411=None, **changes):
     state = state if state is not None else empty_state()
-    run_once(qbt, prowlarr or FakeProwlarr(), settings(**changes), state, now)
+    run_once(qbt, prowlarr or FakeProwlarr(), c411 or FakeC411(), settings(**changes), state, now)
     return state
 
 
@@ -213,10 +245,15 @@ class Twins(unittest.TestCase):
         self.assertEqual(state["twins"], {"public": ["episode", "ratio", NOW, "http://prowlarr/episode.torrent"]})
         self.assertEqual(state["grabbed"], {})
 
-    def test_a_twin_is_grabbed_even_while_paused(self):
-        qbt = FakeQBittorrent([torrent("old", category="radarr", downloaded_gb=20)])
-        run(qbt, FakeProwlarr([episode()], twins=[twin()]))
+    def test_a_twin_is_grabbed_even_under_the_floor(self):
+        qbt = FakeQBittorrent()
+        run(qbt, FakeProwlarr([episode()], twins=[twin()]), c411=under_floor())
         self.assertEqual(qbt.added, [("public", "ratio")])
+
+    def test_a_release_is_fetched_once_for_several_candidates(self):
+        prowlarr = FakeProwlarr([episode()], twins=[twin(), twin()], files={"public": [8]})
+        run(FakeQBittorrent(), prowlarr)
+        self.assertEqual(prowlarr.fetched.count("episode"), 1)
 
     def test_a_twin_must_hold_the_same_files(self):
         qbt = FakeQBittorrent()
@@ -278,6 +315,16 @@ class Twins(unittest.TestCase):
         run(qbt, state=empty_state(twins={"public": ["hungry", "ratio", NOW - 7200, "http://prowlarr/hungry.torrent"]}))
         self.assertEqual(qbt.kept, ["public"])
 
+    def test_a_tracker_copy_that_fails_waits_longer_before_each_retry(self):
+        qbt = FakeQBittorrent([torrent("public", tracker="http://nyaa.tracker.wf/announce")])
+        state = empty_state(twins={"public": ["hungry", "ratio", NOW - 3600, "http://prowlarr/hungry.torrent"]})
+        prowlarr = FakeProwlarr(broken={"hungry"})
+        for minutes in range(0, 120, 10):
+            run(qbt, prowlarr, state, now=NOW + 60 * minutes)
+        self.assertEqual(prowlarr.fetched, ["hungry", "hungry"])
+        run(qbt, prowlarr, state, now=NOW + 3 * 3600)
+        self.assertEqual(prowlarr.fetched, ["hungry", "hungry", "hungry"])
+
     def test_a_tracker_copy_left_stopped_after_its_check_is_started(self):
         qbt = FakeQBittorrent([
             torrent("public", tracker="http://nyaa.tracker.wf/announce"),
@@ -288,21 +335,15 @@ class Twins(unittest.TestCase):
 
 
 class Farm(unittest.TestCase):
-    def test_without_a_twin_the_tracker_is_paid_and_remembered(self):
+    def test_a_fresh_release_is_no_longer_paid_for_upload(self):
         qbt = FakeQBittorrent()
-        state = run(qbt, FakeProwlarr([release("hungry")]))
-        self.assertEqual(qbt.added, [("hungry", "ratio")])
-        self.assertEqual(state["grabbed"], {"hungry": NOW})
-
-    def test_a_deficit_over_the_limit_pauses_paid_grabs(self):
-        qbt = FakeQBittorrent([torrent("old", downloaded_gb=20, uploaded_gb=2, category="radarr")])
-        state = run(qbt, FakeProwlarr([release("hungry")]))
+        state = run(qbt, FakeProwlarr([release("hungry", seeders=80, leechers=200)]))
         self.assertEqual(qbt.added, [])
-        self.assertTrue(state["paused"])
+        self.assertEqual(state["grabbed"], {})
 
-    def test_a_freeleech_release_is_grabbed_even_while_paused(self):
-        qbt = FakeQBittorrent([torrent("old", category="radarr", downloaded_gb=20)])
-        state = run(qbt, FakeProwlarr([release("free", free=True)]))
+    def test_a_freeleech_release_is_grabbed_even_under_the_floor(self):
+        qbt = FakeQBittorrent()
+        state = run(qbt, FakeProwlarr([release("free", seeders=30, free=True)]), c411=under_floor())
         self.assertEqual(qbt.added, [("free", "ratio")])
         self.assertEqual(state["free"], {"free": NOW})
         self.assertEqual(state["grabbed"], {})
@@ -312,25 +353,72 @@ class Farm(unittest.TestCase):
         state = run(qbt, state=empty_state(free={"free": NOW - 100}))
         self.assertEqual(state["transfers"], {"free": [0, 1 * GB]})
 
-    def test_three_paid_grabs_a_day_at_most(self):
-        qbt = FakeQBittorrent()
-        state = empty_state(grabbed={"a": NOW - 100, "b": NOW - 200, "c": NOW - 300})
-        run(qbt, FakeProwlarr([release("hungry")]), state)
-        self.assertEqual(qbt.added, [])
-
     def test_two_downloads_at_once_at_most(self):
         qbt = FakeQBittorrent([torrent("a", progress=0.5), torrent("b", category="zen", progress=0.1)])
-        run(qbt, FakeProwlarr([release("hungry"), episode()], twins=[twin()]))
+        run(qbt, FakeProwlarr([release("free", free=True), episode()], twins=[twin()]))
         self.assertEqual(qbt.added, [])
 
-    def test_a_cold_or_old_release_is_left_alone(self):
-        releases = [release("cold", leechers=5), release("old", age_hours=3)]
-        self.assertEqual(pick_hungry(releases, set(), SETTINGS["rules"]), [])
 
-    def test_the_hungriest_swarm_comes_first(self):
-        releases = [release("a", leechers=20, seeders=2), release("b", leechers=70), release("c", leechers=30)]
-        self.assertEqual([r["infohash"] for r in pick_hungry(releases, set(), SETTINGS["rules"])], ["b", "c", "a"])
+class Floor(unittest.TestCase):
+    def test_the_profile_is_read_once_per_run(self):
+        c411 = FakeC411()
+        run(FakeQBittorrent(), FakeProwlarr([episode(), release("rare", seeders=3)], twins=[twin()]), c411=c411)
+        self.assertEqual(c411.reads, 1)
 
+    def test_under_the_floor_nothing_paid_is_grabbed_and_c411_is_held_in_prowlarr(self):
+        qbt = FakeQBittorrent()
+        prowlarr = FakeProwlarr([release("rare", leechers=0, seeders=3)])
+        state = run(qbt, prowlarr, c411=FakeC411(uploaded_gb=35, downloaded_gb=30))
+        self.assertEqual(qbt.added, [])
+        self.assertEqual(prowlarr.holds, [("3", True, "Paused")])
+        self.assertTrue(state["paused"])
+        self.assertTrue(state["held"])
+        self.assertEqual(state["restore"], {"3": 7})
+
+    def test_above_the_floor_again_c411_is_released_in_prowlarr(self):
+        prowlarr = FakeProwlarr()
+        state = run(FakeQBittorrent(), prowlarr, empty_state(paused=True, held=True, restore={"3": 7}))
+        self.assertEqual(prowlarr.holds, [("3", False, "Paused")])
+        self.assertEqual(prowlarr.restores, [7])
+        self.assertFalse(state["paused"])
+        self.assertFalse(state["held"])
+
+    def test_prowlarr_is_only_told_when_the_floor_changes_side(self):
+        prowlarr = FakeProwlarr()
+        run(FakeQBittorrent(), prowlarr, empty_state(held=False))
+        self.assertEqual(prowlarr.holds, [])
+
+    def test_an_unreadable_profile_counts_as_under_the_floor(self):
+        qbt = FakeQBittorrent()
+        prowlarr = FakeProwlarr([release("rare", leechers=0, seeders=3)])
+        state = run(qbt, prowlarr, c411=FakeC411(broken=True))
+        self.assertEqual(qbt.added, [])
+        self.assertEqual(prowlarr.holds, [("3", True, "Paused")])
+        self.assertTrue(state["paused"])
+
+    def test_a_paid_grab_never_spends_past_the_floor(self):
+        qbt = FakeQBittorrent()
+        prowlarr = FakeProwlarr([release("a", leechers=0, seeders=3), release("b", leechers=0, seeders=4)])
+        run(qbt, prowlarr, c411=FakeC411(uploaded_gb=42, downloaded_gb=31))
+        self.assertEqual(qbt.added, [("a", "zen")])
+
+    def test_a_tracker_download_in_progress_counts_against_the_floor(self):
+        qbt = FakeQBittorrent([torrent("movie", category="radarr", size_gb=4, progress=0.5)])
+        prowlarr = FakeProwlarr([release("rare", leechers=0, seeders=3)])
+        run(qbt, prowlarr, c411=FakeC411(uploaded_gb=42, downloaded_gb=31))
+        self.assertEqual(qbt.added, [])
+
+
+class Throttling(unittest.TestCase):
+    def test_a_429_from_prowlarr_stops_its_use_until_the_wait_is_over(self):
+        prowlarr = FakeProwlarr(throttle=1800)
+        state = run(FakeQBittorrent(), prowlarr)
+        self.assertEqual(state["backoff_until"], NOW + 1800)
+        prowlarr.throttle = None
+        run(FakeQBittorrent(), prowlarr, state, now=NOW + 600)
+        self.assertEqual(prowlarr.reads, 1)
+        run(FakeQBittorrent(), prowlarr, state, now=NOW + 1800)
+        self.assertEqual(prowlarr.reads, 2)
 
 
 class Cleaning(unittest.TestCase):
@@ -398,21 +486,17 @@ class Cleaning(unittest.TestCase):
 
 
 class ZenReserve(unittest.TestCase):
-    def test_without_a_twin_the_hunt_waits_for_a_surplus(self):
-        qbt = FakeQBittorrent([torrent("old", category="radarr", downloaded_gb=10, uploaded_gb=25)])
-        run(qbt, FakeProwlarr([release("rare", leechers=0, seeders=3)]), zen_min_torrents=15)
+    def test_above_the_floor_the_hunt_grabs_a_rare_release(self):
+        qbt = FakeQBittorrent()
+        state = run(qbt, FakeProwlarr([release("rare", leechers=0, seeders=3)]))
+        self.assertEqual(qbt.added, [("rare", "zen")])
+        self.assertEqual(state["grabbed"], {"rare": NOW})
+
+    def test_three_hunted_grabs_a_day_at_most(self):
+        qbt = FakeQBittorrent()
+        state = empty_state(grabbed={"a": NOW - 100, "b": NOW - 200, "c": NOW - 300})
+        run(qbt, FakeProwlarr([release("rare", leechers=0, seeders=3)]), state)
         self.assertEqual(qbt.added, [])
-
-    def test_a_surplus_over_the_threshold_opens_the_hunt(self):
-        qbt = FakeQBittorrent([torrent("old", category="radarr", downloaded_gb=10, uploaded_gb=35)])
-        run(qbt, FakeProwlarr([release("rare", leechers=0, seeders=3)]), zen_min_torrents=15)
-        self.assertEqual(qbt.added, [("rare", "zen")])
-
-    def test_the_reserve_comes_first_until_it_holds_enough_torrents(self):
-        qbt = FakeQBittorrent([torrent("old", category="radarr", downloaded_gb=10, uploaded_gb=35)])
-        prowlarr = FakeProwlarr([release("hungry", leechers=80), release("rare", leechers=0, seeders=3)])
-        run(qbt, prowlarr, zen_min_torrents=15, max_downloading=1)
-        self.assertEqual(qbt.added, [("rare", "zen")])
 
     def test_rare_depends_on_the_size(self):
         self.assertTrue(is_rare(GB // 2, 24))
@@ -453,10 +537,9 @@ def report_of(state, source):
 
 
 class Sources(unittest.TestCase):
-    def test_a_paid_grab_stays_a_paid_grab_in_the_zen_reserve_and_once_removed(self):
-        state = run(FakeQBittorrent(), FakeProwlarr([release("hungry")]))
-        self.assertEqual(state["sources"], {"hungry": "paid"})
-        run(FakeQBittorrent([torrent("hungry", category="zen", downloaded_gb=3, uploaded_gb=1)]), state=state, now=NOW + DAY)
+    def test_a_paid_grab_stays_a_paid_grab_once_removed(self):
+        state = empty_state(sources={"hungry": "paid"})
+        run(FakeQBittorrent([torrent("hungry", downloaded_gb=3, uploaded_gb=1)]), state=state)
         run(FakeQBittorrent(), state=state, now=NOW + 2 * DAY)
         self.assertEqual(state["sources"], {"hungry": "paid"})
         self.assertEqual(report_of(state, "paid")["torrents"], 1)
@@ -471,7 +554,7 @@ class Sources(unittest.TestCase):
 
     def test_a_zen_hunt_is_reported_as_a_zen_hunt(self):
         qbt = FakeQBittorrent([torrent("old", category="radarr", downloaded_gb=10, uploaded_gb=35)])
-        state = run(qbt, FakeProwlarr([release("rare", leechers=0, seeders=3)]), zen_min_torrents=15)
+        state = run(qbt, FakeProwlarr([release("rare", leechers=0, seeders=3)]))
         self.assertEqual(state["sources"]["rare"], "zen-hunt")
         self.assertEqual(state["sources"]["old"], "library")
 
@@ -588,10 +671,10 @@ class Report(unittest.TestCase):
         self.assertEqual(figures["week_downloaded_gb"], 2)
 
 
-def summary_of(qbt, state=None, now=NOW, **changes):
+def summary_of(qbt, state=None, now=NOW, c411=None, **changes):
     state = state if state is not None else empty_state()
     with contextlib.redirect_stdout(io.StringIO()):
-        return run_once(qbt, FakeProwlarr(), settings(**changes), state, now)
+        return run_once(qbt, FakeProwlarr(), c411 or FakeC411(), settings(**changes), state, now)
 
 
 class Summary(unittest.TestCase):
@@ -618,10 +701,27 @@ class Summary(unittest.TestCase):
         self.assertEqual(summary["farm"], {"torrents": 2, "downloading": 1, "size_gb": 5, "limit_gb": 100, "fill": 5.0})
         self.assertEqual(summary["zen"], {"torrents": 1, "downloading": 0, "size_gb": 4, "limit_gb": 50, "fill": 8.0})
 
-    def test_the_grabs_of_the_day_and_the_pause_are_shown(self):
-        state = empty_state(grabbed={"a": NOW - 100, "b": NOW - 200}, paused=True)
+    def test_the_account_shows_its_ratio_its_zen_and_its_upload_of_the_week(self):
+        state = empty_state(account=[
+            [NOW - 8 * DAY, 50 * GB, 20 * GB, 10],
+            [NOW - 7 * DAY, 55 * GB, 25 * GB, 15],
+            [NOW - DAY, 58 * GB, 28 * GB, 20],
+        ])
         summary = summary_of(FakeQBittorrent(), state, indexers=[])
-        self.assertEqual(summary["grabs"], {"today": 2, "per_day": 3, "paused": True})
+        self.assertEqual(summary["account"], {
+            "ratio": 2.0, "floor": 1.2, "paused": False, "zen": 25, "week_uploaded_gb": 5,
+        })
+        self.assertNotIn("grabs", summary)
+
+    def test_a_new_account_counts_its_week_from_its_first_reading(self):
+        state = empty_state(account=[[NOW - 2 * DAY, 57 * GB, 28 * GB, 20]])
+        self.assertEqual(summary_of(FakeQBittorrent(), state, indexers=[])["account"]["week_uploaded_gb"], 3)
+
+    def test_an_unreadable_account_shows_the_pause_and_no_figures(self):
+        summary = summary_of(FakeQBittorrent(), c411=FakeC411(broken=True), indexers=[])
+        self.assertEqual(summary["account"], {
+            "ratio": None, "floor": 1.2, "paused": True, "zen": None, "week_uploaded_gb": None,
+        })
 
     def test_each_source_is_listed_by_name_with_its_figures(self):
         qbt = FakeQBittorrent([torrent("movie", category="radarr", seeders=100, downloaded_gb=4, uploaded_gb=2)])
@@ -812,6 +912,126 @@ class RealClient(unittest.TestCase):
             ["/api/v2/auth/login", "/api/v2/torrents/delete", "/api/v2/torrents/delete",
              "/api/v2/auth/login", "/api/v2/torrents/delete"],
         )
+
+
+class FakeProwlarrServer(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        FakeProwlarrServer.calls.append(("GET", self.path, self.headers.get("X-Api-Key"), None))
+        if self.path.startswith("/3/api"):
+            self.answer(429, b"", {"Retry-After": "1200"})
+        elif self.path == "/api/v1/appprofile":
+            self.answer(200, json.dumps(FakeProwlarrServer.profiles).encode())
+        elif self.path == "/api/v1/indexer/3":
+            self.answer(200, json.dumps({"id": 3, "name": "C411", "appProfileId": FakeProwlarrServer.profile}).encode())
+
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        FakeProwlarrServer.calls.append(("POST", self.path, self.headers.get("X-Api-Key"), body))
+        self.answer(201, json.dumps({**body, "id": 2}).encode())
+
+    def do_PUT(self):
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        FakeProwlarrServer.calls.append(("PUT", self.path, self.headers.get("X-Api-Key"), body))
+        self.answer(202, json.dumps(body).encode())
+
+    def answer(self, code, body, headers=None):
+        self.send_response(code)
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+class RealProwlarr(unittest.TestCase):
+    def setUp(self):
+        FakeProwlarrServer.calls = []
+        FakeProwlarrServer.profiles = [{"id": 1, "name": "Standard"}]
+        FakeProwlarrServer.profile = 1
+        self.server = http.server.HTTPServer(("127.0.0.1", 0), FakeProwlarrServer)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.prowlarr = Prowlarr(f"http://127.0.0.1:{self.server.server_port}", "key", 2, spacing=0)
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+    def writes(self):
+        return [(method, path, body) for method, path, _, body in FakeProwlarrServer.calls if method != "GET"]
+
+    def test_holding_c411_creates_the_paused_profile_and_moves_the_indexer_onto_it(self):
+        self.prowlarr.hold("3", True, "Paused")
+        self.assertEqual(self.writes(), [
+            ("POST", "/api/v1/appprofile", {
+                "name": "Paused", "enableRss": False, "enableAutomaticSearch": False,
+                "enableInteractiveSearch": False, "minimumSeeders": 1,
+            }),
+            ("PUT", "/api/v1/indexer/3", {"id": 3, "name": "C411", "appProfileId": 2}),
+        ])
+        self.assertTrue(all(key == "key" for _, _, key, _ in FakeProwlarrServer.calls))
+
+    def test_releasing_c411_puts_it_back_on_the_other_profile(self):
+        FakeProwlarrServer.profiles.append({"id": 2, "name": "Paused"})
+        FakeProwlarrServer.profile = 2
+        self.prowlarr.hold("3", False, "Paused")
+        self.assertEqual(self.writes(), [("PUT", "/api/v1/indexer/3", {"id": 3, "name": "C411", "appProfileId": 1})])
+
+    def test_releasing_c411_restores_the_profile_it_had_before(self):
+        FakeProwlarrServer.profiles += [{"id": 2, "name": "Paused"}, {"id": 5, "name": "Interactive"}]
+        FakeProwlarrServer.profile = 2
+        self.prowlarr.hold("3", False, "Paused", 5)
+        self.assertEqual(self.writes(), [("PUT", "/api/v1/indexer/3", {"id": 3, "name": "C411", "appProfileId": 5})])
+
+    def test_holding_c411_tells_the_profile_it_leaves(self):
+        self.assertEqual(self.prowlarr.hold("3", True, "Paused"), 1)
+
+    def test_an_indexer_already_on_the_right_profile_is_left_alone(self):
+        self.prowlarr.hold("3", False, "Paused")
+        self.assertEqual(self.writes(), [])
+
+    def test_a_429_raises_with_the_wait_prowlarr_asks_for(self):
+        with self.assertRaises(Throttled) as throttled:
+            self.prowlarr.newest("3", NOW)
+        self.assertEqual(throttled.exception.retry_after, 1200)
+
+
+PROFILE = {
+    "zen": {"balance": 25, "totalEarned": 25, "totalSpent": 0},
+    "transfer": {
+        "uploaded": {"actual": 5447372745, "credit": 53687091200, "total": 59134463945},
+        "downloaded": {"actual": 28231492173, "credit": 0, "total": 28231492173},
+    },
+}
+
+
+class FakeC411Server(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        FakeC411Server.calls.append((self.path, self.headers.get("Authorization")))
+        body = json.dumps(PROFILE).encode()
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+class RealC411(unittest.TestCase):
+    def test_the_account_is_read_from_the_profile_with_the_bearer_key(self):
+        FakeC411Server.calls = []
+        server = http.server.HTTPServer(("127.0.0.1", 0), FakeC411Server)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            account = C411("secret", f"http://127.0.0.1:{server.server_port}/api/user/profile").account()
+        finally:
+            server.shutdown()
+            server.server_close()
+        self.assertEqual(account, {"uploaded": 59134463945, "downloaded": 28231492173, "zen": 25})
+        self.assertEqual(FakeC411Server.calls, [("/api/user/profile", "Bearer secret")])
 
 
 if __name__ == "__main__":
