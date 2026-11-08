@@ -143,10 +143,6 @@
         icon: cross-seed.png
         description: Seeds the same data on C411
         siteMonitor: http://cross-seed:2468/api/ping
-    - qbit_manage:
-        icon: qbitmanage.png
-        description: Tags torrents by tracker
-        href: https://qbit-manage.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
 
 - Automation:
     - Prowlarr:
