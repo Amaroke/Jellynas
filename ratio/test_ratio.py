@@ -123,9 +123,10 @@ class FakeQBittorrent:
         self.made[name] = path
         self.cats[name] = {"savePath": path}
 
-    def remove_categories(self, names):
-        for name in names:
-            del self.cats[name]
+    def remove_tags(self, hashes, tag):
+        for t in self.list:
+            if t["hash"] in hashes:
+                t["tags"] = ", ".join(x for x in t["tags"].split(", ") if x != tag)
 
     def add_tags(self, hashes, tag):
         self.tagged += [(h, tag) for h in hashes]
@@ -597,47 +598,6 @@ class Budget(unittest.TestCase):
 
 
 class Categories(unittest.TestCase):
-    def test_the_torrents_of_the_old_farm_categories_move_into_farm(self):
-        qbt = FakeQBittorrent([
-            torrent("paid", category="ratio"),
-            torrent("kept", category="zen", seeders=3),
-            torrent("linked", category="cross-seed-link", save_path="/data/torrents/cross-seed/C411"),
-        ])
-        qbt.cats.update({"ratio": {}, "zen": {}, "cross-seed-link": {}})
-        state = run(qbt)
-        self.assertEqual(qbt.moved, [("paid", "farm"), ("kept", "farm"), ("linked", "farm")])
-        self.assertEqual(set(qbt.cats), {"movies", "shows", "music", "books", "farm"})
-        self.assertEqual(set(state["transfers"]), {"paid", "kept", "linked"})
-        self.assertEqual(state["sources"], {"paid": "paid", "kept": "zen-hunt", "linked": "cross-seed"})
-
-    def test_a_torrent_moved_into_a_new_category_keeps_its_files_in_place(self):
-        qbt = FakeQBittorrent([
-            torrent("twin", category="ratio", tracker=PUBLIC),
-            torrent("movie", category="radarr", tracker=PUBLIC),
-        ])
-        qbt.cats.update({"ratio": {}, "radarr": {}})
-        run(qbt)
-        self.assertEqual(qbt.pinned, ["twin", "movie"])
-
-    def test_a_torrent_moved_into_farm_loses_its_share_limits_and_seeds_again(self):
-        qbt = FakeQBittorrent([torrent("kept", category="zen", state="stoppedUP")])
-        qbt.cats["zen"] = {}
-        run(qbt)
-        self.assertEqual(qbt.limited, ["kept"])
-        self.assertEqual(qbt.started, ["kept"])
-
-    def test_a_library_torrent_takes_its_new_category_once_imported(self):
-        qbt = FakeQBittorrent([
-            torrent("movie", category="radarr", tracker=PUBLIC),
-            torrent("episode", category="tv-sonarr", tracker=PUBLIC, progress=0.5, seeding_days=0),
-            torrent("album", category="lidarr", tracker=PUBLIC),
-            torrent("book", category="lazylibrarian", tracker=PUBLIC),
-        ])
-        qbt.cats.update({"radarr": {}, "tv-sonarr": {}, "lidarr": {}, "lazylibrarian": {}})
-        run(qbt)
-        self.assertEqual(qbt.moved, [("movie", "movies"), ("album", "music"), ("book", "books")])
-        self.assertEqual(set(qbt.cats), {"movies", "shows", "music", "books", "farm", "tv-sonarr"})
-
     def test_a_category_ratio_does_not_own_is_left_alone(self):
         qbt = FakeQBittorrent([torrent("manual", category="mine")])
         qbt.cats["mine"] = {}
@@ -831,12 +791,6 @@ class Adoption(unittest.TestCase):
         self.assertEqual(qbt.moved, [("movie", "farm"), ("album", "farm")])
         self.assertEqual(qbt.limited, ["movie", "album"])
 
-    def test_a_c411_torrent_of_an_old_library_category_moves_into_the_farm(self):
-        qbt = FakeQBittorrent([torrent("movie", category="radarr")])
-        qbt.cats["radarr"] = {}
-        run(qbt)
-        self.assertEqual(qbt.moved, [("movie", "farm")])
-
     def test_a_public_fresh_or_too_big_library_torrent_stays(self):
         qbt = FakeQBittorrent([
             torrent("public", category="shows", seeders=3, tracker=PUBLIC),
@@ -889,18 +843,18 @@ class Sources(unittest.TestCase):
         self.assertEqual(state["sources"], {"episode": "twin"})
         qbt = FakeQBittorrent([
             torrent("public", tracker="http://nyaa.tracker.wf/announce"),
-            torrent("episode", category="cross-seed-link", state="stoppedUP", tracker=""),
+            torrent("episode", state="stoppedUP", tracker=""),
         ])
         run(qbt, state=state, now=NOW + 600)
         self.assertEqual(state["twins"], {})
-        run(FakeQBittorrent([torrent("episode", category="cross-seed-link")]), state=state, now=NOW + 1200)
+        run(FakeQBittorrent([torrent("episode")]), state=state, now=NOW + 1200)
         self.assertEqual(state["sources"], {"episode": "twin"})
 
     def test_library_torrents_and_their_cross_seeds_are_told_apart(self):
         qbt = FakeQBittorrent([
             torrent("movie", category="movies", seeders=100),
             torrent("show", category="shows", seeders=100),
-            torrent("linked", category="cross-seed-link"),
+            torrent("linked"),
             torrent("public", category="movies", tracker="http://nyaa.tracker.wf/announce"),
         ])
         state = run(qbt)
@@ -908,17 +862,22 @@ class Sources(unittest.TestCase):
 
     def test_a_tracker_torrent_without_a_source_gets_one_from_what_ratio_sees(self):
         qbt = FakeQBittorrent([
-            torrent("farmed", category="ratio", downloaded_gb=4),
+            torrent("linked", downloaded_gb=4),
             torrent("free", downloaded_gb=4),
-            torrent("kept", category="zen", seeders=3),
             torrent("movie", category="movies", seeders=100),
         ])
-        transfers = {h: [GB, 0] for h in ("farmed", "free", "kept", "movie", "gone")}
+        transfers = {h: [GB, 0] for h in ("linked", "free", "movie", "gone")}
         state = run(qbt, state=empty_state(transfers=transfers, free={"free": NOW - 100}))
         self.assertEqual(state["sources"], {
-            "farmed": "paid", "free": "freeleech", "kept": "zen-hunt", "movie": "library", "gone": "unknown",
+            "linked": "cross-seed", "free": "freeleech", "movie": "library", "gone": "unknown",
         })
         self.assertEqual(report_of(state, "unknown")["downloaded_gb"], 1)
+
+    def test_a_retired_zen_hunt_becomes_a_volume_hunt(self):
+        qbt = FakeQBittorrent([torrent("kept", tags="zen-hunt")])
+        state = run(qbt, state=empty_state(transfers={"kept": [GB, 0]}, sources={"kept": "zen-hunt"}))
+        self.assertEqual(state["sources"], {"kept": "volume-hunt"})
+        self.assertEqual(qbt.list[0]["tags"], "volume-hunt")
 
     def test_a_pending_source_that_never_shows_up_is_forgotten(self):
         state = run(FakeQBittorrent(), state=empty_state(sources={"lost": "paid"}))
@@ -937,7 +896,7 @@ class Report(unittest.TestCase):
         state = empty_state()
         lines = self.run_quietly(qbt, state, NOW)
         self.assertEqual(len(lines), 1)
-        self.assertIn("Library download", lines[0])
+        self.assertIn("Source library:", lines[0])
         self.assertEqual(state["report"]["at"], NOW)
         self.assertEqual(report_of(state, "library")["ratio"], 0.5)
         self.assertEqual(self.run_quietly(qbt, state, NOW + 600), [])
@@ -1008,7 +967,7 @@ class Summary(unittest.TestCase):
     def test_the_ledger_counts_every_tracker_torrent_removed_ones_included(self):
         qbt = FakeQBittorrent([
             torrent("farmed", downloaded_gb=3, uploaded_gb=6),
-            torrent("kept", category="zen", size_gb=2, seeders=3, downloaded_gb=2, uploaded_gb=1),
+            torrent("kept", size_gb=2, seeders=3, downloaded_gb=2, uploaded_gb=1),
             torrent("movie", category="movies", size_gb=4, seeders=100, downloaded_gb=4),
             torrent("public", tracker="http://nyaa.tracker.wf/announce", downloaded_gb=9),
         ])
@@ -1021,13 +980,12 @@ class Summary(unittest.TestCase):
     def test_the_farm_shows_the_seed_count_its_fill_and_its_downloads(self):
         qbt = FakeQBittorrent([
             torrent("farmed", size_gb=3),
-            torrent("linked", category="cross-seed-link", size_gb=2, progress=0.5, seeding_days=0),
-            torrent("kept", category="zen", size_gb=4, seeders=3),
+            torrent("linked", size_gb=2, progress=0.5, seeding_days=0),
+            torrent("kept", size_gb=4, seeders=3),
             torrent("movie", category="movies", size_gb=200),
             torrent("stopped", size_gb=1, state="stoppedUP"),
             torrent("public", size_gb=1, tracker=PUBLIC),
         ])
-        qbt.cats.update({"zen": {}, "cross-seed-link": {}})
         qbt.start = lambda hashes: None
         summary = summary_of(qbt, indexers=[])
         self.assertEqual(summary["farm"], {"seeds": 3, "size_gb": 11, "budget_gb": 100, "fill": 11.0, "downloading": 1})
@@ -1059,7 +1017,7 @@ class Summary(unittest.TestCase):
         qbt = FakeQBittorrent([torrent("movie", category="movies", seeders=100, downloaded_gb=4, uploaded_gb=2)])
         summary = summary_of(qbt)
         self.assertEqual(summary["sources"], [
-            {"name": "Library download", "figures": "1 torrent, 2.0 / 4.0 GB, ratio 0.50"},
+            {"name": "library", "figures": "1 torrent, 2.0 / 4.0 GB, ratio 0.50"},
         ])
 
     def test_the_next_quest_is_the_closest_step_not_reached(self):
@@ -1328,7 +1286,7 @@ class Page(unittest.TestCase):
         self.assertIn(">60.0 GB<", body)
         self.assertIn("Frieren 01", body)
         self.assertIn(">0.120 a day<", body)
-        self.assertIn("Twin, ratio 2.40, note 1.35, 1.40 GB, 20 days", body)
+        self.assertIn("twin, ratio 2.40, note 1.35, 1.40 GB, 20 days", body)
         self.assertIn(">Best ratio per day<", body)
         self.assertIn(">Lowest ratio per day<", body)
         self.assertIn("Old book", body)
@@ -1344,6 +1302,7 @@ class Page(unittest.TestCase):
         self.assertIn(">Badge Prime<", body)
         self.assertIn(">Plus faible ratio par jour<", body)
         self.assertIn(">0,120 par jour<", body)
+        self.assertIn(">Même release prise sur un tracker public, gratuite sur C411<", body)
 
     def test_the_time_axis_always_spans_30_days(self):
         _, body = self.page({**BOARD, "history": [entry(30)]}, "?part=1")
@@ -1549,16 +1508,16 @@ class RealClient(unittest.TestCase):
             ("/api/v2/torrents/recheck", b"hashes=abc"),
         ])
 
-    def test_tags_share_limits_and_old_categories_go_to_their_endpoints(self):
+    def test_tags_share_limits_and_auto_management_go_to_their_endpoints(self):
         self.qbt.add_tags(["a", "b"], "public")
         self.qbt.reset_share_limits(["a"])
-        self.qbt.remove_categories(["ratio", "zen"])
+        self.qbt.remove_tags(["a"], "zen-hunt")
         self.qbt.keep_in_place(["a"])
         calls = [(path, body) for path, _, body in FakeServer.calls if path != "/api/v2/auth/login"]
         self.assertEqual(calls, [
             ("/api/v2/torrents/addTags", b"hashes=a%7Cb&tags=public"),
             ("/api/v2/torrents/setShareLimits", b"hashes=a&ratioLimit=-2&seedingTimeLimit=-2&inactiveSeedingTimeLimit=-2&shareLimitAction=Default&shareLimitsMode=Default"),
-            ("/api/v2/torrents/removeCategories", b"categories=ratio%0Azen"),
+            ("/api/v2/torrents/removeTags", b"hashes=a&tags=zen-hunt"),
             ("/api/v2/torrents/setAutoManagement", b"hashes=a&enable=false"),
         ])
 
