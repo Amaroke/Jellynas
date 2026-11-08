@@ -97,7 +97,6 @@ flowchart LR
         direction TB
         autobrr("autobrr<br/>freeleech")
         crossseed("cross-seed")
-        qbitmanage("qbit_manage")
         ratioscript("ratio<br/>Farm")
     end
 
@@ -151,8 +150,7 @@ flowchart LR
     Bazarr -->|requeue| Tdarr
     Radarr -->|works| Indexarr
     Sonarr -->|works| Indexarr
-    autobrr ~~~ crossseed ~~~ qbitmanage
-    qbitmanage ~~~ ratioscript
+    autobrr ~~~ crossseed ~~~ ratioscript
 
     style canvas fill:#ffffff,stroke:#e5e7eb,stroke-width:1px
     linkStyle default stroke:#78909c,color:#374151
@@ -176,7 +174,7 @@ flowchart LR
     class qBittorrent,slskd,Suwayomi vpnNode
     style vpn fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#1f2937
     classDef ratioNode fill:#ffffff,stroke:#ec407a,color:#1f2937,stroke-width:1.5px
-    class autobrr,crossseed,qbitmanage,ratioscript ratioNode
+    class autobrr,crossseed,ratioscript ratioNode
     style ratio fill:#fce4ec,stroke:#ec407a,stroke-width:2px,color:#1f2937
     classDef observationNode fill:#ffffff,stroke:#00897b,color:#1f2937,stroke-width:1.5px
     class Beszel,UptimeKuma,Dozzle,Indexarr,Homepage,Backup observationNode
@@ -195,8 +193,8 @@ flowchart LR
 
 Each optional part is a set of services in `compose.yaml`. To leave one out, comment its lines in a pull request, and doco-cd removes them once merged:
 
-- Without a private tracker, comment `autobrr`, `cross-seed`, `qbit_manage` and `ratio`.
-- Without a VPN, comment `gluetun`, `slskd` and `suwayomi`, remove `network_mode` and `depends_on` from `qbittorrent/compose.yaml`, and replace `gluetun:8080` with `qbittorrent:8080` in `caddy/Caddyfile`, `cross-seed/config.js`, `qbit_manage/config.yml`, `ratio/ratio.py` and `homepage/services.yaml`. Soulseek shows the IP of each user to the others, so slskd never runs without the VPN, and Suwayomi never fetches a manga site from the home IP.
+- Without a private tracker, comment `autobrr`, `cross-seed` and `ratio`.
+- Without a VPN, comment `gluetun`, `slskd` and `suwayomi`, remove `network_mode` and `depends_on` from `qbittorrent/compose.yaml`, and replace `gluetun:8080` with `qbittorrent:8080` in `caddy/Caddyfile`, `cross-seed/config.js`, `ratio/ratio.py` and `homepage/services.yaml`. Soulseek shows the IP of each user to the others, so slskd never runs without the VPN, and Suwayomi never fetches a manga site from the home IP.
 - Without a domain, comment `caddy` and publish the port of each web UI in its own `compose.yaml`, reachable over plain HTTP on the local network only.
 
 Remove the tiles of the services left out from `homepage/services.yaml` too.
@@ -264,7 +262,7 @@ Create both roots, the folder of the archives, the recycle bins of Radarr and So
 
 ```bash
 . <(grep -E '^(DATA_ROOT|APPDATA_ROOT|BACKUP_ROOT|PUID|PGID)=' .env)
-mkdir -p "$BACKUP_ROOT" "$DATA_ROOT"/torrents/{farm,cross-seed} "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,recyclarr,autobrr,cross-seed,qbit_manage,ratio,slskd,suwayomi}
+mkdir -p "$BACKUP_ROOT" "$DATA_ROOT"/torrents/{farm,cross-seed} "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,recyclarr,autobrr,cross-seed,ratio,slskd,suwayomi}
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
@@ -326,7 +324,6 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with `:<CA
 | Tdarr | `https://tdarr.lan.<DOMAIN>` | Local network |
 | Indexarr | `https://indexarr.lan.<DOMAIN>` | Local network |
 | autobrr | `https://autobrr.lan.<DOMAIN>` | Local network |
-| qbit_manage | `https://qbit-manage.lan.<DOMAIN>` | Local network |
 | Beszel | `https://beszel.lan.<DOMAIN>` | Local network |
 | Uptime Kuma | `https://uptime-kuma.lan.<DOMAIN>` | Local network |
 | Dozzle | `https://dozzle.lan.<DOMAIN>` | Local network |
@@ -466,7 +463,7 @@ A Friend then opens the Seerr address, picks "Sign in with Jellyfin" and enters 
 
 Requires [Deploy](#deploy).
 
-qBittorrent downloads torrents into the torrents tree, the only folder it sees, mounted under `/data/torrents`. Transmission or Deluge can replace it, though cross-seed, qbit_manage and ratio speak to qBittorrent. It shares the network of Gluetun, whose firewall only lets traffic out through the VPN. When the VPN is down or not configured yet, qBittorrent has no connectivity at all, so your real IP never leaks.
+qBittorrent downloads torrents into the torrents tree, the only folder it sees, mounted under `/data/torrents`. Transmission or Deluge can replace it, though cross-seed and ratio speak to qBittorrent. It shares the network of Gluetun, whose firewall only lets traffic out through the VPN. When the VPN is down or not configured yet, qBittorrent has no connectivity at all, so your real IP never leaks.
 
 ### VPN
 
@@ -1067,10 +1064,9 @@ The Admin keeps a good ratio on C411, a French private tracker, with torrents gr
 
 - ratio, `ratio/ratio.py`, runs the Farm. It grabs freeleech releases, Twins and, over the Ratio floor of the account, small Rare releases of the Volume hunt for the Farm, downloads each from its Twin on a public tracker when one exists, and cleans both.
 - cross-seed finds the torrents of qBittorrent on C411 and seeds them there too, from hardlinks in `/data/torrents/cross-seed`, without downloading them again. qBittorrent tells it about every finished torrent.
-- qbit_manage tags every torrent by tracker. It removes nothing.
 - autobrr stays available for a tracker that announces on IRC. C411 does not.
 
-Radarr and Sonarr only import their own category, so a torrent of the Farm never reaches the Library. None of these tools sees the media tree. autobrr and ratio see no folder at all, cross-seed and qbit_manage see only the torrents tree.
+Radarr and Sonarr only import their own category, so a torrent of the Farm never reaches the Library. None of these tools sees the media tree. autobrr and ratio see no folder at all, cross-seed sees only the torrents tree.
 
 ### Risks
 
@@ -1080,7 +1076,7 @@ Radarr and Sonarr only import their own category, so a torrent of the Farm never
 
 ### Login
 
-In `.env`, set `QBITTORRENT_USER` and `QBITTORRENT_PASSWORD` to the qBittorrent login. cross-seed, qbit_manage and ratio use it. ratio creates the `movies`, `shows`, `music`, `books` and `farm` categories in qBittorrent by itself.
+In `.env`, set `QBITTORRENT_USER` and `QBITTORRENT_PASSWORD` to the qBittorrent login. cross-seed and ratio use it. ratio creates the `movies`, `shows`, `music`, `books` and `farm` categories in qBittorrent by itself.
 
 ### Public tracker for Twins
 
@@ -1131,22 +1127,6 @@ cross-seed searches the private indexers of Prowlarr for torrents that hold the 
 ratio sets "Run external program on torrent finished" in qBittorrent, Tools > Options > Downloads, to a `curl` that sends the hash of each finished torrent to cross-seed, single episodes included. cross-seed then searches C411 at once, while its swarm is still hungry, and adds each match in the `farm` category. It also searches each new torrent again once a day for two weeks. Leave public indexers out of `CROSS_SEED_INDEXER_IDS`, a public torrent brings no ratio.
 
 To check the hook, open View > Log in qBittorrent once a torrent finishes: it shows the `curl` command it ran. cross-seed then names the torrent in its logs.
-
-### qbit_manage
-
-qbit_manage tags every torrent by tracker every 10 minutes. ratio is the only tool that removes a torrent of the Farm or a public torrent, and Radarr, Sonarr and Lidarr still remove the private torrents they keep. Its config lives in its appdata folder, since its web UI edits it. `qbit_manage/config.yml` is the starting point.
-
-1. Copy it, replacing the file qbit_manage uses:
-
-   ```bash
-   . <(grep '^APPDATA_ROOT=' .env)
-   cp qbit_manage/config.yml "$APPDATA_ROOT"/qbit_manage/config.yml
-   docker compose restart qbit_manage
-   ```
-
-2. Open `https://qbit-manage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. In the Security section, set the authentication method to "Basic Authentication", enter a username and a strong password, distinct from the other tools, leave "Bypass authentication for local" unchecked, and save.
-3. In Tracker Configuration, add one entry per tracker, with a keyword of its announce URL and its name as the tag. A torrent from a tracker not listed gets the `other` tag.
-4. Check that "Share Limits" is off in the commands, so qbit_manage never removes a torrent behind ratio.
 
 ### ratio
 
