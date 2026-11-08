@@ -1049,7 +1049,7 @@ class RealClient(unittest.TestCase):
         calls = [(path, body) for path, _, body in FakeServer.calls if path != "/api/v2/auth/login"]
         self.assertEqual(calls, [
             ("/api/v2/torrents/addTags", b"hashes=a%7Cb&tags=public"),
-            ("/api/v2/torrents/setShareLimits", b"hashes=a&ratioLimit=-2&seedingTimeLimit=-2&inactiveSeedingTimeLimit=-2"),
+            ("/api/v2/torrents/setShareLimits", b"hashes=a&ratioLimit=-2&seedingTimeLimit=-2&inactiveSeedingTimeLimit=-2&shareLimitAction=Default&shareLimitsMode=Default"),
             ("/api/v2/torrents/removeCategories", b"categories=ratio%0Azen"),
             ("/api/v2/torrents/setAutoManagement", b"hashes=a&enable=false"),
         ])
