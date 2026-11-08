@@ -76,8 +76,8 @@ class BackupTest(unittest.TestCase):
         self.assertEqual("30", setting(self.backup(), "BACKUP_RETENTION_DAYS"))
         self.assertTrue(setting(self.backup(), "BACKUP_FILENAME").startswith(setting(self.backup(), "BACKUP_PRUNING_PREFIX")))
 
-    def test_a_failed_backup_notifies_ntfy(self):
-        self.assertEqual("ntfy://ntfy.sh/${NTFY_TOPIC}", setting(self.backup(), "NOTIFICATION_URLS"))
+    def test_a_failed_backup_notifies_discord(self):
+        self.assertEqual("discord://${DISCORD_ALERTS_WEBHOOK_TOKEN}@${DISCORD_ALERTS_WEBHOOK_ID}", setting(self.backup(), "NOTIFICATION_URLS"))
         self.assertIn(setting(self.backup(), "NOTIFICATION_LEVEL"), {None, "error"})
 
     def test_every_service_with_appdata_says_whether_it_stops(self):

@@ -3,6 +3,8 @@ services:
     image: henrygd/beszel:0.21.1
     container_name: beszel
     restart: unless-stopped
+    networks:
+      - internal-zone
     security_opt:
       - no-new-privileges
     environment:
@@ -28,16 +30,18 @@ services:
     container_name: beszel-agent
     restart: unless-stopped
     network_mode: host
+    depends_on:
+      - socket-proxy
     security_opt:
       - no-new-privileges
     environment:
       LISTEN: /beszel_socket/beszel.sock
       KEY: ${BESZEL_AGENT_KEY}
       DOCKER_IMAGE_CHECK: "false"
+      DOCKER_HOST: tcp://127.0.0.1:2375
     labels:
       kuma.beszel-agent.docker.name: Beszel agent
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - beszel_socket:/beszel_socket
       - ${DATA_ROOT}/.beszel:/extra-filesystems/data__Data:ro
     healthcheck:

@@ -1,4 +1,5 @@
 {
+	https_port {$CADDY_HTTPS_PORT}
 	auto_https disable_redirects
 	acme_dns ovh {
 		endpoint {env.OVH_ENDPOINT}
@@ -37,6 +38,7 @@
 }
 
 *.{$DOMAIN} {
+	header Strict-Transport-Security "max-age=31536000"
 	@jellyfin host jellyfin.{$DOMAIN}
 	handle @jellyfin {
 		reverse_proxy jellyfin:8096
@@ -51,6 +53,7 @@
 }
 
 *.lan.{$DOMAIN} {
+	header Strict-Transport-Security "max-age=31536000"
 	import lan truenas host.docker.internal:80
 	import lan jellyfin jellyfin:8096
 	import lan seerr seerr:5055
@@ -91,6 +94,6 @@
 	}
 }
 
-:443 {
+:{$CADDY_HTTPS_PORT} {
 	abort
 }

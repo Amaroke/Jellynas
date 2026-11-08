@@ -13,7 +13,6 @@ from status import Status, serve, summary
 
 from jellyfin import Jellyfin
 
-JELLYFIN_URL = "http://jellyfin:8096"
 STATUS_PORT = 8000
 TICK_SECONDS = 15
 QUEUE_SHOWN = 10
@@ -387,7 +386,7 @@ def main():
         sys.exit(f"DISCORD_GUILD_ID must be the number of the Discord server, got {guild!r}")
     status = Status()
     serve(status, "0.0.0.0", STATUS_PORT)
-    bot = MusicBot(int(guild), Jellyfin(JELLYFIN_URL, required("MUSIC_BOT_JELLYFIN_API_KEY")), status)
+    bot = MusicBot(int(guild), Jellyfin(required("MUSIC_BOT_JELLYFIN_URL"), required("MUSIC_BOT_JELLYFIN_API_KEY")), status)
     bot.run(token, log_handler=None)
 
 

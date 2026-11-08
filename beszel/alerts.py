@@ -5,7 +5,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-NTFY_PREFIX = "ntfy://ntfy.sh/"
+REPLACED_PREFIXES = ("ntfy://", "discord://")
 ALERT_MINUTES = 10
 
 
@@ -26,15 +26,20 @@ def threshold(env, name, default):
         sys.exit(f"{name} must be a whole number, got {value!r}")
 
 
-def with_topic(settings, topic):
-    webhooks = [hook for hook in settings.get("webhooks") or [] if not hook.startswith(NTFY_PREFIX)]
-    return {**settings, "webhooks": [*webhooks, NTFY_PREFIX + topic]}
+def required(env, name):
+    value = env.get(name, "").strip()
+    if not value:
+        sys.exit(f"{name} is empty in .env")
+    return value
+
+
+def with_webhook(settings, webhook):
+    webhooks = [hook for hook in settings.get("webhooks") or [] if not hook.startswith(REPLACED_PREFIXES)]
+    return {**settings, "webhooks": [*webhooks, webhook]}
 
 
 def apply_alerts(hub_url, env):
-    topic = env.get("NTFY_TOPIC", "").strip()
-    if not topic:
-        sys.exit("NTFY_TOPIC is empty in .env")
+    webhook = f"discord://{required(env, 'DISCORD_ALERTS_WEBHOOK_TOKEN')}@{required(env, 'DISCORD_ALERTS_WEBHOOK_ID')}"
     disk = threshold(env, "BESZEL_DISK_ALERT_PERCENT", 85)
     temperature = threshold(env, "BESZEL_TEMPERATURE_ALERT_CELSIUS", 80)
     api = hub_url.rstrip("/") + "/api"
@@ -54,7 +59,7 @@ def apply_alerts(hub_url, env):
     else:
         record = request("POST", f"{api}/collections/user_settings/records", {"user": user}, token)
     request("PATCH", f"{api}/collections/user_settings/records/{record['id']}",
-            {"settings": with_topic(record.get("settings") or {}, topic)}, token)
+            {"settings": with_webhook(record.get("settings") or {}, webhook)}, token)
 
     systems = [system["id"] for system in
                request("GET", f"{api}/collections/systems/records?perPage=500", token=token)["items"]]
@@ -64,7 +69,7 @@ def apply_alerts(hub_url, env):
         request("POST", f"{api}/beszel/user-alerts",
                 {"name": name, "value": value, "min": ALERT_MINUTES, "systems": systems, "overwrite": True}, token)
     print(f"Beszel alerts on {len(systems)} system(s): disk over {disk}%, temperature over {temperature}°C, "
-          f"sent to ntfy.sh")
+          f"sent to Discord")
 
 
 if __name__ == "__main__":

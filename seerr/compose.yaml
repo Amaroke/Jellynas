@@ -4,6 +4,8 @@ services:
     container_name: seerr
     init: true
     restart: unless-stopped
+    networks:
+      - seerr-zone
     security_opt:
       - no-new-privileges
     cap_drop:
@@ -14,10 +16,8 @@ services:
       LOG_LEVEL: info
     labels:
       kuma.seerr.http.name: Seerr
-      kuma.seerr.http.url: http://seerr:5055/api/v1/settings/public
-      kuma.seerr-public.http.name: Seerr public
-      kuma.seerr-public.http.url: https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/v1/settings/public
-      kuma.seerr-public.http.expiry_notification: "true"
+      kuma.seerr.http.url: https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/v1/settings/public
+      kuma.seerr.http.expiry_notification: "true"
       docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/seerr:/app/config

@@ -3,16 +3,20 @@ services:
     image: amir20/dozzle:v11.4.1
     container_name: dozzle
     restart: unless-stopped
+    networks:
+      - internal-zone
+    depends_on:
+      - socket-proxy
     security_opt:
       - no-new-privileges
     environment:
       DOZZLE_AUTH_PROVIDER: simple
       DOZZLE_NO_ANALYTICS: "true"
+      DOCKER_HOST: tcp://socket-proxy:2375
     labels:
       kuma.dozzle.http.name: Dozzle
       kuma.dozzle.http.url: http://dozzle:8080/healthcheck
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${APPDATA_ROOT}/dozzle:/data
     healthcheck:
       test: ["CMD", "/dozzle", "healthcheck"]

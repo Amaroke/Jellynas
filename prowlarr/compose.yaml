@@ -3,6 +3,8 @@ services:
     image: lscr.io/linuxserver/prowlarr:2.7.0.5723-ls167
     container_name: prowlarr
     restart: unless-stopped
+    networks:
+      - internal-zone
     security_opt:
       - no-new-privileges
     environment:

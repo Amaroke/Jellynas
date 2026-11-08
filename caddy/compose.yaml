@@ -3,6 +3,16 @@ services:
     build: .
     container_name: caddy
     restart: unless-stopped
+    networks:
+      jellyfin-zone:
+      seerr-zone:
+        aliases:
+          - jellyfin.${DOMAIN}
+          - seerr.${DOMAIN}
+      internal-zone:
+        aliases:
+          - jellyfin.${DOMAIN}
+          - seerr.${DOMAIN}
     security_opt:
       - no-new-privileges
     cap_drop:
@@ -12,6 +22,7 @@ services:
     environment:
       DOMAIN: ${DOMAIN}
       LAN_SUBNET: ${LAN_SUBNET}
+      CADDY_HTTPS_PORT: ${CADDY_HTTPS_PORT:-443}
       OVH_ENDPOINT: ${OVH_ENDPOINT:-ovh-eu}
       OVH_APPLICATION_KEY: ${OVH_APPLICATION_KEY}
       OVH_APPLICATION_SECRET: ${OVH_APPLICATION_SECRET}
@@ -25,7 +36,7 @@ services:
       - ${APPDATA_ROOT}/caddy/data:/data
       - ${APPDATA_ROOT}/caddy/config:/config
     ports:
-      - 0.0.0.0:${CADDY_HTTPS_PORT:-443}:443
+      - 0.0.0.0:${CADDY_HTTPS_PORT:-443}:${CADDY_HTTPS_PORT:-443}
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:2019/config/"]
       timeout: 10s

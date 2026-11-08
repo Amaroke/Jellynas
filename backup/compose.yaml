@@ -3,6 +3,8 @@ services:
     image: offen/docker-volume-backup:v2.50.1
     container_name: backup
     restart: unless-stopped
+    networks:
+      - internal-zone
     security_opt:
       - no-new-privileges
     environment:
@@ -12,7 +14,7 @@ services:
       BACKUP_PRUNING_PREFIX: appdata-
       BACKUP_RETENTION_DAYS: "30"
       BACKUP_EXCLUDE_REGEXP: ^/backup/appdata/(jellyfin/cache|jellyfin/data/metadata|jellyfin/data/transcodes|tdarr/cache|tdarr/logs)/
-      NOTIFICATION_URLS: ntfy://ntfy.sh/${NTFY_TOPIC}
+      NOTIFICATION_URLS: discord://${DISCORD_ALERTS_WEBHOOK_TOKEN}@${DISCORD_ALERTS_WEBHOOK_ID}
       NOTIFICATION_LEVEL: error
     labels:
       kuma.backup.docker.name: Backup

@@ -3,6 +3,8 @@ services:
     image: lscr.io/linuxserver/lazylibrarian:8b6ba443-ls392
     container_name: lazylibrarian
     restart: unless-stopped
+    networks:
+      - internal-zone
     security_opt:
       - no-new-privileges
     environment:

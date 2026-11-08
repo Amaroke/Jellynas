@@ -237,8 +237,8 @@ class Prowlarr:
         return self.open(urllib.request.Request(link, headers={"User-Agent": "Mozilla/5.0 (compatible; jellynas-ratio)"}))
 
     def query(self, indexer, fields, now, seeders_in_peers):
-        query = urllib.parse.urlencode({**fields, "apikey": self.api_key})
-        return parse_torznab(self.open(urllib.request.Request(f"{self.url}/{indexer}/api?{query}")), now, seeders_in_peers)
+        request = urllib.request.Request(f"{self.url}/{indexer}/api?{urllib.parse.urlencode(fields)}", headers={"X-Api-Key": self.api_key})
+        return parse_torznab(self.open(request), now, seeders_in_peers)
 
     def hold(self, indexer, paused, profile_name, restore=None):
         profiles = self.api("/appprofile")

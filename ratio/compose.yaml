@@ -3,6 +3,8 @@ services:
     image: python:3.14.5-alpine3.22
     container_name: ratio
     restart: unless-stopped
+    networks:
+      - internal-zone
     security_opt:
       - no-new-privileges
     cap_drop:

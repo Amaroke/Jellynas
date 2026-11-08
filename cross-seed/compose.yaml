@@ -3,6 +3,8 @@ services:
     image: ghcr.io/cross-seed/cross-seed:6.13.9
     container_name: cross-seed
     restart: unless-stopped
+    networks:
+      - internal-zone
     security_opt:
       - no-new-privileges
     cap_drop:

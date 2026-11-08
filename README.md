@@ -51,7 +51,6 @@ flowchart LR
     Trackers{{"Trackers and peers"}}
     Soulseek{{"Soulseek"}}
     Manga{{"Manga sites"}}
-    ntfy{{"ntfy.sh"}}
     Discord{{"Discord"}}
 
     subgraph exposure["Exposure"]
@@ -118,8 +117,8 @@ flowchart LR
     end
 
     Friend -->|HTTPS| exposure
-    exposure --> watch
-    watch -->|Requests| automation
+    exposure -->|"own network zones"| watch
+    watch -->|"Requests, Seerr zone"| automation
     automation -->|grab| vpn
     ratio -->|"grab, clean, cross-seed"| vpn
     automation -->|search| Trackers
@@ -131,10 +130,10 @@ flowchart LR
     watch -->|"read-only"| data
     Admin -->|LAN| automation
     Admin -->|LAN| observation
-    observation -->|alerts| ntfy
+    observation -->|alerts| Discord
     Friend -->|voice| Discord
     MusicBot -->|"music, outbound only"| Discord
-    ntfy -->|push| Admin
+    Discord -->|"alerts, push"| Admin
     Admin --> GitHub
     gitops -->|"update PRs, pulls main"| GitHub
     OVH -.-|"public IP, DNS challenge"| Caddy
@@ -157,7 +156,7 @@ flowchart LR
     classDef person fill:#37474f,stroke:#263238,color:#ffffff,stroke-width:2px
     classDef external fill:#ffffff,stroke:#607d8b,color:#1f2937,stroke-width:1.5px
     class Friend,Admin person
-    class GitHub,Trackers,Soulseek,Manga,ntfy,Discord external
+    class GitHub,Trackers,Soulseek,Manga,Discord external
     classDef exposureNode fill:#ffffff,stroke:#1e88e5,color:#1f2937,stroke-width:1.5px
     class OVH,Caddy exposureNode
     style exposure fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#1f2937
@@ -271,6 +270,20 @@ chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 Requires [Settings](#settings).
 
 Caddy is the only service the NAS publishes, on `CADDY_HTTPS_PORT`. Friends reach `jellyfin.<DOMAIN>` and `seerr.<DOMAIN>` from the internet. The Admin reaches every tool at `<tool>.lan.<DOMAIN>`, from the local network only: Caddy refuses a lan name to any address outside `LAN_SUBNET`, and refuses any name it does not know. Through the API of the DNS provider, Caddy obtains a wildcard certificate for `*.<DOMAIN>` and one for `*.lan.<DOMAIN>`, so no port opens for the certificates and the certificate logs never list the tools, and it keeps `jellyfin` and `seerr` on the public IP of the home. [ADR 0008](docs/adr/0008-the-nas-answers-on-its-own-domain.md) records why.
+
+Caddy also listens on `CADDY_HTTPS_PORT` inside its container and sends HSTS on every name, so a browser never tries plain HTTP. Inside the NAS, Caddy answers `jellyfin.<DOMAIN>` and `seerr.<DOMAIN>` itself, so a service reaches Jellyfin or Seerr at the same address a Friend uses, without going through the router. [Network zones](#network-zones) says why.
+
+### Network zones
+
+Jellyfin and Seerr face the internet, so a flaw in either must not land next to the rest of the NAS. The services sit in three Docker networks:
+
+| Zone | Services |
+| --- | --- |
+| `jellyfin-zone` | Caddy, Jellyfin |
+| `seerr-zone` | Caddy, Seerr, Radarr, Sonarr |
+| `internal-zone` | every other service, Caddy, Radarr and Sonarr included |
+
+qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal zone, and the Beszel agent the network of the Host. A service of the internal zone that needs Jellyfin or Seerr, such as Homepage, Uptime Kuma or the Music bot, reaches it through Caddy at its public name, so the zones only open towards Jellyfin and Seerr, never from them. `python3 -m unittest discover -s tests` checks the members of each zone. [ADR 0012](docs/adr/0012-the-nas-is-split-into-network-zones.md) records why.
 
 Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS provider, swap the `caddy-dns/ovh` module in `caddy/Dockerfile` for its own, and its settings in the `acme_dns` and `dynamic_dns` blocks of `caddy/Caddyfile` and in `.env`.
 
@@ -428,6 +441,10 @@ Each Friend gets their own Account, so their watch history and progress are thei
 3. Leave "Allow this user to manage the server" unchecked.
 4. Check "Allow media downloading" so the Friend can download videos, books and manga to their phone.
 
+### Login lockout
+
+In Dashboard > Users, keep "Maximum number of failed login attempts before user is locked out" at its default on every Account, never `-1`, so no Account can be brute forced from the internet.
+
 ### Jellyfin behind Caddy
 
 In Dashboard > Networking, add `caddy` to "Known proxies" and save. Jellyfin then sees the real address of each Friend instead of the address of Caddy. Jellyfin looks up the address of Caddy when it starts, so restart it now and whenever Caddy is recreated:
@@ -446,7 +463,7 @@ Friends make Requests in Seerr, on its own public name, and log in with their Je
 
 1. Open `https://seerr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the local network.
 2. Choose Jellyfin as the media server.
-3. Enter `jellyfin` as the hostname, `8096` as the port, leave SSL off and the URL base empty.
+3. Enter `jellyfin.<DOMAIN>` as the hostname, `CADDY_HTTPS_PORT` as the port, turn SSL on and leave the URL base empty. Seerr sits in another network zone than Jellyfin and reaches it through Caddy, as [Network zones](#network-zones) sets out.
 4. Enter an email address and the username and password of the Jellyfin Admin Account. This Account becomes the Seerr Admin.
 5. Sync the libraries and enable Movies, Shows and Anime.
 6. Skip the Radarr and Sonarr step, [Requests](#requests) adds them.
@@ -1173,26 +1190,27 @@ Requires [Deploy](#deploy).
 
 Three tools tell the Admin that something goes wrong before a Friend does. [Beszel](#beszel) watches the resources of the Host and of each container, and alerts on the disk and the temperature. [Uptime Kuma](#uptime-kuma) checks that each service answers, and alerts when one is down, with checks AutoKuma writes from the labels of each service. [Dozzle](#dozzle) shows the logs of every container. All three are reached from the local network only, behind their own login.
 
-None of them can start, stop or change a container: git stays the only way to change the NAS, as [ADR 0010](docs/adr/0010-doco-cd-deploys-main.md) records. Each, AutoKuma included, mounts the Docker socket read-only, which `./scripts/verify.sh` checks. A read-only mount does not make the Docker API read-only though: a flaw in one of them could still reach it, so their logins and their lan names keep them to the Admin.
+None of them can start, stop or change a container: git stays the only way to change the NAS, as [ADR 0010](docs/adr/0010-doco-cd-deploys-main.md) records. Dozzle, Uptime Kuma, AutoKuma and the Beszel agent reach Docker through the socket proxy, a [read-only proxy](https://docs.linuxserver.io/images/docker-socket-proxy/) that lets through the list of the containers, their logs, stats and events, and the version and info of Docker, and refuses every write. A read-only mount of the socket would not do: the Docker API stays writable through it. The proxy listens in the internal zone, and on the loopback of the Host for the Beszel agent. Only the proxy, backup and doco-cd mount the socket, which `python3 -m unittest discover -s tests` checks, and `./scripts/verify.sh` checks that the proxy refuses a write.
 
-### ntfy
+### Discord alerts
 
-Beszel and Uptime Kuma send their alerts to a topic of the public [ntfy.sh](https://ntfy.sh) server, which pushes them to the phone of the Admin. A topic has no password: anyone who knows its name reads it, so the name is the secret. Gotify or a self-hosted ntfy can replace ntfy.sh, though both need a public address of their own to reach the phone.
+Backup, Beszel and Uptime Kuma send their alerts to a channel of a Discord server dedicated to the NAS, which pushes them to the phone of the Admin. Nobody else is on the server, so nobody else reads the alerts, and only the webhook can post them.
 
-1. In `.env`, set `NTFY_TOPIC` to a long random name, as `.env.example` sets out.
-2. Install the ntfy app from the Play Store, F-Droid or the App Store. Subscribe to the topic, on the default server `ntfy.sh`.
-3. Send a test alert, which the phone shows within seconds:
+1. In Discord, create a server for the NAS, with yourself alone on it.
+2. In Server Settings > Integrations > Webhooks, click "New Webhook", pick the channel of the alerts and copy its URL, `https://discord.com/api/webhooks/<id>/<token>`.
+3. In `.env`, set `DISCORD_ALERTS_WEBHOOK_ID` and `DISCORD_ALERTS_WEBHOOK_TOKEN` to both parts of the URL, then restart doco-cd to apply `.env`.
+4. Send a test alert, which the channel shows within seconds:
 
    ```bash
-   . <(grep '^NTFY_TOPIC=' .env)
-   curl -d 'Test alert from the NAS' "https://ntfy.sh/$NTFY_TOPIC"
+   . <(grep -E '^DISCORD_ALERTS_WEBHOOK_(ID|TOKEN)=' .env)
+   curl -H 'Content-Type: application/json' -d '{"content": "Test alert from the NAS"}' "https://discord.com/api/webhooks/$DISCORD_ALERTS_WEBHOOK_ID/$DISCORD_ALERTS_WEBHOOK_TOKEN"
    ```
 
 ## Beszel
 
 Requires [Observation](#observation).
 
-Beszel shows the processor, the memory, the disks, the network and the temperatures of the Host and of every container, over time. Its agent runs in the network of the Host to see its interfaces, and opens no port: the hub reaches it through a socket that both containers share. Container details are off in Beszel, since they show the environment of each container, secrets included. Dozzle shows the logs instead. Netdata, or Prometheus with Grafana, can replace it, with far more to set up.
+Beszel shows the processor, the memory, the disks, the network and the temperatures of the Host and of every container, over time. Its agent runs in the network of the Host to see its interfaces, and opens no port: the hub reaches it through a socket that both containers share. The agent reads Docker through the socket proxy, on the loopback of the Host. Container details are off in Beszel, since they show the environment of each container, secrets included. Dozzle shows the logs instead. Netdata, or Prometheus with Grafana, can replace it, with far more to set up.
 
 ### Login and key
 
@@ -1209,11 +1227,11 @@ Beszel shows the processor, the memory, the disks, the network and the temperatu
 
 ### Alerts
 
-In `.env`, set `BESZEL_DISK_ALERT_PERCENT` and `BESZEL_TEMPERATURE_ALERT_CELSIUS`, or leave them empty for their defaults. Apply them, and the ntfy topic, to every system of Beszel:
+In `.env`, set `BESZEL_DISK_ALERT_PERCENT` and `BESZEL_TEMPERATURE_ALERT_CELSIUS`, or leave them empty for their defaults. Apply them, and the Discord webhook, to every system of Beszel:
 
 ```bash
 set -a
-. <(grep -E '^(BESZEL_EMAIL|BESZEL_PASSWORD|BESZEL_DISK_ALERT_PERCENT|BESZEL_TEMPERATURE_ALERT_CELSIUS|NTFY_TOPIC)=' .env)
+. <(grep -E '^(BESZEL_EMAIL|BESZEL_PASSWORD|BESZEL_DISK_ALERT_PERCENT|BESZEL_TEMPERATURE_ALERT_CELSIUS|DISCORD_ALERTS_WEBHOOK_ID|DISCORD_ALERTS_WEBHOOK_TOKEN)=' .env)
 set +a
 python3 beszel/alerts.py "http://$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' beszel):8090"
 ```
@@ -1224,13 +1242,13 @@ An alert fires once a value stays over its threshold for 10 minutes. Run the sam
 
 Requires [Observation](#observation).
 
-Uptime Kuma checks every minute that each service answers, and sends an alert when one stops and when it comes back. AutoKuma writes its checks: each service carries its own in the `kuma.*` labels of its `compose.yaml`, and AutoKuma creates and updates the monitors of Uptime Kuma to match the running containers. It never deletes one, so a container that stops stays down in Uptime Kuma and on its status page: delete the monitor of a service commented out in `compose.yaml` by hand. AutoKuma also creates the ntfy notification and the Docker host `NAS`, from the labels of its own service. Gatus can replace both with checks kept in a file.
+Uptime Kuma checks every minute that each service answers, and sends an alert when one stops and when it comes back. AutoKuma writes its checks: each service carries its own in the `kuma.*` labels of its `compose.yaml`, and AutoKuma creates and updates the monitors of Uptime Kuma to match the running containers. It never deletes one, so a container that stops stays down in Uptime Kuma and on its status page: delete the monitor of a service commented out in `compose.yaml` by hand. AutoKuma also creates the Discord notification and the Docker host `NAS`, which reads Docker through the socket proxy, from the labels of its own service. Gatus can replace both with checks kept in a file.
 
 ### Account
 
 1. Open `https://uptime-kuma.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. Pick SQLite as the database, then create the admin account with a strong password, distinct from the other tools. Leave two-factor authentication off: AutoKuma signs in with the password alone.
 2. In `.env`, set `UPTIME_KUMA_USERNAME` and `UPTIME_KUMA_PASSWORD` to this account, then restart doco-cd to apply `.env`.
-3. Within a minute, Uptime Kuma lists one monitor per service, a notification `ntfy` in Settings > Notifications and a Docker host `NAS` in Settings > Docker Hosts. If AutoKuma made none, read its logs:
+3. Within a minute, Uptime Kuma lists one monitor per service, a notification `discord` in Settings > Notifications and a Docker host `NAS` in Settings > Docker Hosts. If AutoKuma made none, read its logs:
 
    ```bash
    docker compose logs autokuma
@@ -1240,7 +1258,7 @@ A monitor, notification or Docker host made by hand before AutoKuma stays as it 
 
 ### Checks
 
-An HTTP monitor reaches its service by its name in the Docker network, with no login. A service without a route to check gets a Docker Container monitor, which only tells whether its container runs. The labels of a service read:
+An HTTP monitor reaches its service by its name in the Docker network, with no login. Jellyfin and Seerr sit in other network zones, so their monitors reach them at their public names, through Caddy. A service without a route to check gets a Docker Container monitor, which only tells whether its container runs. The labels of a service read:
 
 ```yaml
 labels:
@@ -1248,9 +1266,9 @@ labels:
   kuma.radarr.http.url: http://radarr:7878/ping
 ```
 
-The defaults of every monitor, its interval of 60 seconds, the ntfy notification and the Docker host `NAS`, sit in `AUTOKUMA__DEFAULT_SETTINGS` in `uptime-kuma/compose.yaml`. `python3 -m unittest discover -s uptime-kuma` checks that every service has a monitor.
+The defaults of every monitor, its interval of 60 seconds, the Discord notification and the Docker host `NAS`, sit in `AUTOKUMA__DEFAULT_SETTINGS` in `uptime-kuma/compose.yaml`. `python3 -m unittest discover -s uptime-kuma` checks that every service has a monitor.
 
-`Jellyfin public` and `Seerr public` also alert before the certificate expires. They go out to the public IP and back in through the router, so they also catch a broken port forward or a stale DNS record. A router without NAT loopback never lets them in: they then stay down, and only a check from outside the home, such as a free monitor of UptimeRobot, covers the public addresses.
+The monitors of Jellyfin and Seerr also alert before the certificate expires. Inside the NAS their public names lead straight to Caddy, so they check Caddy, its certificate and the service, but neither the port forward of the router nor the DNS record: only a check from outside the home, such as a free monitor of UptimeRobot, covers those.
 
 ## Dozzle
 
@@ -1338,11 +1356,11 @@ Open `https://homepage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `HOMEPA
 
 Requires [Observation](#observation).
 
-The settings made in the web UIs of the services live in the appdata root, outside git, as [ADR 0010](docs/adr/0010-doco-cd-deploys-main.md) records. The backup service, [docker-volume-backup](https://offen.github.io/docker-volume-backup/), archives the whole appdata root every night at 4:00 into `BACKUP_ROOT`, a dataset of its own, and deletes the archives older than 30 days. A failed backup sends an alert to the ntfy topic. The caches of Jellyfin and Tdarr, the logs of Tdarr and the images Jellyfin keeps in `data/metadata` stay out of the archive: Jellyfin fetches the images again at its next library scan, and keeping them would take gigabytes per archive. No copy leaves the NAS for now, so a lost pool takes the archives with it. restic or Borg can add a copy elsewhere, and the snapshots and replication of TrueNAS can replace the service.
+The settings made in the web UIs of the services live in the appdata root, outside git, as [ADR 0010](docs/adr/0010-doco-cd-deploys-main.md) records. The backup service, [docker-volume-backup](https://offen.github.io/docker-volume-backup/), archives the whole appdata root every night at 4:00 into `BACKUP_ROOT`, a dataset of its own, and deletes the archives older than 30 days. A failed backup sends an alert to the [Discord alerts](#discord-alerts) channel. The caches of Jellyfin and Tdarr, the logs of Tdarr and the images Jellyfin keeps in `data/metadata` stay out of the archive: Jellyfin fetches the images again at its next library scan, and keeping them would take gigabytes per archive. No copy leaves the NAS for now, so a lost pool takes the archives with it. restic or Borg can add a copy elsewhere, and the snapshots and replication of TrueNAS can replace the service.
 
 A service whose database could be copied mid-write is stopped during the backup, and started again once the archive is written. It carries the label `docker-volume-backup.stop-during-backup: "true"` in its `compose.yaml`. Uptime Kuma carries it too, so the services stopped for the night send no alert. A service slower to start than Uptime Kuma, such as Jellyfin, can still send one as it comes back. `python3 -m unittest discover -s backup` checks that every service with an appdata folder either carries the label or is listed in `backup/test_backup.py` as one that keeps running.
 
-The backup service mounts the appdata root read-only, and the Docker socket to stop and start the services. `./scripts/verify.sh` checks that it cannot write to the appdata and that `BACKUP_ROOT` is on another dataset than the data and appdata roots.
+The backup service mounts the appdata root read-only, and the Docker socket, without the proxy, to stop and start the services. `./scripts/verify.sh` checks that it cannot write to the appdata and that `BACKUP_ROOT` is on another dataset than the data and appdata roots.
 
 ### First archive
 

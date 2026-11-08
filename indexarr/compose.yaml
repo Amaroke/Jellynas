@@ -3,6 +3,8 @@ services:
     image: ghcr.io/techn0phil/indexarr:1.1.1
     container_name: indexarr
     restart: unless-stopped
+    networks:
+      - internal-zone
     security_opt:
       - no-new-privileges
     environment:

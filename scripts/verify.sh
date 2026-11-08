@@ -233,14 +233,17 @@ check_published_ports() {
     if [ "$service" = caddy ]; then
       bindings="$(docker inspect -f '{{range $p, $b := .HostConfig.PortBindings}}{{range $b}} {{.HostIp}}:{{.HostPort}}{{end}}{{end}}' "$id")"
       [ "$bindings" = " 0.0.0.0:$https_port" ] || exposed="$exposed caddy($bindings )"
+    elif [ "$service" = socket-proxy ]; then
+      bindings="$(docker inspect -f '{{range $p, $b := .HostConfig.PortBindings}}{{range $b}} {{.HostIp}}:{{.HostPort}}{{end}}{{end}}' "$id")"
+      [ "$bindings" = " 127.0.0.1:2375" ] || exposed="$exposed socket-proxy($bindings )"
     elif [ -n "$ports" ]; then
       exposed="$exposed $service($ports )"
     fi
   done
   if [ -n "$exposed" ]; then
-    fail compose "only caddy may publish a port, $https_port on IPv4, found:$exposed"
+    fail compose "only caddy may publish a port, $https_port on IPv4, and socket-proxy on the loopback, found:$exposed"
   else
-    pass compose "only caddy publishes a port, $https_port on IPv4"
+    pass compose "only caddy publishes a port, $https_port on IPv4, and socket-proxy on the loopback"
   fi
 }
 
@@ -269,6 +272,35 @@ check_docker_socket_read_only() {
     fail compose "mounts the Docker socket read-write:$writable"
   else
     pass compose "no service mounts the Docker socket read-write"
+  fi
+}
+
+check_socket_proxy_read_only() {
+  local code
+  enabled socket-proxy || return
+  code="$(http_code http://127.0.0.1:2375/version)"
+  if [ "$code" = 200 ]; then
+    pass socket-proxy "answers a read on the loopback"
+  else
+    fail socket-proxy "does not answer a read on the loopback (HTTP $code)"
+  fi
+  code="$(http_code --request POST http://127.0.0.1:2375/containers/socket-proxy/restart)"
+  if [ "$code" = 403 ]; then
+    pass socket-proxy "refuses a write"
+  else
+    fail socket-proxy "does not refuse a write (HTTP $code)"
+  fi
+}
+
+check_hsts() {
+  local host="$1" header
+  [ -n "$host" ] || return
+  caddy_running "HSTS on $host" || return
+  header="$(curl --silent --head --max-time 10 --resolve "$host:$https_port:127.0.0.1" "https://$host:$https_port/" | grep -i '^strict-transport-security:')"
+  if [ -n "$header" ]; then
+    pass caddy "$host sends HSTS"
+  else
+    fail caddy "$host sends no HSTS"
   fi
 }
 
@@ -548,6 +580,7 @@ check_homepage_values
 check_published_ports
 check_no_new_privileges
 check_docker_socket_read_only
+check_socket_proxy_read_only
 check_login_required qbittorrent "https://qbittorrent.$lan:$https_port/api/v2/app/version"
 check_login_required prowlarr "https://prowlarr.$lan:$https_port/"
 check_login_required radarr "https://radarr.$lan:$https_port/"
@@ -580,6 +613,7 @@ check_lan_refused_outside "radarr.$lan"
 check_lan_refused_outside "truenas.$lan"
 check_lan_refused_outside "homepage.$lan"
 check_unknown_host_refused "$jellyfin_hostname"
+check_hsts "$jellyfin_hostname"
 
 if [ -n "$jellyfin_hostname$seerr_hostname" ]; then
   printf '\nOn a phone on 4G with wifi off, open each address and check that it loads:\n'

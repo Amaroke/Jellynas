@@ -5,7 +5,7 @@
         href: https://jellyfin.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: jellyfin
-          url: http://jellyfin:8096
+          url: https://jellyfin.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
           key: '{{HOMEPAGE_VAR_JELLYFIN_API_KEY}}'
           version: 2
           enableBlocks: true
@@ -20,7 +20,7 @@
         href: https://seerr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: seerr
-          url: http://seerr:5055
+          url: https://seerr.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
           key: '{{HOMEPAGE_VAR_SEERR_API_KEY}}'
           fields: ["pending", "processing", "available", "issues"]
     - Music bot:
