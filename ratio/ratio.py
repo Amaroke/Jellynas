@@ -29,15 +29,6 @@ CATEGORIES = {
     "books": "/data/torrents/books",
     FARM: "/data/torrents/farm",
 }
-LEGACY = {
-    "ratio": FARM,
-    "zen": FARM,
-    "cross-seed-link": FARM,
-    "radarr": "movies",
-    "tv-sonarr": "shows",
-    "lidarr": "music",
-    "lazylibrarian": "books",
-}
 PUBLIC = "public"
 SEEDING = ("uploading", "stalledUP", "queuedUP", "forcedUP")
 SHARE_LIMITS = ("max_ratio_enabled", "max_seeding_time_enabled", "max_inactive_seeding_time_enabled")
@@ -49,16 +40,8 @@ SEED_STEPS = (100, 150, 200, 250, 300)
 CONTRIBUTION_SHARES = ("62.5", "75", "100", "100", "100", "100")
 DURATION_STEPS = ((25, 7), (100, 30), (150, 90), (250, 180), (300, 365))
 HISTORY_DAYS = 30
-SOURCES = {
-    "paid": "paid grab",
-    "twin": "Twin",
-    "freeleech": "freeleech",
-    "cross-seed": "cross-seed of the Library",
-    "library": "Library download",
-    "zen-hunt": "Zen hunt",
-    "volume-hunt": "Volume hunt",
-    "unknown": "unknown",
-}
+SOURCES = ("paid", "twin", "freeleech", "cross-seed", "library", "volume-hunt", "unknown")
+RETIRED_SOURCES = {"zen-hunt": "volume-hunt"}
 FILMS = "Films & Vidéos"
 QUEST_CATEGORIES = {
     FILMS: "102000,102010,102030,102050,102060,102070,102080,102090,105000,105060,105070,105080",
@@ -148,11 +131,11 @@ class QBittorrent:
     def create_category(self, name, path):
         self.post("/api/v2/torrents/createCategory", {"category": name, "savePath": path})
 
-    def remove_categories(self, names):
-        self.post("/api/v2/torrents/removeCategories", {"categories": "\n".join(names)})
-
     def add_tags(self, hashes, tag):
         self.post("/api/v2/torrents/addTags", {"hashes": "|".join(hashes), "tags": tag})
+
+    def remove_tags(self, hashes, tag):
+        self.post("/api/v2/torrents/removeTags", {"hashes": "|".join(hashes), "tags": tag})
 
     def keep_in_place(self, hashes):
         self.post("/api/v2/torrents/setAutoManagement", {"hashes": "|".join(hashes), "enable": "false"})
@@ -498,11 +481,11 @@ def is_public(state, settings, t):
 
 
 def is_owned(t):
-    return t["category"] in CATEGORIES or t["category"] in LEGACY
+    return t["category"] in CATEGORIES
 
 
 def is_library(settings, category):
-    return category in settings["library_categories"] or LEGACY.get(category) in settings["library_categories"]
+    return category in settings["library_categories"]
 
 
 def is_seeding(t):
@@ -520,19 +503,17 @@ def source_of(state, settings, copies, t):
         return "twin"
     if t["hash"] in state["free"]:
         return "freeleech"
-    if t["category"] == "ratio":
-        return "paid"
-    if t["category"] in ("cross-seed-link", FARM):
+    if t["category"] == FARM:
         return "cross-seed"
     if is_library(settings, t["category"]):
         return "library"
-    if t["category"] == "zen":
-        return "zen-hunt"
     return "unknown"
 
 
 def record_sources(state, torrents, settings):
     copies = twin_copies(state)
+    for infohash, source in state["sources"].items():
+        state["sources"][infohash] = RETIRED_SOURCES.get(source, source)
     for infohash in state["transfers"]:
         if infohash not in state["sources"]:
             state["sources"][infohash] = source_of(state, settings, copies, torrents.get(infohash))
@@ -598,7 +579,7 @@ def record(state, torrents, settings, now):
 
 def record_kinds(state, torrents, settings):
     for t in torrents.values():
-        kind = KINDS.get(LEGACY.get(t["category"], t["category"]))
+        kind = KINDS.get(t["category"])
         if kind and t["hash"] not in state["kinds"] and is_c411(state, settings, t):
             state["kinds"][t["hash"]] = kind
     copies = twin_copies(state)
@@ -675,7 +656,7 @@ def report(state, now):
     state["report"] = {"at": now, "sources": figures}
     for source, f in figures.items():
         print(
-            f"Source {SOURCES[source]}: {f['torrents']} torrents, {f['downloaded_gb']:.1f} GB down, "
+            f"Source {source}: {f['torrents']} torrents, {f['downloaded_gb']:.1f} GB down, "
             f"{f['uploaded_gb']:.1f} GB up, ratio {shown(f['ratio'])}, last 7 days {f['week_downloaded_gb']:.1f} GB down, "
             f"{f['week_uploaded_gb']:.1f} GB up, ratio {shown(f['week_ratio'])}, {f['farm_days']:.1f} days in the Farm"
         )
@@ -885,7 +866,7 @@ def summary(state, torrents, settings, account, now):
     ] or [0] * 6
     sources = [
         {
-            "name": SOURCES[source],
+            "name": source,
             "figures": f"{f['torrents']} torrent{'s' if f['torrents'] != 1 else ''}, "
                        f"{f['uploaded_gb']:.1f} / {f['downloaded_gb']:.1f} GB, ratio {shown(f['ratio'])}",
         }
@@ -912,7 +893,7 @@ def summary(state, torrents, settings, account, now):
 
 COLORS = {
     "paid": "#f472b6", "twin": "#a78bfa", "freeleech": "#34d399", "cross-seed": "#60a5fa", "library": "#38bdf8",
-    "zen-hunt": "#fbbf24", "volume-hunt": "#fb923c", "unknown": "#94a3b8", PUBLIC: "#64748b",
+    "volume-hunt": "#fb923c", "unknown": "#94a3b8", PUBLIC: "#64748b",
 }
 REWARDS = {
     "seed_volume": (("100 Zen",) * 2, ("150 Zen",) * 2, ("200 Zen",) * 2, ("250 Zen",) * 2, ("300 Zen",) * 2),
@@ -957,7 +938,6 @@ TEXT = {
         "disk": "Farm disk", "free": "Free", "of": "of {budget} {gb}",
         "best": "Best ratio per day", "worst": "Lowest ratio per day",
         "per_day": "{v} a day", "card": "ratio {ratio}, note {note}, {size}, {days}", "days": "{n} days",
-        "sources": {**SOURCES, PUBLIC: "Public"},
     },
     "fr": {
         "gb": "Go", "decimal": ",", "empty": "Pas encore d'historique, ratio note son premier jour après son premier passage.",
@@ -977,11 +957,6 @@ TEXT = {
         "disk": "Disque de la Farm", "free": "Libre", "of": "sur {budget} {gb}",
         "best": "Meilleur ratio par jour", "worst": "Plus faible ratio par jour",
         "per_day": "{v} par jour", "card": "ratio {ratio}, note {note}, {size}, {days}", "days": "{n} jours",
-        "sources": {
-            "paid": "Grab payant", "twin": "Twin", "freeleech": "Freeleech", "cross-seed": "Cross-seed de la Library",
-            "library": "Téléchargement de la Library", "zen-hunt": "Zen hunt", "volume-hunt": "Volume hunt",
-            "unknown": "Inconnue", PUBLIC: "Public",
-        },
     },
 }
 STYLE = """
@@ -1242,7 +1217,7 @@ def donut(farm, words):
         )
         legend.append(
             f'<li><span class="swatch" style="background:{color}"></span>'
-            f'<span class="name">{html.escape(words["sources"].get(s["source"], s["source"]))}</span>'
+            f'<span class="name">{html.escape(s["source"])}</span>'
             f'<span class="figure">{html.escape(size_text(s["gb"], words))}</span></li>'
         )
         start += part
@@ -1278,7 +1253,7 @@ def ranking(title, cards, words):
         f'<li><span class="swatch" style="background:{COLORS.get(c["source"], COLORS["unknown"])}"></span>'
         f'<span class="name" title="{html.escape(c["name"])}">{html.escape(c["name"])}</span>'
         f'<span class="figure">{html.escape(per_day_text(c, words))}</span>'
-        f'<span class="meta">{html.escape(words["sources"].get(c["source"], c["source"]))}, {html.escape(card_text(c, words))}</span></li>'
+        f'<span class="meta">{html.escape(c["source"])}, {html.escape(card_text(c, words))}</span></li>'
         for c in cards
     )
     return f'<figure><figcaption>{html.escape(title)}</figcaption><ol class="ranking">{rows}</ol></figure>'
@@ -1423,22 +1398,6 @@ def adopt(qbt, settings, state, torrents):
             print(f"Moved {t['name']} from {category} to the Farm, it keeps paying Zen")
 
 
-def migrate(qbt, settings, torrents):
-    for t in torrents.values():
-        target = LEGACY.get(t["category"])
-        if target == FARM:
-            into_farm(qbt, t)
-        elif target and t["progress"] >= 1 and t["seeding_time"] >= settings["adopt_after"]:
-            qbt.keep_in_place([t["hash"]])
-            qbt.set_category([t["hash"]], target)
-            t["category"] = target
-    used = {t["category"] for t in torrents.values()}
-    old = [name for name in qbt.categories() if name in LEGACY and name not in used]
-    if old:
-        qbt.remove_categories(old)
-        print(f"Removed the old categories {', '.join(old)} of qBittorrent")
-
-
 def file_sizes(qbt, t, cache):
     if t["hash"] not in cache:
         cache[t["hash"]] = sorted(f["size"] for f in qbt.files(t["hash"]))
@@ -1494,7 +1453,8 @@ def clean_farm(qbt, settings, state, torrents):
 
 
 def tag(qbt, settings, state, torrents):
-    wanted = {}
+    known = {*SOURCES, *RETIRED_SOURCES, PUBLIC}
+    wanted, stale = {}, {}
     for t in torrents.values():
         if is_owned(t) and is_public(state, settings, t):
             name = PUBLIC
@@ -1502,10 +1462,15 @@ def tag(qbt, settings, state, torrents):
             name = state["sources"][t["hash"]]
         else:
             continue
-        if name not in {x.strip() for x in t.get("tags", "").split(",")}:
+        tags = {x.strip() for x in t.get("tags", "").split(",")}
+        if name not in tags:
             wanted.setdefault(name, []).append(t["hash"])
+        for old in tags & known - {name}:
+            stale.setdefault(old, []).append(t["hash"])
     for name, hashes in wanted.items():
         qbt.add_tags(hashes, name)
+    for name, hashes in stale.items():
+        qbt.remove_tags(hashes, name)
 
 
 def episode_of(title):
@@ -1747,7 +1712,6 @@ def run_once(qbt, prowlarr, c411, settings, state, now):
     report(state, now)
     use_prowlarr(state, now, lambda: hold_c411(prowlarr, settings, state), always=True)
     adopt(qbt, settings, state, torrents)
-    migrate(qbt, settings, torrents)
     drop_twins(qbt, state, torrents)
     clean_public(qbt, settings, state, torrents)
     clean_farm(qbt, settings, state, torrents)
