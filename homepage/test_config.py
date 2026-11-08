@@ -7,6 +7,7 @@ HOMEPAGE = ROOT / "homepage"
 CONFIG_FILES = [HOMEPAGE / name for name in ("settings.yaml", "services.yaml", "widgets.yaml", "bookmarks.yaml")]
 WITHOUT_TILE = {"homepage", "beszelagent", "autokuma", "ratio"}
 SECRET_FIELDS = {"key", "password", "username", "apikey", "token"}
+BOARD_CARDS = ("Farm board", "Farm quests")
 PLACEHOLDER = re.compile(r"\{\{(HOMEPAGE_[A-Z_]+)\}\}")
 
 
@@ -105,15 +106,28 @@ class HomepageConfigTest(unittest.TestCase):
         fields = re.findall(r"- field: (\S+)", quests.group(1))
         self.assertEqual(fields, ["quests.name", "quests.shown"])
 
-    def test_the_graphs_of_ratio_are_embedded_in_an_iframe_of_their_own_group(self):
+    def test_the_board_of_ratio_fills_two_iframes_of_their_own_group_in_french(self):
         text = (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")
         group = re.search(r"^- Graphs:$(.*?)(?=^- |\Z)", text, re.MULTILINE | re.DOTALL)
         self.assertIsNotNone(group)
-        self.assertRegex(group.group(1), r"(?m)^    - Farm graphs:$")
-        self.assertIn("type: iframe", group.group(1))
-        self.assertIn("src: https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs", group.group(1))
+        cards = re.findall(r"^    - ([^:]+):$(.*?)(?=^    - |\Z)", group.group(1), re.MULTILINE | re.DOTALL)
+        self.assertEqual([name for name, _ in cards], list(BOARD_CARDS))
+        src = "src: https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs?lang=fr&part="
+        for (name, body), part in zip(cards, ("1", "2"), strict=True):
+            self.assertIn("type: iframe", body, name)
+            self.assertIn(src + part, body, name)
+            self.assertIn("classes: h-96", body, name)
         settings = (HOMEPAGE / "settings.yaml").read_text(encoding="utf-8")
         self.assertRegex(settings, r"(?m)^  Graphs:\n(    .*\n)*    columns: 1$")
+
+    def test_the_cards_of_the_board_hide_their_title(self):
+        css = (HOMEPAGE / "custom.css").read_text(encoding="utf-8")
+        rule = re.search(r"([^{}]*)\{([^}]*)\}", css)
+        selectors = {s.strip() for s in rule.group(1).split(",")}
+        self.assertEqual(selectors, {f'li.service[data-name="{name}"] .service-title' for name in BOARD_CARDS})
+        self.assertIn("display: none", rule.group(2))
+        compose = (HOMEPAGE / "compose.yaml").read_text(encoding="utf-8")
+        self.assertIn("./custom.css:/app/config/custom.css:ro", compose)
 
     def test_every_variable_is_documented(self):
         documented = set(re.findall(r"^([A-Z][A-Z0-9_]*)=", (ROOT / ".env.example").read_text(encoding="utf-8"), re.MULTILINE))

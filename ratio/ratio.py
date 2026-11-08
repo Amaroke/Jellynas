@@ -44,6 +44,8 @@ RARE_STEP = 0.25
 BEST_NOTE = 1 + SEEDING_STEPS[0][1] + RARE_STEP
 GOOD_NOTE = 0.625
 SEED_STEPS = (100, 150, 200, 250, 300)
+CONTRIBUTION_SHARES = ("62.5", "75", "100", "100", "100", "100")
+DURATION_STEPS = ((25, 7), (100, 30), (150, 90), (250, 180), (300, 365))
 HISTORY_DAYS = 30
 SOURCES = {
     "paid": "paid grab",
@@ -301,6 +303,7 @@ class C411:
             "downloaded": profile["transfer"]["downloaded"]["total"],
             "zen": profile["zen"]["balance"],
             "earned": profile["zen"].get("totalEarned"),
+            "actual": profile["transfer"]["uploaded"].get("actual"),
         }
 
 
@@ -436,6 +439,7 @@ def load_state(path):
         "kinds": state.get("kinds", {}),
         "hunt_at": state.get("hunt_at", {}),
         "daily": state.get("daily", []),
+        "scores": state.get("scores", {}),
     }
 
 
@@ -654,19 +658,43 @@ def farm_of(state, settings, torrents):
     }
 
 
-def quest_steps(state, settings, torrents):
+def challenges_of(state, settings, torrents):
     seeded = seeded_on_c411(state, settings, torrents)
     kinds = [state["kinds"].get(t["hash"]) for t in seeded]
     tops = sorted((kinds.count(name) for name in QUEST_CATEGORIES), reverse=True)
-    yield from ((f"Seed count {n}", len(seeded), n, "seeds") for n in SEED_STEPS)
-    for n, days in ((25, 7), (150, 90)):
-        yield f"{n} seeds for {days} days", sum(1 for t in seeded if t["seeding_time"] >= days * DAY), n, "seeds"
-    for k in range(1, len(QUEST_CATEGORIES) + 1):
-        name = f"25 seeds in {k} categor{'y' if k == 1 else 'ies'}"
-        yield name, sum(min(count, 25) for count in tops[:k]), 25 * k, "seeds"
-    yield from ((f"{n} seeds in one category", tops[0], n, "seeds") for n in (50, 100))
-    good = sum(1 for t in seeded if note_of(t) >= GOOD_NOTE * BEST_NOTE)
-    yield "50 torrents at 62.5 % of their best note", good, 50, "torrents"
+
+    def good(share_of_best):
+        return sum(1 for t in seeded if note_of(t) >= share_of_best * BEST_NOTE)
+
+    def lasting(days):
+        return sum(1 for t in seeded if t["seeding_time"] >= days * DAY)
+
+    return [
+        ("seed_volume", [(n, len(seeded)) for n in SEED_STEPS], True),
+        ("contribution", [(50, good(GOOD_NOTE)), (100, good(0.75))] + [(n, good(1)) for n in (150, 200, 250, 300)], True),
+        ("duration", [(n, lasting(days)) for n, days in DURATION_STEPS], True),
+        ("diversity", [(25 * k, sum(min(c, 25) for c in tops[:k])) for k in range(1, len(QUEST_CATEGORIES) + 1)], False),
+        ("category", [(50, tops[0]), (100, tops[0]), (250, kinds.count(FILMS)), (500, kinds.count(FILMS))], False),
+    ]
+
+
+def step_name(key, index, target):
+    if key == "contribution":
+        return f"{target} torrents at {CONTRIBUTION_SHARES[index]} % of their best note"
+    if key == "duration":
+        return f"{target} seeds for {DURATION_STEPS[index][1]} days"
+    if key == "diversity":
+        return f"25 seeds in {index + 1} categor{'y' if index == 0 else 'ies'}"
+    if key == "category":
+        return f"{target} seeds in one category" if index < 2 else f"{target} seeds in {FILMS}"
+    return f"Seed count {target}"
+
+
+def quest_steps(state, settings, torrents):
+    for key, steps, _ in challenges_of(state, settings, torrents):
+        unit = "torrents" if key == "contribution" else "seeds"
+        for index, (target, progress) in enumerate(steps):
+            yield step_name(key, index, target), progress, target, unit
 
 
 def quests_of(state, settings, torrents):
@@ -677,40 +705,105 @@ def quests_of(state, settings, torrents):
     return {"name": name, "progress": progress, "target": target, "shown": f"{progress} of {target} {unit}"}
 
 
-def estimated_zen_by_source(state, settings, torrents):
-    zen = {}
+def score_torrents(state, settings, torrents, today):
+    scores = state["scores"]
     for t in seeded_on_c411(state, settings, torrents):
-        source = state["sources"].get(t["hash"])
-        source = source if source in SOURCES else "unknown"
-        zen[source] = zen.get(source, 0) + nightly_zen(t)
-    return zen
+        zen, day = scores.get(t["hash"], [0, None])
+        scores[t["hash"]] = [zen + nightly_zen(t), today] if day != today else [zen, day]
+    for infohash in [h for h in scores if h not in torrents]:
+        del scores[infohash]
+
+
+def card_of(state, t):
+    zen = state["scores"].get(t["hash"], [0])[0]
+    score = t["uploaded"] / GB + zen
+    days = t["seeding_time"] / DAY
+    source = state["sources"].get(t["hash"])
+    return {
+        "name": t["name"],
+        "source": source if source in SOURCES else "unknown",
+        "score_gb": round(score, 2),
+        "rate": round(score / max(t["size"] / GB, 0.001) / max(days, 1), 4),
+        "size_gb": gigabytes(t["size"]),
+        "days": int(days),
+    }
+
+
+def board_of(state, settings, torrents):
+    farm = [t for t in torrents.values() if t["category"] == FARM]
+    slices = {}
+    for t in farm:
+        source = state["sources"].get(t["hash"]) if is_c411(state, settings, t) else PUBLIC
+        source = source if source in SOURCES or source == PUBLIC else "unknown"
+        slices[source] = slices.get(source, 0) + t["size"]
+    cards = [card_of(state, t) for t in farm if is_c411(state, settings, t) and t["progress"] >= 1]
+    best = sorted(cards, key=lambda c: -c["score_gb"])[:3]
+    worst = sorted((c for c in cards if all(c is not b for b in best)), key=lambda c: c["rate"])[:3]
+    return {
+        "history": [dict(e) for e in state["daily"]],
+        "challenges": [
+            {"key": key, "steps": [{"target": t, "progress": p} for t, p in steps], "max": has_max}
+            for key, steps, has_max in challenges_of(state, settings, torrents)
+        ],
+        "farm": {
+            "budget_gb": gigabytes(settings["farm_size"]),
+            "slices": [{"source": s, "gb": gigabytes(size)} for s, size in sorted(slices.items(), key=lambda i: -i[1])],
+        },
+        "best": best,
+        "worst": worst,
+    }
+
+
+def waiting_board(state, settings):
+    return {
+        "history": [dict(e) for e in state["daily"]],
+        "challenges": [],
+        "farm": {"budget_gb": gigabytes(settings["farm_size"]), "slices": []},
+        "best": [],
+        "worst": [],
+    }
+
+
+def entry_of(day, settings):
+    return {
+        "day": day, "floor": settings["floor"], "ratio": None, "left_gb": None, "uploaded_gb": None,
+        "actual_gb": None, "downloaded_gb": None, "zen": None, "earned": None, "zen_paid": None, "seeds": None,
+    }
+
+
+def account_fields(uploaded, downloaded, settings):
+    return {
+        "ratio": share(uploaded, downloaded),
+        "left_gb": gigabytes(download_left({"uploaded": uploaded, "downloaded": downloaded}, settings)),
+        "uploaded_gb": gigabytes(uploaded),
+        "downloaded_gb": gigabytes(downloaded),
+    }
+
+
+def backfill(state, settings, today):
+    first = state["daily"][0]["day"] if state["daily"] else today.isoformat()
+    older = {}
+    for at, uploaded, downloaded, zen in state["account"]:
+        day = datetime.date.fromtimestamp(at).isoformat()
+        if day < first:
+            older[day] = {**entry_of(day, settings), **account_fields(uploaded, downloaded, settings), "zen": zen}
+    state["daily"][:0] = [older[day] for day in sorted(older)]
 
 
 def record_day(state, settings, torrents, account, now):
     today = datetime.date.fromtimestamp(now)
+    backfill(state, settings, today)
     daily = state["daily"]
     current = daily.pop() if daily and daily[-1]["day"] == today.isoformat() else {}
     yesterday = (today - datetime.timedelta(days=1)).isoformat()
     earned = next((e["earned"] for e in daily if e["day"] == yesterday), None)
-    uploads = {source: f["uploaded_gb"] for source, f in figures_by_source(state).items()}
-    zen = estimated_zen_by_source(state, settings, torrents)
-    entry = {
-        "day": today.isoformat(),
-        "floor": settings["floor"],
-        "ratio": current.get("ratio"),
-        "zen": current.get("zen"),
-        "earned": current.get("earned"),
-        "zen_paid": current.get("zen_paid"),
-        "seeds": len(seeded_on_c411(state, settings, torrents)),
-        "sources": {
-            source: {"uploaded_gb": uploads.get(source, 0), "zen": round(zen.get(source, 0), 3)}
-            for source in SOURCES
-            if source in uploads or source in zen
-        },
-    }
+    entry = {**entry_of(today.isoformat(), settings), **{k: v for k, v in current.items() if v is not None}}
+    entry.update(floor=settings["floor"], seeds=len(seeded_on_c411(state, settings, torrents)))
+    entry.pop("sources", None)
     if account is not None:
         entry.update(
-            ratio=share(account["uploaded"], account["downloaded"]),
+            account_fields(account["uploaded"], account["downloaded"], settings),
+            actual_gb=None if account.get("actual") is None else gigabytes(account["actual"]),
             zen=account["zen"],
             earned=account["earned"],
             zen_paid=None if earned is None or account["earned"] is None else account["earned"] - earned,
@@ -718,6 +811,7 @@ def record_day(state, settings, torrents, account, now):
     daily.append(entry)
     oldest = (today - datetime.timedelta(days=HISTORY_DAYS - 1)).isoformat()
     daily[:] = [e for e in daily if e["day"] >= oldest]
+    score_torrents(state, settings, torrents, today.isoformat())
 
 
 def read_account(c411, state, now):
@@ -786,194 +880,380 @@ def summary(state, torrents, settings, account, now):
     }
 
 
-WIDTH, HEIGHT, LEFT, RIGHT, TOP, BOTTOM = 320, 150, 34, 8, 10, 20
+COLORS = {
+    "paid": "#f472b6", "twin": "#a78bfa", "freeleech": "#34d399", "cross-seed": "#60a5fa", "library": "#38bdf8",
+    "zen-hunt": "#fbbf24", "volume-hunt": "#fb923c", "unknown": "#94a3b8", PUBLIC: "#64748b",
+}
+REWARDS = {
+    "seed_volume": (("100 Zen",) * 2, ("150 Zen",) * 2, ("200 Zen",) * 2, ("250 Zen",) * 2, ("300 Zen",) * 2),
+    "contribution": (
+        ("5 free downloads", "5 DL gratuits"), ("+1 % weight", "+1 % de pondération"),
+        ("+2 % weight", "+2 % de pondération"), ("+3 % weight", "+3 % de pondération"),
+        ("+4 % weight", "+4 % de pondération"), ("+5 % weight", "+5 % de pondération"),
+    ),
+    "duration": (
+        ("25 Zen",) * 2, ("Silver Leech 7 days", "Silver Leech 7 jours"), ("300 Zen",) * 2, ("C411",) * 2,
+        ("Free Leech 7 days", "Free Leech 7 jours"),
+    ),
+    "diversity": (
+        ("25 Zen",) * 2, ("C411",) * 2, ("Corridor certified badge", "Badge Certifié Corridor"),
+        ("T411 badge", "Badge T411"), ("C411 badge", "Badge C411"),
+    ),
+    "category": (
+        ("Category badge", "Badge Catégorie"), ("Specialty badge", "Badge Spécialité"),
+        ("Silver upgrade, Specialty dial", "Upgrade Argent, Cadran Spécialité"), ("Gold upgrade", "Upgrade Or"),
+    ),
+}
+MAX_REWARDS = {
+    "seed_volume": ("Prime badge", "Badge Prime"),
+    "contribution": ("Contributor badge", "Badge Contributeur"),
+    "duration": ("Timeless badge", "Badge Timeless"),
+}
+TEXT = {
+    "en": {
+        "gb": "GB", "decimal": ".", "empty": "No history yet, ratio records its first day after its first run.",
+        "ratio": "Account ratio", "floor": "floor {v}", "left": "Before the floor", "uploaded": "Uploaded",
+        "actual": "{v} real", "downloaded": "Downloaded", "zen": "Zen", "paid_last": "+{v} last night",
+        "zen_chart": "Zen", "paid": "paid each night", "balance": "balance", "transfer": "Upload and download",
+        "challenges": {
+            "seed_volume": "Seed volume", "contribution": "Minimum contribution", "duration": "Seed duration",
+            "diversity": "Category diversity", "category": "Category volume",
+        },
+        "short": {
+            "seed_volume": "{n} seeds", "contribution": "{n} at {share} % of best", "duration": "{n} for {days} days",
+            "diversity": ("25 in 1 category", "25 in {k} categories"), "category": ("{n} in one category", "{n} in Films"),
+        },
+        "max": "Every step",
+        "disk": "Farm disk", "free": "Free", "of": "of {budget} {gb}",
+        "best": "Best torrents", "worst": "Least worth their space",
+        "score": "{v} {gb} earned", "rate": "{v} {gb} per {gb} a day", "days": "{n} days",
+        "sources": {**SOURCES, PUBLIC: "Public"},
+    },
+    "fr": {
+        "gb": "Go", "decimal": ",", "empty": "Pas encore d'historique, ratio note son premier jour après son premier passage.",
+        "ratio": "Ratio du compte", "floor": "plancher {v}", "left": "Avant le plancher", "uploaded": "Envoyé",
+        "actual": "{v} réels", "downloaded": "Reçu", "zen": "Zen", "paid_last": "+{v} cette nuit",
+        "zen_chart": "Zen", "paid": "payé chaque nuit", "balance": "solde", "transfer": "Envoi et réception",
+        "challenges": {
+            "seed_volume": "Volume de seed", "contribution": "Contribution minimum", "duration": "Durée de seed",
+            "diversity": "Diversité catégories", "category": "Volume catégorie",
+        },
+        "short": {
+            "seed_volume": "{n} seeds", "contribution": "{n} à {share} % du max", "duration": "{n} pendant {days} jours",
+            "diversity": ("25 dans 1 catégorie", "25 dans {k} catégories"),
+            "category": ("{n} dans une catégorie", "{n} en Films"),
+        },
+        "max": "Tous les paliers",
+        "disk": "Disque de la Farm", "free": "Libre", "of": "sur {budget} {gb}",
+        "best": "Meilleurs torrents", "worst": "Les moins rentables",
+        "score": "{v} {gb} rapportés", "rate": "{v} {gb} par {gb} et par jour", "days": "{n} jours",
+        "sources": {
+            "paid": "Grab payant", "twin": "Twin", "freeleech": "Freeleech", "cross-seed": "Cross-seed de la Library",
+            "library": "Téléchargement de la Library", "zen-hunt": "Zen hunt", "volume-hunt": "Volume hunt",
+            "unknown": "Inconnue", PUBLIC: "Public",
+        },
+    },
+}
 STYLE = """
-:root { color-scheme: dark; }
-body { margin: 0; padding: 8px; background: transparent; color: #e2e8f0; font: 12px system-ui, sans-serif; }
-main { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-section { background: rgba(15, 23, 42, 0.55); border-radius: 8px; padding: 8px; min-width: 0; }
-h2 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
-p { margin: 0 0 4px; color: #94a3b8; }
-svg { width: 100%; height: auto; display: block; }
-text { fill: #94a3b8; font-size: 10px; }
-.axis { stroke: #475569; }
-.guide { stroke: #94a3b8; stroke-dasharray: 4 3; }
-.ratio, .seeds, .balance { fill: none; stroke-width: 2; }
-.ratio { stroke: #a78bfa; }
-.seeds { stroke: #34d399; }
-.balance { stroke: #34d399; }
-circle.ratio { fill: #a78bfa; }
-circle.seeds, circle.balance { fill: #34d399; }
-.paid, .zen { fill: #fbbf24; }
-.upload { fill: #60a5fa; }
-.key-paid { color: #fbbf24; }
-.key-balance { color: #34d399; }
-.key-upload { color: #60a5fa; }
+:root { color-scheme: dark; --text: #e2e8f0; --muted: #94a3b8; --line: rgba(148, 163, 184, 0.22);
+  --violet: #a78bfa; --green: #34d399; --amber: #fbbf24; --blue: #60a5fa; --rose: #fb7185; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: transparent; color: var(--text);
+  font: 13px/1.35 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { display: flex; flex-direction: column; gap: 14px; height: 100vh; padding: 10px 12px; overflow: auto; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px 20px; }
+.kpi { display: flex; flex-direction: column; min-width: 0; }
+.label, figcaption, h3 { color: var(--muted); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; margin: 0; }
+.value { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
+.sub { color: var(--muted); font-size: 12px; min-height: 16px; }
+.ratio .value { color: var(--violet); } .left .value { color: var(--green); } .zen .value { color: var(--amber); }
+.charts, .bottom { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; flex: 1; min-height: 150px; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
+figcaption { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.key { text-transform: none; letter-spacing: 0; font-size: 11px; }
+.key::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; background: currentColor; }
+.chart { position: relative; flex: 1; min-height: 80px; border-bottom: 1px solid var(--line); }
+.chart svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.mark { position: absolute; font-size: 10px; color: var(--muted); transform: translateY(-100%); white-space: nowrap; }
+.mark.right { right: 0; } .mark.left { left: 0; }
+.axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; }
+.line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.dot { stroke-width: 6; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.guide { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+.c-ratio { stroke: var(--violet); color: var(--violet); } .c-balance { stroke: var(--green); color: var(--green); }
+.c-paid { fill: var(--amber); color: var(--amber); } .c-up { stroke: var(--blue); color: var(--blue); }
+.c-down { stroke: var(--rose); color: var(--rose); }
+.quests { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; }
+.quest ol, .ranking { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.quest li { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; font-size: 12px; }
+.quest .reward { color: var(--muted); font-size: 11px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+.quest .done { color: var(--muted); opacity: 0.55; } .quest .done .step::before { content: "✓ "; color: var(--green); }
+.quest .later { color: var(--muted); opacity: 0.7; }
+.quest .next { color: var(--text); font-weight: 600; } .quest .next .reward { color: var(--amber); }
+.bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 400; color: var(--muted); }
+.bar span { flex: 1; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--amber); }
+.disk { display: flex; gap: 14px; align-items: center; min-height: 0; }
+.donut { position: relative; width: 128px; height: 128px; flex: none; }
+.donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.donut circle { fill: none; stroke-width: 0.32; }
+.donut .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-size: 11px; color: var(--muted); }
+.donut .center b { color: var(--green); font-size: 20px; font-weight: 600; line-height: 1.1; }
+.legend { list-style: none; margin: 0; padding: 0; font-size: 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.legend li { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.ranking li { display: grid; grid-template-columns: auto 1fr auto; gap: 0 6px; font-size: 12px; min-width: 0; }
+.ranking .swatch { align-self: center; }
+.name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legend .name { flex: 1; }
+.figure { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.meta { grid-column: 2 / -1; color: var(--muted); font-size: 11px; }
+.empty { color: var(--muted); }
 """
 
 
-def highest(values):
-    return max([v for v in values if v is not None] or [0])
+def figure_text(value, digits, words):
+    return "-" if value is None else f"{value:,.{digits}f}".replace(",", " ").replace(".", words["decimal"])
 
 
-def ceiling(values):
-    top = highest(values)
-    return top * 1.15 if top > 0 else 1
+def size_text(value, words, digits=1):
+    return f"{figure_text(value, digits, words)} {words['gb']}"
 
 
-def runs(offsets, values):
-    run = []
-    for at, value in zip(offsets, values):
+def window_of(history):
+    end = datetime.date.fromisoformat(history[-1]["day"])
+    start = end - datetime.timedelta(days=HISTORY_DAYS - 1)
+    entries = [e for e in history if e["day"] >= start.isoformat()]
+    offsets = [(datetime.date.fromisoformat(e["day"]) - start).days for e in entries]
+    return start, end, entries, offsets
+
+
+def x_of(offset):
+    return (offset + 0.5) * 100 / HISTORY_DAYS
+
+
+def y_of(value, top):
+    return 100 - 90 * value / top
+
+
+def top_of(values):
+    found = max([v for v in values if v is not None] or [0])
+    return found if found > 0 else 1
+
+
+def lines(css, offsets, values, top):
+    parts, run = [], []
+    for at, value in [*zip(offsets, values), (None, None)]:
         if run and (value is None or at > run[-1][0] + 1):
-            yield run
+            if len(run) == 1:
+                x, y = x_of(run[0][0]), y_of(run[0][1], top)
+                parts.append(f'<line class="dot {css}" x1="{x:.2f}" y1="{y:.2f}" x2="{x:.2f}" y2="{y:.2f}"/>')
+            else:
+                points = " ".join(f"{x_of(a):.2f},{y_of(v, top):.2f}" for a, v in run)
+                parts.append(f'<polyline class="line {css}" points="{points}"/>')
             run = []
         if value is not None:
             run.append((at, value))
-    if run:
-        yield run
+    return parts
 
 
-def span_of(days):
-    first, last = (datetime.date.fromisoformat(d) for d in (days[0], days[-1]))
-    return (last - first).days + 1
-
-
-def plot(label, days, series, guides=()):
-    first = datetime.date.fromisoformat(days[0])
-    offsets = [(datetime.date.fromisoformat(d) - first).days for d in days]
-    count = offsets[-1] + 1
-    width, height = WIDTH - LEFT - RIGHT, HEIGHT - TOP - BOTTOM
-    tops = [ceiling(values + ([v for v, _ in guides] if n == 0 else [])) for n, (_, _, values) in enumerate(series)]
-
-    def x(at):
-        return LEFT + (at + 0.5) * width / count
-
-    def y(value, top):
-        return TOP + height * (1 - value / top)
-
-    parts = [
-        f'<line class="axis" x1="{LEFT}" y1="{TOP + height}" x2="{WIDTH - RIGHT}" y2="{TOP + height}"/>',
-        f'<text x="{LEFT - 4}" y="{TOP + 4}" text-anchor="end">{highest(series[0][2]):.3g}</text>',
-        f'<text x="{LEFT - 4}" y="{TOP + height}" text-anchor="end">0</text>',
-        f'<text x="{LEFT}" y="{HEIGHT - 4}">{html.escape(days[0][5:])}</text>',
-        f'<text x="{WIDTH - RIGHT}" y="{HEIGHT - 4}" text-anchor="end">{html.escape(days[-1][5:])}</text>',
+def bars(css, offsets, values, top):
+    width = 100 / HISTORY_DAYS * 0.6
+    return [
+        f'<rect class="{css}" x="{x_of(at) - width / 2:.2f}" y="{y_of(v, top):.2f}" '
+        f'width="{width:.2f}" height="{100 - y_of(v, top):.2f}"/>'
+        for at, v in zip(offsets, values)
+        if v and v > 0
     ]
-    if len(series) > 1:
-        parts.append(f'<text x="{WIDTH - RIGHT}" y="{TOP + 4}" text-anchor="end">{highest(series[1][2]):.3g}</text>')
-    for value, name in guides:
-        at = round(y(value, tops[0]), 1)
-        parts.append(f'<line class="guide" x1="{LEFT}" y1="{at}" x2="{WIDTH - RIGHT}" y2="{at}"/>')
-        parts.append(f'<text x="{WIDTH - RIGHT - 2}" y="{at - 3}" text-anchor="end">{html.escape(name)}</text>')
-    for (kind, css, values), top in zip(series, tops):
-        if kind == "bar":
-            bar = max(width / count * 0.6, 1)
-            for at, value in zip(offsets, values):
-                if value and value > 0:
-                    high = y(value, top)
-                    parts.append(
-                        f'<rect class="{css}" x="{x(at) - bar / 2:.1f}" y="{high:.1f}" '
-                        f'width="{bar:.1f}" height="{TOP + height - high:.1f}"/>'
-                    )
-            continue
-        for run in runs(offsets, values):
-            if len(run) == 1:
-                at, value = run[0]
-                parts.append(f'<circle class="{css}" cx="{x(at):.1f}" cy="{y(value, top):.1f}" r="2.5"/>')
-            else:
-                points = " ".join(f"{x(at):.1f},{y(value, top):.1f}" for at, value in run)
-                parts.append(f'<polyline class="{css}" points="{points}"/>')
+
+
+def chart(caption, keys, shapes, marks, start, end):
+    svg = '<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' + "".join(shapes) + "</svg>"
+    legend = "".join(f'<span class="key {css}">{html.escape(text)}</span>' for css, text in keys)
+    labels = "".join(
+        f'<span class="mark {side}" style="top:{top:.1f}%">{html.escape(text)}</span>' for side, top, text in marks
+    )
     return (
-        f'<svg viewBox="0 0 {WIDTH} {HEIGHT}" role="img" aria-label="{html.escape(label)}">' + "".join(parts) + "</svg>"
+        f"<figure><figcaption>{html.escape(caption)}{legend}</figcaption>"
+        f'<div class="chart">{svg}{labels}</div>'
+        f'<div class="axis"><span>{start.strftime("%d/%m")}</span><span>{end.strftime("%d/%m")}</span></div></figure>'
     )
 
 
-def section(title, legend, svg):
-    return f"<section><h2>{html.escape(title)}</h2><p>{legend}</p>{svg}</section>"
-
-
-def ratio_graph(history, days):
-    ratios = [e["ratio"] for e in history]
-    floor = history[-1]["floor"]
-    svg = plot("Account ratio", days, [("line", "ratio", ratios)], [(floor, f"floor {floor:g}")])
-    last = next((r for r in reversed(ratios) if r is not None), None)
-    return section("Account ratio", f"Now {shown(last)}, over {span_of(days)} days", svg)
-
-
-def zen_graph(history, days):
-    paid = [e["zen_paid"] for e in history]
-    balance = [e["zen"] for e in history]
-    svg = plot("Zen", days, [("bar", "paid", paid), ("line", "balance", balance)])
-    most = highest(paid)
-    held = next((b for b in reversed(balance) if b is not None), None)
-    legend = (
-        f'<span class="key-paid">■ paid each night, up to {most:g}, left scale</span> '
-        f'<span class="key-balance">— balance, right scale, now {"-" if held is None else f"{held:g}"}</span>'
+def kpi(css, label, value, sub=""):
+    return (
+        f'<div class="kpi {css}"><span class="label">{html.escape(label)}</span>'
+        f'<span class="value">{html.escape(value)}</span><span class="sub">{html.escape(sub)}</span></div>'
     )
-    return section("Zen", legend, svg)
 
 
-def seeds_graph(history, days):
-    seeds = [e["seeds"] for e in history]
-    most = max(seeds)
-    steps = [n for n in SEED_STEPS if n <= most] + [n for n in SEED_STEPS if n > most][:1]
-    svg = plot("Seed count", days, [("line", "seeds", seeds)], [(n, f"Quest {n}") for n in steps])
-    return section("Seed count", f"Now {seeds[-1]}, Quest steps dashed", svg)
+def trends(history, words):
+    start, end, entries, offsets = window_of(history)
+    today = history[-1]
+    paid = today.get("zen_paid")
+    floor = today["floor"]
+    actual = today.get("actual_gb")
+    strip = "".join([
+        kpi("ratio", words["ratio"], figure_text(today.get("ratio"), 2, words),
+            words["floor"].format(v=figure_text(floor, 1, words))),
+        kpi("left", words["left"], size_text(today.get("left_gb"), words)),
+        kpi("up", words["uploaded"], size_text(today.get("uploaded_gb"), words),
+            "" if actual is None else words["actual"].format(v=size_text(actual, words))),
+        kpi("down", words["downloaded"], size_text(today.get("downloaded_gb"), words)),
+        kpi("zen", words["zen"], figure_text(today.get("zen"), 0, words),
+            words["paid_last"].format(v=figure_text(paid, 0, words)) if paid else ""),
+    ])
+    ratios = [e.get("ratio") for e in entries]
+    top = top_of(ratios + [floor]) * 1.05
+    ratio_chart = chart(
+        words["ratio"], [],
+        [f'<line class="guide" x1="0" y1="{y_of(floor, top):.2f}" x2="100" y2="{y_of(floor, top):.2f}"/>',
+         *lines("c-ratio", offsets, ratios, top)],
+        [*([("left", y_of(top_of(ratios), top), figure_text(top_of(ratios), 2, words))] if any(ratios) else []),
+         ("right", y_of(floor, top), words["floor"].format(v=figure_text(floor, 1, words)))],
+        start, end,
+    )
+    paid_values = [e.get("zen_paid") for e in entries]
+    balance = [e.get("zen") for e in entries]
+    zen_chart = chart(
+        words["zen_chart"], [("c-paid", words["paid"]), ("c-balance", words["balance"])],
+        bars("c-paid", offsets, paid_values, top_of(paid_values)) + lines("c-balance", offsets, balance, top_of(balance)),
+        [("left", 10, figure_text(top_of(paid_values), 0, words)), ("right", 10, figure_text(top_of(balance), 0, words))],
+        start, end,
+    )
+    up = [e.get("uploaded_gb") for e in entries]
+    down = [e.get("downloaded_gb") for e in entries]
+    both = top_of(up + down)
+    transfer_chart = chart(
+        words["transfer"], [("c-up", words["uploaded"]), ("c-down", words["downloaded"])],
+        lines("c-up", offsets, up, both) + lines("c-down", offsets, down, both),
+        [("left", 10, size_text(both, words, 0))],
+        start, end,
+    )
+    return (
+        f'<section class="kpis">{strip}</section>'
+        f'<section class="charts">{ratio_chart}{zen_chart}{transfer_chart}</section>'
+    )
 
 
-def sources_graph(history, days):
-    first, last = history[0]["sources"], history[-1]["sources"]
-    names = [s for s in SOURCES if any(s in e["sources"] for e in history)]
-    rows = [
-        (
-            s,
-            max(last.get(s, {}).get("uploaded_gb", 0) - first.get(s, {}).get("uploaded_gb", 0), 0),
-            sum(e["sources"].get(s, {}).get("zen", 0) for e in history[1:]),
+def short_step(key, index, target, words):
+    text = words["short"][key]
+    if key == "duration":
+        return text.format(n=target, days=DURATION_STEPS[index][1])
+    if key == "contribution":
+        return text.format(n=target, share=CONTRIBUTION_SHARES[index].replace(".", words["decimal"]))
+    if key == "diversity":
+        return text[0 if index == 0 else 1].format(k=index + 1)
+    if key == "category":
+        return text[0 if index < 2 else 1].format(n=target)
+    return text.format(n=target)
+
+
+def quest_column(challenge, words, pick):
+    key = challenge["key"]
+    rows, waiting = [], False
+    for index, step in enumerate(challenge["steps"]):
+        reached = step["progress"] >= step["target"]
+        status = "done" if reached else "later" if waiting else "next"
+        waiting = waiting or not reached
+        bar = ""
+        if status == "next":
+            fill = min(100, 100 * step["progress"] / step["target"])
+            bar = f'<span class="bar"><span><i style="width:{fill:.0f}%"></i></span>{step["progress"]} / {step["target"]}</span>'
+        rows.append(
+            f'<li class="{status}"><span class="step">{html.escape(short_step(key, index, step["target"], words))}</span>'
+            f'<span class="reward" title="{html.escape(REWARDS[key][index][pick])}">{html.escape(REWARDS[key][index][pick])}</span>{bar}</li>'
         )
-        for s in names
-    ]
-    most_upload = max([r[1] for r in rows] or [0]) or 1
-    most_zen = max([r[2] for r in rows] or [0]) or 1
-    row, start, span = 40, 96, WIDTH - 96 - 80
-    parts = []
-    for n, (source, upload, zen) in enumerate(rows):
-        top = 6 + n * row
-        parts += [
-            f'<text x="0" y="{top + 12}">{html.escape(SOURCES[source])}</text>',
-            f'<rect class="upload" x="{start}" y="{top + 2}" width="{span * upload / most_upload:.1f}" height="12"/>',
-            f'<text x="{WIDTH - 2}" y="{top + 12}" text-anchor="end">{upload:.1f} GB</text>',
-            f'<rect class="zen" x="{start}" y="{top + 18}" width="{span * zen / most_zen:.1f}" height="12"/>',
-            f'<text x="{WIDTH - 2}" y="{top + 28}" text-anchor="end">{zen:.1f} Zen, estimate</text>',
-        ]
-    height = max(6 + len(rows) * row, 20)
-    svg = f'<svg viewBox="0 0 {WIDTH} {height}" role="img" aria-label="Sources">' + "".join(parts) + "</svg>"
-    legend = (
-        f'<span class="key-upload">■ upload</span> <span class="key-paid">■ Zen, estimated from the seeding '
-        f"of each torrent, not what C411 paid</span>, over the {span_of(days) - 1} nights since {html.escape(days[0])}"
-    )
-    return section("Sources", legend, svg)
-
-
-def graphs_page(history):
-    if history:
-        days = [e["day"] for e in history]
-        body = "".join(
-            [ratio_graph(history, days), zen_graph(history, days), seeds_graph(history, days), sources_graph(history, days)]
+    if challenge["max"]:
+        rows.append(
+            f'<li class="{"later" if waiting else "done"}"><span class="step">{html.escape(words["max"])}</span>'
+            f'<span class="reward">{html.escape(MAX_REWARDS[key][pick])}</span></li>'
         )
+    return f'<div class="quest"><h3>{html.escape(words["challenges"][key])}</h3><ol>{"".join(rows)}</ol></div>'
+
+
+def donut(farm, words):
+    budget = farm["budget_gb"] or 1
+    used = sum(s["gb"] for s in farm["slices"])
+    start, rings, legend = 0, [], []
+    for s in farm["slices"]:
+        part = 100 * s["gb"] / max(budget, used)
+        color = COLORS.get(s["source"], COLORS["unknown"])
+        rings.append(
+            f'<circle r="0.84" pathLength="100" stroke="{color}" '
+            f'stroke-dasharray="{part:.2f} {100 - part:.2f}" stroke-dashoffset="{-start:.2f}"/>'
+        )
+        legend.append(
+            f'<li><span class="swatch" style="background:{color}"></span>'
+            f'<span class="name">{html.escape(words["sources"].get(s["source"], s["source"]))}</span>'
+            f'<span class="figure">{html.escape(size_text(s["gb"], words))}</span></li>'
+        )
+        start += part
+    legend.append(
+        f'<li><span class="swatch" style="background:var(--line)"></span><span class="name">{html.escape(words["free"])}</span>'
+        f'<span class="figure">{html.escape(size_text(max(budget - used, 0), words))}</span></li>'
+    )
+    center = words["of"].format(budget=figure_text(budget, 0, words), gb=words["gb"])
+    svg = (
+        '<svg viewBox="-1 -1 2 2" aria-hidden="true"><circle r="0.84" stroke="rgba(148,163,184,0.22)"/>'
+        + "".join(rings) + "</svg>"
+    )
+    return (
+        f'<figure><figcaption>{html.escape(words["disk"])}</figcaption><div class="disk">'
+        f'<div class="donut">{svg}<div class="center"><b>{figure_text(100 * used / budget, 0, words)} %</b>'
+        f'{html.escape(center)}</div></div><ul class="legend">{"".join(legend)}</ul></div></figure>'
+    )
+
+
+def ranking(title, cards, words, figure):
+    rows = "".join(
+        f'<li><span class="swatch" style="background:{COLORS.get(c["source"], COLORS["unknown"])}"></span>'
+        f'<span class="name" title="{html.escape(c["name"])}">{html.escape(c["name"])}</span>'
+        f'<span class="figure">{html.escape(figure(c))}</span>'
+        f'<span class="meta">{html.escape(words["sources"].get(c["source"], c["source"]))}, '
+        f'{html.escape(size_text(c["size_gb"], words, 2))}, {html.escape(words["days"].format(n=c["days"]))}</span></li>'
+        for c in cards
+    )
+    return f'<figure><figcaption>{html.escape(title)}</figcaption><ol class="ranking">{rows}</ol></figure>'
+
+
+def goals(board, words, pick):
+    columns = "".join(quest_column(c, words, pick) for c in board["challenges"])
+    best = ranking(
+        words["best"], board["best"], words,
+        lambda c: words["score"].format(v=figure_text(c["score_gb"], 1, words), gb=words["gb"]),
+    )
+    worst = ranking(
+        words["worst"], board["worst"], words,
+        lambda c: words["rate"].format(v=figure_text(c["rate"], 3, words), gb=words["gb"]),
+    )
+    return f'<section class="quests">{columns}</section><section class="bottom">{donut(board["farm"], words)}{best}{worst}</section>'
+
+
+def board_page(board, part=None, language="en"):
+    language = language if language in TEXT else "en"
+    words = TEXT[language]
+    pick = 0 if language == "en" else 1
+    if not board or not board["history"]:
+        body = f'<p class="empty">{html.escape(words["empty"])}</p>'
     else:
-        body = "<p>No history yet, ratio records one day after its first run.</p>"
+        body = (trends(board["history"], words) if part != "2" else "") + (goals(board, words, pick) if part != "1" else "")
     return (
-        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        f'<!doctype html><html lang="{language}"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"<title>Farm graphs</title><style>{STYLE}</style></head><body><main>{body}</main></body></html>"
+        f"<title>Farm</title><style>{STYLE}</style></head><body><main>{body}</main></body></html>"
     )
 
 
 def serve(latest, port=8000):
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
-            path = urllib.parse.urlsplit(self.path).path.rstrip("/")
+            url = urllib.parse.urlsplit(self.path)
+            path = url.path.rstrip("/")
             if path == "/graphs":
-                self.answer(graphs_page(latest.get("history", [])).encode(), "text/html; charset=utf-8", {
+                query = urllib.parse.parse_qs(url.query)
+                page = board_page(latest.get("board"), query.get("part", [None])[0], query.get("lang", ["en"])[0])
+                self.answer(page.encode(), "text/html; charset=utf-8", {
                     "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
                 })
                 return
@@ -1398,7 +1678,7 @@ def run_once(qbt, prowlarr, c411, settings, state, now):
     use_prowlarr(state, now, lambda: grab(qbt, prowlarr, settings, state, torrents, account, now))
     torrents = {t["hash"].lower(): {**t, "hash": t["hash"].lower()} for t in qbt.torrents()}
     record_day(state, settings, torrents, account, now)
-    return summary(state, torrents, settings, account, now)
+    return {**summary(state, torrents, settings, account, now), "board": board_of(state, settings, torrents)}
 
 
 def number(name, default=None):
@@ -1460,16 +1740,18 @@ def main():
     c411 = C411(os.environ.get("C411_PROFILE_API_KEY", ""))
     state_path = "/state/state.json"
     state = load_state(state_path)
-    latest = {"history": list(state["daily"])}
+    latest = {"board": waiting_board(state, settings)}
     serve(latest)
     if not settings["indexers"]:
         print("RATIO_GRAB_INDEXER_IDS is empty, ratio grabs nothing and only cleans")
     while True:
         try:
-            latest["summary"] = run_once(qbt, prowlarr, c411, settings, state, time.time())
+            board_and_summary = run_once(qbt, prowlarr, c411, settings, state, time.time())
+            latest["board"] = board_and_summary.pop("board")
+            latest["summary"] = board_and_summary
         except Exception as error:
             print(f"Cannot run the Farm: {error}")
-        latest["history"] = list(state["daily"])
+            latest["board"] = {**latest["board"], "history": [dict(e) for e in state["daily"]]}
         try:
             save_state(state_path, state)
         except OSError as error:

@@ -1,0 +1,4 @@
+li.service[data-name="Farm board"] .service-title,
+li.service[data-name="Farm quests"] .service-title {
+  display: none;
+}
