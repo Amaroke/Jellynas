@@ -1,8 +1,10 @@
 import contextlib
+import datetime
 import http.server
 import io
 import json
 import os
+import re
 import tempfile
 import threading
 import unittest
@@ -189,10 +191,11 @@ class FakeProwlarr:
 
 
 class FakeC411:
-    def __init__(self, uploaded_gb=60, downloaded_gb=30, zen=25, broken=False):
+    def __init__(self, uploaded_gb=60, downloaded_gb=30, zen=25, broken=False, earned=None):
         self.uploaded = uploaded_gb * GB
         self.downloaded = downloaded_gb * GB
         self.zen = zen
+        self.earned = zen if earned is None else earned
         self.broken = broken
         self.reads = 0
 
@@ -200,7 +203,7 @@ class FakeC411:
         self.reads += 1
         if self.broken:
             raise RuntimeError("Site is currently restricted")
-        return {"uploaded": self.uploaded, "downloaded": self.downloaded, "zen": self.zen}
+        return {"uploaded": self.uploaded, "downloaded": self.downloaded, "zen": self.zen, "earned": self.earned}
 
 
 def under_floor():
@@ -262,7 +265,7 @@ def empty_state(**changes):
     return {
         "transfers": {}, "hunted": {}, "twins": {}, "free": {}, "checked": {}, "paused": False,
         "sources": {}, "history": {}, "zen": {}, "report": {}, "account": [], "held": None, "backoff_until": 0,
-        "stuck": {}, "restore": {}, "kinds": {}, "hunt_at": {}, **changes,
+        "stuck": {}, "restore": {}, "kinds": {}, "hunt_at": {}, "daily": [], **changes,
     }
 
 
@@ -1022,6 +1025,159 @@ class Summary(unittest.TestCase):
         self.assertEqual(summary_of(FakeQBittorrent())["updated_at"], "2027-01-15T08:00:00+00:00")
 
 
+def day(now):
+    return datetime.date.fromtimestamp(now).isoformat()
+
+
+class History(unittest.TestCase):
+    def test_each_day_keeps_one_entry_of_the_account_the_seeds_and_the_sources(self):
+        qbt = FakeQBittorrent([
+            torrent("movie", category="movies", size_gb=2, seeders=100, uploaded_gb=3, downloaded_gb=2),
+        ])
+        state = empty_state()
+        run(qbt, state=state, c411=FakeC411(zen=20))
+        run(qbt, state=state, now=NOW + 600, c411=FakeC411(zen=21))
+        self.assertEqual(len(state["daily"]), 1)
+        run(qbt, state=state, now=NOW + DAY, c411=FakeC411(zen=22))
+        self.assertEqual([e["day"] for e in state["daily"]], [day(NOW), day(NOW + DAY)])
+        self.assertEqual(state["daily"][0]["zen"], 21)
+        entry = state["daily"][1]
+        self.assertEqual(entry["ratio"], 2.0)
+        self.assertEqual(entry["floor"], 1.2)
+        self.assertEqual(entry["zen"], 22)
+        self.assertEqual(entry["seeds"], 1)
+        self.assertEqual(list(entry["sources"]), ["library"])
+        self.assertEqual(entry["sources"]["library"]["uploaded_gb"], 3)
+        self.assertAlmostEqual(entry["sources"]["library"]["zen"], 0.089, places=3)
+
+    def test_the_zen_paid_each_night_is_what_the_zen_earned_grew_by(self):
+        state = empty_state()
+        run(FakeQBittorrent(), state=state, c411=FakeC411(zen=20, earned=30))
+        run(FakeQBittorrent(), state=state, now=NOW + DAY, c411=FakeC411(zen=12, earned=34))
+        self.assertEqual([e["zen_paid"] for e in state["daily"]], [None, 4])
+
+    def test_after_a_missing_day_the_zen_paid_is_unknown(self):
+        state = empty_state()
+        run(FakeQBittorrent(), state=state, c411=FakeC411(earned=30))
+        run(FakeQBittorrent(), state=state, now=NOW + 3 * DAY, c411=FakeC411(earned=40))
+        self.assertEqual([e["zen_paid"] for e in state["daily"]], [None, None])
+
+    def test_a_profile_without_the_zen_earned_still_counts_for_the_floor(self):
+        state = empty_state()
+        run(FakeQBittorrent(), state=state, c411=FakeC411(earned=30))
+        c411 = FakeC411()
+        c411.earned = None
+        run(FakeQBittorrent(), state=state, now=NOW + DAY, c411=c411)
+        self.assertFalse(state["paused"])
+        self.assertEqual(state["daily"][1]["zen_paid"], None)
+
+    def test_an_unreadable_account_keeps_the_figures_the_day_already_had(self):
+        state = empty_state()
+        run(FakeQBittorrent(), state=state, c411=FakeC411(zen=20))
+        run(FakeQBittorrent(), state=state, now=NOW + 600, c411=FakeC411(broken=True))
+        self.assertEqual(state["daily"][0]["zen"], 20)
+        self.assertEqual(state["daily"][0]["ratio"], 2.0)
+        run(FakeQBittorrent(), state=state, now=NOW + DAY, c411=FakeC411(broken=True))
+        self.assertEqual(state["daily"][1]["ratio"], None)
+        self.assertEqual(state["daily"][1]["zen_paid"], None)
+
+    def test_the_history_survives_a_restart_and_keeps_the_last_30_days(self):
+        state = empty_state()
+        with tempfile.TemporaryDirectory() as folder, contextlib.redirect_stdout(io.StringIO()):
+            path = os.path.join(folder, "state.json")
+            for n in range(40):
+                run(FakeQBittorrent(), state=state, now=NOW + n * DAY)
+                save_state(path, state)
+                state = load_state(path)
+        days = [e["day"] for e in state["daily"]]
+        self.assertEqual(len(days), 30)
+        self.assertEqual(days[0], day(NOW + 10 * DAY))
+        self.assertEqual(days[-1], day(NOW + 39 * DAY))
+
+
+def entry(n, **changes):
+    return {
+        "day": f"2027-01-{n:02d}", "ratio": 2.0, "floor": 1.2, "zen": 25, "earned": 25, "zen_paid": 3, "seeds": 112,
+        "sources": {"volume-hunt": {"uploaded_gb": n, "zen": 0.5}, "twin": {"uploaded_gb": 2 * n, "zen": 0.3}},
+        **changes,
+    }
+
+
+def sections(body):
+    return {re.search(r"<h2>([^<]+)</h2>", part).group(1): part for part in body.split("<section")[1:]}
+
+
+class Graphs(unittest.TestCase):
+    def page(self, history, path="/graphs"):
+        server = serve({"history": history}, port=0)
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}{path}") as response:
+                return response.headers, response.read().decode()
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_the_page_draws_four_graphs_in_inline_svg_without_any_script(self):
+        headers, body = self.page([entry(n) for n in range(1, 31)])
+        self.assertTrue(headers["Content-Type"].startswith("text/html"))
+        self.assertIn("default-src 'none'", headers["Content-Security-Policy"])
+        self.assertNotIn("<script", body)
+        self.assertNotRegex(body, r"\b(src|href)=")
+        self.assertEqual(list(sections(body)), ["Account ratio", "Zen", "Seed count", "Sources"])
+        for part in sections(body).values():
+            self.assertEqual(part.count("<svg"), 1)
+
+    def test_the_account_ratio_draws_the_floor(self):
+        _, body = self.page([entry(n) for n in range(1, 31)])
+        self.assertIn(">floor 1.2<", sections(body)["Account ratio"])
+
+    def test_the_zen_graph_shows_what_was_paid_each_night_and_the_balance(self):
+        _, body = self.page([entry(1, zen_paid=None), entry(2, zen=28, zen_paid=3)])
+        zen = sections(body)["Zen"]
+        self.assertEqual(zen.count("<rect class=\"paid\""), 1)
+        self.assertIn("class=\"balance\"", zen)
+
+    def test_the_seed_count_draws_the_quest_steps_up_to_the_next_one(self):
+        _, body = self.page([entry(n) for n in range(1, 31)])
+        seeds = sections(body)["Seed count"]
+        self.assertIn(">Quest 100<", seeds)
+        self.assertIn(">Quest 150<", seeds)
+        self.assertNotIn(">Quest 200<", seeds)
+
+    def test_each_source_shows_its_upload_and_its_zen_marked_as_an_estimate(self):
+        _, body = self.page([entry(n) for n in range(1, 31)])
+        sources = sections(body)["Sources"]
+        self.assertIn("Volume hunt", sources)
+        self.assertIn("Twin", sources)
+        self.assertIn(">29.0 GB<", sources)
+        self.assertIn(">58.0 GB<", sources)
+        self.assertIn(">14.5 Zen, estimate<", sources)
+        self.assertIn(">8.7 Zen, estimate<", sources)
+        self.assertIn("29 nights", sources)
+
+    def test_a_source_new_in_the_window_counts_its_upload_from_zero(self):
+        first = entry(1, sources={})
+        _, body = self.page([first, entry(2)])
+        self.assertIn(">2.0 GB<", sections(body)["Sources"])
+
+    def test_a_missing_day_leaves_a_gap_on_the_time_axis(self):
+        _, body = self.page([entry(1), entry(2), entry(5)])
+        points = re.search(r'<polyline class="ratio" points="([^"]+)"', body).group(1).split()
+        self.assertEqual(len(points), 2)
+        self.assertEqual(sections(body)["Account ratio"].count('<circle class="ratio"'), 1)
+        self.assertIn("over 5 days", body)
+
+    def test_the_page_answers_with_a_query_or_a_trailing_slash(self):
+        for path in ("/graphs/", "/graphs?refresh=1"):
+            _, body = self.page([entry(1)], path)
+            self.assertIn("<h2>Sources</h2>", body)
+
+    def test_without_history_the_page_says_so(self):
+        _, body = self.page([])
+        self.assertIn("No history yet", body)
+        self.assertNotIn("<svg", body)
+
+
 class Server(unittest.TestCase):
     def test_the_last_summary_is_served_as_json_and_nothing_else(self):
         latest = {"summary": {"ledger": {"ratio": 1.5}}}
@@ -1328,7 +1484,7 @@ class RealC411(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
-        self.assertEqual(account, {"uploaded": 59134463945, "downloaded": 28231492173, "zen": 25})
+        self.assertEqual(account, {"uploaded": 59134463945, "downloaded": 28231492173, "zen": 25, "earned": 25})
         self.assertEqual(FakeC411Server.calls, [("/api/user/profile", "Bearer secret")])
 
 

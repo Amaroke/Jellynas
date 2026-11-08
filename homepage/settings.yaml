@@ -28,6 +28,10 @@ layout:
     icon: mdi-scale-balance
     style: row
     columns: 4
+  Graphs:
+    icon: mdi-chart-line
+    style: row
+    columns: 1
   Automation:
     icon: mdi-robot-outline
     style: row

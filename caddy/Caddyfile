@@ -74,6 +74,14 @@
 	import lan tdarr tdarr:8265
 	import lan indexarr indexarr:8787
 	import lan autobrr autobrr:7474
+	@ratio {
+		host ratio.lan.{$DOMAIN}
+		remote_ip {$LAN_SUBNET}
+		path /graphs
+	}
+	handle @ratio {
+		reverse_proxy ratio:8000
+	}
 	import lan beszel beszel:8090
 	import lan uptime-kuma uptime-kuma:3001
 	import lan dozzle dozzle:8080

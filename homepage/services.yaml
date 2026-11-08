@@ -144,6 +144,20 @@
         description: Seeds the same data on C411
         siteMonitor: http://cross-seed:2468/api/ping
 
+- Graphs:
+    - Farm graphs:
+        icon: mdi-chart-line-#a78bfa
+        description: Account ratio, Zen, Seed count and Sources over 30 days
+        widget:
+          type: iframe
+          name: farm-graphs
+          src: https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs
+          classes: h-60 sm:h-60 md:h-60 lg:h-60 xl:h-60 2xl:h-72
+          referrerPolicy: same-origin
+          allowScrolling: "yes"
+          loadingStrategy: lazy
+          refreshInterval: 600000
+
 - Automation:
     - Prowlarr:
         icon: prowlarr.svg
