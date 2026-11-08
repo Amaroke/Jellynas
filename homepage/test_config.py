@@ -73,7 +73,7 @@ class HomepageConfigTest(unittest.TestCase):
         caddyfile = (ROOT / "caddy" / "Caddyfile").read_text(encoding="utf-8")
         routed = set(re.findall(r"^\s*import lan ([a-z0-9-]+) ", caddyfile, re.MULTILINE))
         routed |= set(re.findall(r"^\s*host ([a-z0-9-]+)\.lan\.", caddyfile, re.MULTILINE))
-        linked = set(re.findall(r"href: https://([a-z0-9-]+)\.lan\.", (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")))
+        linked = set(re.findall(r"(?:href|src): https://([a-z0-9-]+)\.lan\.", (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")))
         self.assertEqual(set(), linked - routed)
 
     def test_the_account_tile_reads_the_account_block_of_ratio(self):
@@ -104,6 +104,16 @@ class HomepageConfigTest(unittest.TestCase):
         self.assertIn("url: http://ratio:8000/summary", quests.group(1))
         fields = re.findall(r"- field: (\S+)", quests.group(1))
         self.assertEqual(fields, ["quests.name", "quests.shown"])
+
+    def test_the_graphs_of_ratio_are_embedded_in_an_iframe_of_their_own_group(self):
+        text = (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")
+        group = re.search(r"^- Graphs:$(.*?)(?=^- |\Z)", text, re.MULTILINE | re.DOTALL)
+        self.assertIsNotNone(group)
+        self.assertRegex(group.group(1), r"(?m)^    - Farm graphs:$")
+        self.assertIn("type: iframe", group.group(1))
+        self.assertIn("src: https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs", group.group(1))
+        settings = (HOMEPAGE / "settings.yaml").read_text(encoding="utf-8")
+        self.assertRegex(settings, r"(?m)^  Graphs:\n(    .*\n)*    columns: 1$")
 
     def test_every_variable_is_documented(self):
         documented = set(re.findall(r"^([A-Z][A-Z0-9_]*)=", (ROOT / ".env.example").read_text(encoding="utf-8"), re.MULTILINE))

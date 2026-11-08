@@ -324,6 +324,7 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with `:<CA
 | Tdarr | `https://tdarr.lan.<DOMAIN>` | Local network |
 | Indexarr | `https://indexarr.lan.<DOMAIN>` | Local network |
 | autobrr | `https://autobrr.lan.<DOMAIN>` | Local network |
+| ratio | `https://ratio.lan.<DOMAIN>/graphs` | Local network |
 | Beszel | `https://beszel.lan.<DOMAIN>` | Local network |
 | Uptime Kuma | `https://uptime-kuma.lan.<DOMAIN>` | Local network |
 | Dozzle | `https://dozzle.lan.<DOMAIN>` | Local network |
@@ -1160,6 +1161,8 @@ docker compose logs ratio | grep Source
 
 After each run, ratio also serves a summary at `http://ratio:8000/summary`, on the Compose network only, for [Homepage](#homepage): the Account with its ratio, the floor, whether downloads are paused, its Zen and its upload of the last 7 days, the Ledger with its ratio and its Surplus, the Farm with the Seed count, its size, its budget and its downloads, the next Quest of C411 with its progress, such as 112 of 150 seeds, and one line per Source. The next Quest is the step ratio knows that is not reached and is the closest to it: a Seed count of 100 to 300, 25 seeds for 7 days or 150 for 90, 25 seeds in each of 1 to 5 categories, 50 or 100 seeds in one category, or 50 torrents at 62.5 % of their best note. It holds no key and changes nothing.
 
+ratio also keeps one entry per day in `daily` of its state file, the last 30 days, so a restart or a deploy keeps them: the Account ratio, the Zen balance, the Zen paid that night, which is the growth of the total Zen earned since the entry of the day before, the Seed count, and for each Source its upload in the Ledger and its estimated Zen of the night. It draws them at `https://ratio.lan.<DOMAIN>/graphs`, a page of four graphs in inline SVG that loads no script: the Account ratio with the floor, the Zen paid each night and the balance, the Seed count with the Quest steps up to the next one, and what each Source earned over the window, its upload and its Zen. The Zen of a Source is an estimate from the seeding of each torrent, not what C411 paid. Homepage embeds the page in an iframe. Caddy only routes `/graphs` on that lan name, `/summary` stays on the Compose network.
+
 To start the Deficit over, for example once the ratio on the tracker has a buffer, stop ratio, delete its state file and start it again. Every other limit above is fixed in `settings_from_env` of `ratio/ratio.py`.
 
 ## Observation
@@ -1274,7 +1277,7 @@ Open `https://dozzle.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in.
 
 Requires [Bazarr](#bazarr), [Suwayomi](#suwayomi), [Private tracker ratio](#private-tracker-ratio), [Beszel](#beszel) and [Uptime Kuma](#uptime-kuma).
 
-Homepage is the start page of the Admin: one tile per service, grouped as in [Architecture](#architecture), with a link to its lan name and its live figures, such as the Requests waiting in Seerr, the queues of Radarr, Sonarr and Lidarr, the manga of Suwayomi, the torrents of qBittorrent, the public IP and the country of the VPN, and the free space of the data disk. Homarr or Dashy can replace it.
+Homepage is the start page of the Admin: one tile per service, grouped as in [Architecture](#architecture), with a link to its lan name and its live figures, such as the Requests waiting in Seerr, the queues of Radarr, Sonarr and Lidarr, the manga of Suwayomi, the torrents of qBittorrent, the public IP and the country of the VPN, and the free space of the data disk, plus the graphs of ratio in an iframe. Homarr or Dashy can replace it.
 
 Its config is `homepage/settings.yaml`, `homepage/services.yaml` and `homepage/widgets.yaml`. They hold no key and no personal value: Homepage reads each one from `.env`, through the `HOMEPAGE_VAR_` variables of `homepage/compose.yaml`. Homepage pastes each value into the YAML before reading it, so a value it reads must hold no single quote, or the whole page stays empty. This is why it reads qBittorrent with an API key rather than its password. Homepage calls the APIs itself, so no key ever reaches the browser. It sees no file of the data root, only the empty folder `<DATA_ROOT>/.homepage`, which gives it the free space of the data disk. `./scripts/verify.sh` checks that it mounts neither the media tree nor the torrents tree.
 
