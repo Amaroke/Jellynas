@@ -1,5 +1,7 @@
+import base64
 import datetime
 import email.utils
+import hashlib
 import html
 import http.cookiejar
 import http.server
@@ -1050,7 +1052,19 @@ polygon.area { stroke: none; fill-opacity: 0.14; }
 .figure { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
 .meta { grid-column: 2 / -1; color: var(--muted); font-size: 11px; }
 .empty { color: var(--muted); }
+@media (max-width: 640px) {
+  main { height: auto; overflow: visible; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .charts, .bottom { flex: none; }
+  .chart { flex: none; height: 140px; }
+}
 """
+SCRIPT = (
+    'if (parent !== window) { const main = document.querySelector("main"); '
+    'const compact = matchMedia("(max-width: 640px)"); '
+    'new ResizeObserver(() => parent.postMessage({ratioBoardHeight: compact.matches ? main.scrollHeight : null}, "*")).observe(main); }'
+)
+SCRIPT_HASH = base64.b64encode(hashlib.sha256(SCRIPT.encode()).digest()).decode()
 
 
 def figure_text(value, digits, words):
@@ -1288,7 +1302,7 @@ def board_page(board, part=None, language="en"):
     return (
         f'<!doctype html><html lang="{language}"{"" if part else ' class="standalone"'}><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"<title>Farm</title><style>{STYLE}</style></head><body><main>{body}</main></body></html>"
+        f"<title>Farm</title><style>{STYLE}</style></head><body><main>{body}</main><script>{SCRIPT}</script></body></html>"
     )
 
 
@@ -1301,7 +1315,7 @@ def serve(latest, port=8000):
                 query = urllib.parse.parse_qs(url.query)
                 page = board_page(latest.get("board"), query.get("part", [None])[0], query.get("lang", ["en"])[0])
                 self.answer(page.encode(), "text/html; charset=utf-8", {
-                    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+                    "Content-Security-Policy": f"default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-{SCRIPT_HASH}'",
                 })
                 return
             if path != "/summary" or "summary" not in latest:

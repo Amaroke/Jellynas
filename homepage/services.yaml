@@ -206,7 +206,7 @@
           key: '{{HOMEPAGE_VAR_LIDARR_API_KEY}}'
           fields: ["artists", "wanted", "queued"]
     - LazyLibrarian:
-        icon: lazylibrarian.svg
+        icon: lazylibrarian.png
         description: Books
         href: https://lazylibrarian.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
     - Suwayomi:

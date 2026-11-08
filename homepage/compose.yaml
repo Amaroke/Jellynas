@@ -43,6 +43,7 @@ services:
       - ./widgets.yaml:/app/config/widgets.yaml:ro
       - ./bookmarks.yaml:/app/config/bookmarks.yaml:ro
       - ./custom.css:/app/config/custom.css:ro
+      - ./custom.js:/app/config/custom.js:ro
       - ./background.svg:/app/public/images/background.svg:ro
       - ${DATA_ROOT}/.homepage:/data-disk:ro
     healthcheck:
