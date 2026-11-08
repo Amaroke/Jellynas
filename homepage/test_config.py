@@ -97,6 +97,14 @@ class HomepageConfigTest(unittest.TestCase):
         self.assertEqual(fields, ["farm.seeds", "farm.size_gb", "farm.fill", "farm.downloading"])
         self.assertNotIn("zen.", text)
 
+    def test_the_quests_tile_reads_the_quests_block_of_ratio(self):
+        text = (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")
+        quests = re.search(r"^    - Quests:$(.*?)(?=^    - )", text, re.MULTILINE | re.DOTALL)
+        self.assertIsNotNone(quests)
+        self.assertIn("url: http://ratio:8000/summary", quests.group(1))
+        fields = re.findall(r"- field: (\S+)", quests.group(1))
+        self.assertEqual(fields, ["quests.name", "quests.shown"])
+
     def test_every_variable_is_documented(self):
         documented = set(re.findall(r"^([A-Z][A-Z0-9_]*)=", (ROOT / ".env.example").read_text(encoding="utf-8"), re.MULTILINE))
         for path in included_compose_files():
