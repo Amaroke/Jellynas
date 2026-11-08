@@ -145,16 +145,26 @@
         siteMonitor: http://cross-seed:2468/api/ping
 
 - Graphs:
-    - Farm graphs:
-        icon: mdi-chart-line-#a78bfa
-        description: Account ratio, Zen, Seed count and Sources over 30 days
+    - Farm board:
+        description: Account ratio, Zen, upload and download over 30 days
         widget:
           type: iframe
-          name: farm-graphs
-          src: https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs
-          classes: h-60 sm:h-60 md:h-60 lg:h-60 xl:h-60 2xl:h-72
+          name: farm-board
+          src: https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs?lang=fr&part=1
+          classes: h-96
           referrerPolicy: same-origin
-          allowScrolling: "yes"
+          allowScrolling: "no"
+          loadingStrategy: lazy
+          refreshInterval: 600000
+    - Farm quests:
+        description: Quests of C411, Farm disk, best and worst torrents
+        widget:
+          type: iframe
+          name: farm-quests
+          src: https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs?lang=fr&part=2
+          classes: h-96
+          referrerPolicy: same-origin
+          allowScrolling: "no"
           loadingStrategy: lazy
           refreshInterval: 600000
 
