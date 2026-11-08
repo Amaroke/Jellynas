@@ -3,6 +3,8 @@ services:
     image: lscr.io/linuxserver/lidarr:3.1.6.5079-ls47
     container_name: lidarr
     restart: unless-stopped
+    networks:
+      - internal-zone
     security_opt:
       - no-new-privileges
     environment:

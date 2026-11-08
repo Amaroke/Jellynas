@@ -1391,7 +1391,10 @@ class Setup(unittest.TestCase):
     def test_categories_and_the_cross_seed_hook_are_set(self):
         qbt = FakeQBittorrent()
         qbt.cats = {}
-        qbt.prefs = {"max_ratio_enabled": True, "max_seeding_time_enabled": True, "max_inactive_seeding_time_enabled": True}
+        qbt.prefs = {
+            "max_ratio_enabled": True, "max_seeding_time_enabled": True, "max_inactive_seeding_time_enabled": True,
+            "queueing_enabled": True,
+        }
         run(qbt, cross_seed_key="secret")
         self.assertEqual(qbt.made, {
             "movies": "/data/torrents/movies", "shows": "/data/torrents/shows", "music": "/data/torrents/music",
@@ -1400,6 +1403,7 @@ class Setup(unittest.TestCase):
         self.assertFalse(qbt.prefs["max_ratio_enabled"])
         self.assertFalse(qbt.prefs["max_seeding_time_enabled"])
         self.assertFalse(qbt.prefs["max_inactive_seeding_time_enabled"])
+        self.assertFalse(qbt.prefs["queueing_enabled"])
         self.assertTrue(qbt.prefs["autorun_enabled"])
         self.assertIn('X-Api-Key: secret', qbt.prefs["autorun_program"])
         self.assertIn("infoHash=%I", qbt.prefs["autorun_program"])
@@ -1563,7 +1567,9 @@ class FakeProwlarrServer(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         FakeProwlarrServer.calls.append(("GET", self.path, self.headers.get("X-Api-Key"), None))
-        if self.path.startswith("/3/api"):
+        if self.path.startswith("/9/api"):
+            self.answer(200, FEED)
+        elif self.path.startswith("/3/api"):
             self.answer(429, b"", {"Retry-After": "1200"})
         elif self.path.startswith("/5/api"):
             body = b'<error code="429" description="Indexer is disabled till 11/08/2026 15:39:18 due to recent failures." />'
@@ -1630,6 +1636,13 @@ class RealProwlarr(unittest.TestCase):
         FakeProwlarrServer.profile = 2
         self.prowlarr.hold("3", False, "Paused", 5)
         self.assertEqual(self.writes(), [("PUT", "/api/v1/indexer/3", {"id": 3, "name": "C411", "appProfileId": 5})])
+
+    def test_a_search_sends_the_key_in_a_header_and_not_in_the_url(self):
+        self.prowlarr.search("9", "Some.Show.S01", 1793743200)
+        [(_, path, key, _)] = FakeProwlarrServer.calls
+        self.assertTrue(path.startswith("/9/api?"))
+        self.assertNotIn("apikey", path)
+        self.assertEqual(key, "key")
 
     def test_holding_c411_tells_the_profile_it_leaves(self):
         self.assertEqual(self.prowlarr.hold("3", True, "Paused"), 1)

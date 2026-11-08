@@ -8,7 +8,8 @@ from alerts import apply_alerts
 ENV = {
     "BESZEL_EMAIL": "admin@example.com",
     "BESZEL_PASSWORD": "secret",
-    "NTFY_TOPIC": "nas-alerts-1234",
+    "DISCORD_ALERTS_WEBHOOK_ID": "1234",
+    "DISCORD_ALERTS_WEBHOOK_TOKEN": "abcd",
 }
 
 
@@ -102,29 +103,35 @@ class ApplyAlertsTest(unittest.TestCase):
         apply_alerts(hub.url, {**ENV, "BESZEL_DISK_ALERT_PERCENT": "90", "BESZEL_TEMPERATURE_ALERT_CELSIUS": "65"})
         self.assertEqual([(a["name"], a["value"]) for a in hub.alerts], [("Disk", 90), ("Temperature", 65)])
 
-    def test_creates_the_user_settings_with_the_ntfy_topic(self):
+    def test_creates_the_user_settings_with_the_discord_webhook(self):
         hub = self.hub()
         apply_alerts(hub.url, ENV)
         self.assertEqual(hub.settings["user"], "user-1")
-        self.assertEqual(hub.settings["settings"]["webhooks"], ["ntfy://ntfy.sh/nas-alerts-1234"])
+        self.assertEqual(hub.settings["settings"]["webhooks"], ["discord://abcd@1234"])
 
-    def test_replaces_an_older_ntfy_topic_and_keeps_other_settings(self):
+    def test_replaces_ntfy_and_older_discord_webhooks_and_keeps_other_settings(self):
         hub = self.hub({"id": "settings-1", "user": "user-1", "settings": {
             "chartTime": "1h",
             "emails": ["admin@example.com"],
-            "webhooks": ["ntfy://ntfy.sh/old-topic", "discord://token@id"],
+            "webhooks": ["ntfy://ntfy.sh/old-topic", "discord://old@9", "telegram://token@telegram?chats=1"],
         }})
         apply_alerts(hub.url, ENV)
         self.assertEqual(hub.settings["settings"], {
             "chartTime": "1h",
             "emails": ["admin@example.com"],
-            "webhooks": ["discord://token@id", "ntfy://ntfy.sh/nas-alerts-1234"],
+            "webhooks": ["telegram://token@telegram?chats=1", "discord://abcd@1234"],
         })
 
-    def test_refuses_an_empty_topic(self):
+    def test_refuses_an_empty_webhook_id(self):
         hub = self.hub()
-        with self.assertRaisesRegex(SystemExit, "NTFY_TOPIC"):
-            apply_alerts(hub.url, {**ENV, "NTFY_TOPIC": ""})
+        with self.assertRaisesRegex(SystemExit, "DISCORD_ALERTS_WEBHOOK_ID"):
+            apply_alerts(hub.url, {**ENV, "DISCORD_ALERTS_WEBHOOK_ID": ""})
+        self.assertEqual(hub.alerts, [])
+
+    def test_refuses_an_empty_webhook_token(self):
+        hub = self.hub()
+        with self.assertRaisesRegex(SystemExit, "DISCORD_ALERTS_WEBHOOK_TOKEN"):
+            apply_alerts(hub.url, {**ENV, "DISCORD_ALERTS_WEBHOOK_TOKEN": " "})
         self.assertEqual(hub.alerts, [])
 
     def test_refuses_a_wrong_password(self):

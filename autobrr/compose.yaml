@@ -3,6 +3,8 @@ services:
     image: ghcr.io/autobrr/autobrr:v1.90.0
     container_name: autobrr
     restart: unless-stopped
+    networks:
+      - internal-zone
     security_opt:
       - no-new-privileges
     cap_drop:

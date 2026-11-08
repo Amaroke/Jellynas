@@ -25,5 +25,11 @@ include:
   - beszel/compose.yaml
   - uptime-kuma/compose.yaml
   - dozzle/compose.yaml
+  - socket-proxy/compose.yaml
   - homepage/compose.yaml
   - backup/compose.yaml
+
+networks:
+  jellyfin-zone:
+  seerr-zone:
+  internal-zone:

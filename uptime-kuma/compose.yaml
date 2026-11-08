@@ -3,6 +3,8 @@ services:
     image: louislam/uptime-kuma:2.5.9
     container_name: uptime-kuma
     restart: unless-stopped
+    networks:
+      - internal-zone
     security_opt:
       - no-new-privileges
     environment:
@@ -11,37 +13,38 @@ services:
       docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/uptime-kuma:/app/data
-      - /var/run/docker.sock:/var/run/docker.sock:ro
 
   autokuma:
     image: ghcr.io/bigboot/autokuma:2.0.0
     container_name: autokuma
     restart: unless-stopped
+    networks:
+      - internal-zone
     security_opt:
       - no-new-privileges
     depends_on:
       - uptime-kuma
+      - socket-proxy
     environment:
       AUTOKUMA__KUMA__URL: http://uptime-kuma:3001
       AUTOKUMA__KUMA__USERNAME: ${UPTIME_KUMA_USERNAME}
       AUTOKUMA__KUMA__PASSWORD: ${UPTIME_KUMA_PASSWORD}
-      AUTOKUMA__DOCKER__HOSTS: unix:///var/run/docker.sock
+      AUTOKUMA__DOCKER__HOSTS: tcp://socket-proxy:2375
       AUTOKUMA__ON_DELETE: keep
       AUTOKUMA__DEFAULT_SETTINGS: |-
         http.interval: 60
-        http.notification_name_list: ["ntfy"]
+        http.notification_name_list: ["discord"]
         docker.interval: 60
         docker.docker_container: {{container_name}}
         docker.docker_host_name: nas
-        docker.notification_name_list: ["ntfy"]
+        docker.notification_name_list: ["discord"]
     labels:
       kuma.nas.docker_host.name: NAS
-      kuma.nas.docker_host.connection_type: socket
-      kuma.nas.docker_host.path: /var/run/docker.sock
-      kuma.ntfy.notification.name: ntfy
-      kuma.ntfy.notification.active: "true"
-      kuma.ntfy.notification.config: '{"type": "ntfy", "ntfyserverurl": "https://ntfy.sh", "ntfytopic": "${NTFY_TOPIC}", "ntfyPriority": 5, "applyExisting": false}'
+      kuma.nas.docker_host.connection_type: tcp
+      kuma.nas.docker_host.path: http://socket-proxy:2375
+      kuma.discord.notification.name: discord
+      kuma.discord.notification.active: "true"
+      kuma.discord.notification.config: '{"type": "discord", "discordWebhookUrl": "https://discord.com/api/webhooks/${DISCORD_ALERTS_WEBHOOK_ID}/${DISCORD_ALERTS_WEBHOOK_TOKEN}", "discordUsername": "Uptime Kuma", "applyExisting": false}'
       kuma.autokuma.docker.name: AutoKuma
     volumes:
       - ${APPDATA_ROOT}/autokuma:/data
-      - /var/run/docker.sock:/var/run/docker.sock:ro

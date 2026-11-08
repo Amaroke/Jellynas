@@ -3,6 +3,8 @@ services:
     image: ghcr.io/flaresolverr/flaresolverr:v3.5.2
     container_name: flaresolverr
     restart: unless-stopped
+    networks:
+      - internal-zone
     security_opt:
       - no-new-privileges
     cap_drop:

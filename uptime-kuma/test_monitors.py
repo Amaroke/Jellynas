@@ -128,11 +128,20 @@ class MonitorsTest(unittest.TestCase):
     def test_docker_monitors_use_a_known_docker_host(self):
         self.assertIn(default_settings()["docker"]["docker_host_name"], ids_of("docker_host"))
 
+    def test_docker_hosts_go_through_the_socket_proxy(self):
+        for entity_id in ids_of("docker_host"):
+            settings = entities()[entity_id]["settings"]
+            self.assertEqual("tcp", settings["connection_type"], entity_id)
+            self.assertEqual("http://socket-proxy:2375", settings["path"], entity_id)
+
     def test_notification_config_is_json(self):
         for entity_id in ids_of("notification"):
             config = json.loads(entities()[entity_id]["settings"]["config"])
-            self.assertEqual("ntfy", config["type"])
-            self.assertEqual("${NTFY_TOPIC}", config["ntfytopic"])
+            self.assertEqual("discord", config["type"])
+            self.assertEqual(
+                "https://discord.com/api/webhooks/${DISCORD_ALERTS_WEBHOOK_ID}/${DISCORD_ALERTS_WEBHOOK_TOKEN}",
+                config["discordWebhookUrl"],
+            )
 
 
 if __name__ == "__main__":

@@ -145,3 +145,7 @@ _Avoid_: public URL, external address
 **Lan name**:
 A name under `lan.` of the domain of the Admin that only the local network reaches.
 _Avoid_: local URL, internal address
+
+**Network zone**:
+A Docker network that groups the services one exposed service may reach: Jellyfin alone with Caddy, Seerr with Caddy, Radarr and Sonarr, every other service in the internal zone. A zone only opens towards Jellyfin and Seerr, through their Public names.
+_Avoid_: VLAN, segment, subnet
