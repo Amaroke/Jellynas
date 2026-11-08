@@ -3,6 +3,7 @@ import email.utils
 import http.cookiejar
 import http.server
 import json
+import math
 import os
 import re
 import sys
@@ -17,8 +18,28 @@ import xml.etree.ElementTree as ET
 GB = 1024**3
 DAY = 86400
 WEEK = 7 * DAY
-FARM = ("ratio", "cross-seed-link")
-ZEN = "zen"
+FARM = "farm"
+CATEGORIES = {
+    "movies": "/data/torrents/movies",
+    "shows": "/data/torrents/shows",
+    "music": "/data/torrents/music",
+    "books": "/data/torrents/books",
+    FARM: "/data/torrents/farm",
+}
+LEGACY = {
+    "ratio": FARM,
+    "zen": FARM,
+    "cross-seed-link": FARM,
+    "radarr": "movies",
+    "tv-sonarr": "shows",
+    "lidarr": "music",
+    "lazylibrarian": "books",
+}
+PUBLIC = "public"
+SEEDING = ("uploading", "stalledUP", "queuedUP", "forcedUP")
+SHARE_LIMITS = ("max_ratio_enabled", "max_seeding_time_enabled", "max_inactive_seeding_time_enabled")
+SEEDING_STEPS = ((180, 0.5), (90, 0.35), (30, 0.25), (7, 0.1))
+RARE_STEP = 0.25
 SOURCES = {
     "paid": "paid grab",
     "twin": "Twin",
@@ -98,6 +119,20 @@ class QBittorrent:
 
     def create_category(self, name, path):
         self.post("/api/v2/torrents/createCategory", {"category": name, "savePath": path})
+
+    def remove_categories(self, names):
+        self.post("/api/v2/torrents/removeCategories", {"categories": "\n".join(names)})
+
+    def add_tags(self, hashes, tag):
+        self.post("/api/v2/torrents/addTags", {"hashes": "|".join(hashes), "tags": tag})
+
+    def keep_in_place(self, hashes):
+        self.post("/api/v2/torrents/setAutoManagement", {"hashes": "|".join(hashes), "enable": "false"})
+
+    def reset_share_limits(self, hashes):
+        self.post("/api/v2/torrents/setShareLimits", {
+            "hashes": "|".join(hashes), "ratioLimit": -2, "seedingTimeLimit": -2, "inactiveSeedingTimeLimit": -2,
+        })
 
     def preferences(self):
         return json.loads(self.send("/api/v2/app/preferences"))
@@ -330,35 +365,22 @@ def pick_rare(releases, known, rules):
     return sorted(rare, key=lambda r: (r["seeders"], -r["leechers"]))
 
 
-def pick_evictions(torrents, limit_bytes, min_seeding_seconds):
-    used = sum(t["size"] for t in torrents)
-    candidates = sorted(
-        (t for t in torrents if t["progress"] >= 1 and t["seeding_time"] >= min_seeding_seconds),
-        key=lambda t: (t["uploaded"] / max(t["seeding_time"], 1), t["completion_on"]),
-    )
-    evicted = []
-    for t in candidates:
-        if used <= limit_bytes:
-            break
-        evicted.append(t)
-        used -= t["size"]
-    return evicted
+def nightly_zen(t):
+    days = t["seeding_time"] / DAY
+    note = 1 + next((step for at, step in SEEDING_STEPS if days >= at), 0)
+    if is_rare(t["size"], t["num_complete"]):
+        note += RARE_STEP
+    size = t["size"] / 1e9
+    weight = (0.25 + size) / 4.25
+    return note * (weight if size <= 4 else math.sqrt(weight)) / 7
 
 
-def uploaded_since(samples, uploaded, since):
-    older = [u for at, u in samples if at <= since]
-    return None if not older else uploaded - older[-1]
+def zen_per_gb(t):
+    return nightly_zen(t) / max(t["size"] / GB, 0.001)
 
 
-def is_stale(torrent, samples, settings, now):
-    if torrent["progress"] < 1 or torrent["seeding_time"] < settings["min_seeding"]:
-        return False
-    recent = uploaded_since(samples, torrent["uploaded"], now - settings["stale_after"])
-    return recent is not None and recent < settings["stale_upload"] * torrent["size"]
-
-
-def size_of(torrents, categories):
-    return sum(t["size"] for t in torrents.values() if t["category"] in categories)
+def size_of(torrents, category):
+    return sum(t["size"] for t in torrents.values() if t["category"] == category)
 
 
 def load_state(path):
@@ -371,7 +393,6 @@ def load_state(path):
         "transfers": state.get("transfers", {}),
         "grabbed": state.get("grabbed", {}),
         "twins": state.get("twins", {}),
-        "uploads": state.get("uploads", {}),
         "free": state.get("free", {}),
         "checked": state.get("checked", {}),
         "paused": state.get("paused", False),
@@ -396,19 +417,43 @@ def save_state(path, state):
 
 def prepare(qbt, settings):
     categories = qbt.categories()
-    for name in ("ratio", ZEN):
+    for name, path in CATEGORIES.items():
         if name not in categories:
-            qbt.create_category(name, f"/data/torrents/{name}")
+            qbt.create_category(name, path)
+    preferences = qbt.preferences()
+    limits = {key: False for key in SHARE_LIMITS if preferences.get(key)}
+    if limits:
+        qbt.set_preferences(limits)
+        print("qBittorrent no longer stops torrents at its global share limits, ratio removes them")
     if not settings["cross_seed_key"]:
         return
     hook = (
         "curl -XPOST http://cross-seed:2468/api/webhook "
         f'-H "X-Api-Key: {settings["cross_seed_key"]}" -d "infoHash=%I" -d "includeSingleEpisodes=true"'
     )
-    preferences = qbt.preferences()
     if not preferences.get("autorun_enabled") or preferences.get("autorun_program") != hook:
         qbt.set_preferences({"autorun_enabled": True, "autorun_program": hook})
         print("qBittorrent now tells cross-seed about every finished torrent")
+
+
+def is_c411(state, settings, t):
+    return t["hash"] in state["transfers"] or settings["tracker"] in t["tracker"].lower()
+
+
+def is_public(state, settings, t):
+    return bool(t["tracker"]) and not t.get("private") and not is_c411(state, settings, t)
+
+
+def is_owned(t):
+    return t["category"] in CATEGORIES or t["category"] in LEGACY
+
+
+def is_library(settings, category):
+    return category in settings["library_categories"] or LEGACY.get(category) in settings["library_categories"]
+
+
+def is_seeding(t):
+    return t["progress"] >= 1 and t["state"] in SEEDING
 
 
 def twin_copies(state):
@@ -424,11 +469,11 @@ def source_of(state, settings, copies, t):
         return "freeleech"
     if t["category"] == "ratio":
         return "paid"
-    if t["category"] == "cross-seed-link":
+    if t["category"] in ("cross-seed-link", FARM):
         return "cross-seed"
-    if t["category"] in settings["library_categories"]:
+    if is_library(settings, t["category"]):
         return "library"
-    if t["category"] == ZEN:
+    if t["category"] == "zen":
         return "zen-hunt"
     return "unknown"
 
@@ -468,10 +513,10 @@ def record_zen(state, torrents):
         seeding = t["seeding_time"]
         entry = state["zen"].get(infohash)
         if entry is None:
-            if t["category"] == ZEN:
+            if t["category"] == FARM:
                 state["zen"][infohash] = [seeding, 0]
             continue
-        if t["category"] == ZEN:
+        if t["category"] == FARM:
             entry[1] += seeding - entry[0] if seeding >= entry[0] else seeding
         entry[0] = seeding
 
@@ -484,16 +529,6 @@ def record(state, torrents, settings, now):
                 fresh.add(t["hash"])
             downloaded = 0 if t["hash"] in state["free"] else t["downloaded"]
             state["transfers"][t["hash"]] = [downloaded, t["uploaded"]]
-        if t["category"] in FARM:
-            samples = state["uploads"].setdefault(t["hash"], [])
-            if not samples or now - samples[-1][0] >= DAY:
-                samples.append([now, t["uploaded"]])
-    for infohash in list(state["uploads"]):
-        if infohash not in torrents:
-            del state["uploads"][infohash]
-            continue
-        keep_after = now - settings["stale_after"] - DAY
-        state["uploads"][infohash] = [s for s in state["uploads"][infohash] if s[0] >= keep_after]
     for infohash in [h for h, at in state["grabbed"].items() if at < now - DAY]:
         del state["grabbed"][infohash]
     for infohash in [h for h in state["free"] if h not in torrents and h in state["transfers"]]:
@@ -538,7 +573,7 @@ def figures_by_source(state):
             "week_downloaded_gb": gigabytes(week_downloaded),
             "week_uploaded_gb": gigabytes(week_uploaded),
             "week_ratio": share(week_uploaded, week_downloaded),
-            "zen_days": round(zen / DAY, 1),
+            "farm_days": round(zen / DAY, 1),
         }
     return figures
 
@@ -556,19 +591,20 @@ def report(state, now):
         print(
             f"Source {SOURCES[source]}: {f['torrents']} torrents, {f['downloaded_gb']:.1f} GB down, "
             f"{f['uploaded_gb']:.1f} GB up, ratio {shown(f['ratio'])}, last 7 days {f['week_downloaded_gb']:.1f} GB down, "
-            f"{f['week_uploaded_gb']:.1f} GB up, ratio {shown(f['week_ratio'])}, {f['zen_days']:.1f} days in the Zen reserve"
+            f"{f['week_uploaded_gb']:.1f} GB up, ratio {shown(f['week_ratio'])}, {f['farm_days']:.1f} days in the Farm"
         )
 
 
-def fill_of(torrents, categories, limit):
-    held = [t for t in torrents.values() if t["category"] in categories]
+def farm_of(state, settings, torrents):
+    held = [t for t in torrents.values() if t["category"] == FARM]
     size = sum(t["size"] for t in held)
+    limit = settings["farm_size"]
     return {
-        "torrents": len(held),
-        "downloading": sum(1 for t in held if t["progress"] < 1),
+        "seeds": sum(1 for t in torrents.values() if is_c411(state, settings, t) and is_seeding(t)),
         "size_gb": gigabytes(size),
-        "limit_gb": gigabytes(limit),
+        "budget_gb": gigabytes(limit),
         "fill": round(100 * size / limit, 1) if limit else 0,
+        "downloading": sum(1 for t in held if t["progress"] < 1),
     }
 
 
@@ -632,8 +668,7 @@ def summary(state, torrents, settings, account, now):
             "week_ratio": share(week_uploaded, week_downloaded),
         },
         "account": account_of(account, state, settings, now),
-        "farm": fill_of(torrents, FARM, settings["farm_size"]),
-        "zen": fill_of(torrents, (ZEN,), settings["zen_size"]),
+        "farm": farm_of(state, settings, torrents),
         "sources": sources,
     }
 
@@ -660,7 +695,7 @@ def serve(latest, port=8000):
 
 
 def drop_twins(qbt, state, torrents):
-    for twin, (original, category, *_) in list(state["twins"].items()):
+    for twin, (original, *_) in list(state["twins"].items()):
         if twin not in torrents:
             del state["twins"][twin]
             continue
@@ -669,9 +704,6 @@ def drop_twins(qbt, state, torrents):
             continue
         if seeding["state"].startswith("stopped"):
             qbt.start([original])
-        if category == ZEN and seeding["category"] != ZEN:
-            qbt.set_category([original], ZEN)
-            seeding["category"] = ZEN
         qbt.delete([twin], seeding["save_path"] != torrents[twin]["save_path"])
         del torrents[twin]
         del state["twins"][twin]
@@ -681,7 +713,7 @@ def drop_twins(qbt, state, torrents):
 def seed_twins(qbt, prowlarr, settings, state, torrents, now):
     for twin in [t for t in state["stuck"] if t not in state["twins"]]:
         del state["stuck"][twin]
-    for twin, (original, category, grabbed_at, link) in list(state["twins"].items()):
+    for twin, (original, _, grabbed_at, link) in list(state["twins"].items()):
         public = torrents.get(twin)
         if original in torrents or public is None or public["progress"] < 1:
             continue
@@ -691,7 +723,7 @@ def seed_twins(qbt, prowlarr, settings, state, torrents, now):
         if now < next_at:
             continue
         try:
-            qbt.add(prowlarr.torrent({"page": "", "link": link}), category, public["save_path"])
+            qbt.add(prowlarr.torrent({"page": "", "link": link}), FARM, public["save_path"])
             qbt.match_files(original, qbt.files(twin))
         except Throttled:
             raise
@@ -704,63 +736,115 @@ def seed_twins(qbt, prowlarr, settings, state, torrents, now):
         print(f"cross-seed missed {public['name']}, its tracker copy now checks the same files")
 
 
-def retire(qbt, settings, state, torrents, t, reason):
-    room = settings["zen_size"] - size_of(torrents, (ZEN,))
-    if t["hash"] in state["transfers"] and is_rare(t["size"], t["num_complete"]) and t["size"] <= room:
-        qbt.set_category([t["hash"]], ZEN)
-        t["category"] = ZEN
-        print(f"Moved {t['name']} to the Zen reserve, {reason}, but only {t['num_complete']} seeders keep it")
-        return
-    qbt.delete([t["hash"]])
-    del torrents[t["hash"]]
-    print(f"Removed {t['name']}, {reason}")
-
-
-def clean_farm(qbt, settings, state, torrents, now):
-    for t in [t for t in torrents.values() if t["category"] in FARM]:
-        if is_stale(t, state["uploads"].get(t["hash"], []), settings, now):
-            retire(qbt, settings, state, torrents, t, "it uploaded too little this week")
-    farm = [t for t in torrents.values() if t["category"] in FARM]
-    for t in pick_evictions(farm, settings["farm_size"], settings["min_seeding"]):
-        retire(qbt, settings, state, torrents, t, "the farm is full and it uploads the least")
-    used = size_of(torrents, FARM)
-    if used > settings["farm_size"]:
-        print(f"The farm holds {used / GB:.1f} GB, over {settings['farm_size'] / GB:g} GB, the rest is still downloading or too young")
+def into_farm(qbt, t):
+    qbt.keep_in_place([t["hash"]])
+    qbt.set_category([t["hash"]], FARM)
+    qbt.reset_share_limits([t["hash"]])
+    if t["progress"] >= 1 and t["state"].startswith("stopped"):
+        qbt.start([t["hash"]])
+        t["state"] = "stalledUP"
+    t["category"] = FARM
 
 
 def adopt(qbt, settings, state, torrents):
-    room = settings["zen_size"] - size_of(torrents, (ZEN,))
+    room = settings["farm_size"] - size_of(torrents, FARM)
     for t in torrents.values():
         if (
-            t["category"] in settings["library_categories"]
-            and t["hash"] in state["transfers"]
+            is_library(settings, t["category"])
+            and is_c411(state, settings, t)
             and t["progress"] >= 1
             and t["seeding_time"] >= settings["adopt_after"]
-            and is_rare(t["size"], t["num_complete"])
             and t["size"] <= room
         ):
-            qbt.set_category([t["hash"]], ZEN)
-            t["category"] = ZEN
+            category = t["category"]
+            into_farm(qbt, t)
             room -= t["size"]
-            print(f"Moved {t['name']} from {settings['library_categories']} to the Zen reserve, {t['num_complete']} seeders")
+            print(f"Moved {t['name']} from {category} to the Farm, it keeps paying Zen")
 
 
-def clean_zen(qbt, settings, torrents):
-    zen = [t for t in torrents.values() if t["category"] == ZEN]
-    seeded = [t for t in zen if t["progress"] >= 1 and t["seeding_time"] >= settings["min_seeding"]]
-    for t in seeded:
-        if not is_rare(t["size"], t["num_complete"]):
-            qbt.delete([t["hash"]])
+def migrate(qbt, settings, torrents):
+    for t in torrents.values():
+        target = LEGACY.get(t["category"])
+        if target == FARM:
+            into_farm(qbt, t)
+        elif target and t["progress"] >= 1 and t["seeding_time"] >= settings["adopt_after"]:
+            qbt.keep_in_place([t["hash"]])
+            qbt.set_category([t["hash"]], target)
+            t["category"] = target
+    used = {t["category"] for t in torrents.values()}
+    old = [name for name in qbt.categories() if name in LEGACY and name not in used]
+    if old:
+        qbt.remove_categories(old)
+        print(f"Removed the old categories {', '.join(old)} of qBittorrent")
+
+
+def file_sizes(qbt, t, cache):
+    if t["hash"] not in cache:
+        cache[t["hash"]] = sorted(f["size"] for f in qbt.files(t["hash"]))
+    return cache[t["hash"]]
+
+
+def same_files(qbt, a, b, cache):
+    return a["size"] == b["size"] and file_sizes(qbt, a, cache) == file_sizes(qbt, b, cache)
+
+
+def shares_its_folder(t, torrents):
+    return any(o is not t and o["save_path"] == t["save_path"] and o["size"] == t["size"] for o in torrents.values())
+
+
+def clean_public(qbt, settings, state, torrents):
+    copies = [t for t in torrents.values() if is_c411(state, settings, t) and is_seeding(t)]
+    cache = {}
+    for t in [t for t in torrents.values() if is_owned(t) and is_public(state, settings, t) and t["progress"] >= 1]:
+        if t["seeding_time"] >= settings["public_seeding"]:
+            qbt.delete([t["hash"]], not shares_its_folder(t, torrents))
             del torrents[t["hash"]]
-            print(f"Removed {t['name']} from the Zen reserve, {t['num_complete']} seeders keep it now")
-    used = size_of(torrents, (ZEN,))
-    for t in sorted((t for t in seeded if t["hash"] in torrents), key=lambda t: -t["num_complete"]):
-        if used <= settings["zen_size"]:
+            print(f"Removed {t['name']}, a Public torrent that seeded two weeks")
+            continue
+        if t["seeding_time"] < settings["adopt_after"]:
+            continue
+        copy = next((c for c in copies if same_files(qbt, c, t, cache)), None)
+        if copy is not None:
+            qbt.delete([t["hash"]], not shares_its_folder(t, torrents))
+            del torrents[t["hash"]]
+            print(f"Removed {t['name']}, a Public torrent whose files {copy['name']} now seeds on C411")
+
+
+def clean_farm(qbt, settings, state, torrents):
+    farm = [t for t in torrents.values() if t["category"] == FARM]
+    used = sum(t["size"] for t in farm)
+    candidates = sorted(
+        (
+            t
+            for t in farm
+            if is_c411(state, settings, t) and t["progress"] >= 1 and t["seeding_time"] >= settings["min_seeding"]
+        ),
+        key=lambda t: (zen_per_gb(t), t["completion_on"]),
+    )
+    for t in candidates:
+        if used <= settings["farm_size"]:
             break
         qbt.delete([t["hash"]])
         del torrents[t["hash"]]
         used -= t["size"]
-        print(f"Removed {t['name']} from the Zen reserve, it is full and this one is the least rare")
+        print(f"Removed {t['name']}, the Farm is full and it pays the least Zen for its size")
+    if used > settings["farm_size"]:
+        print(f"The Farm holds {used / GB:.1f} GB, over {settings['farm_size'] / GB:g} GB, the rest is still downloading or short of its Seeding goal")
+
+
+def tag(qbt, settings, state, torrents):
+    wanted = {}
+    for t in torrents.values():
+        if is_owned(t) and is_public(state, settings, t):
+            name = PUBLIC
+        elif is_c411(state, settings, t) and t["hash"] in state["sources"]:
+            name = state["sources"][t["hash"]]
+        else:
+            continue
+        if name not in {x.strip() for x in t.get("tags", "").split(",")}:
+            wanted.setdefault(name, []).append(t["hash"])
+    for name, hashes in wanted.items():
+        qbt.add_tags(hashes, name)
 
 
 def episode_of(title):
@@ -854,8 +938,8 @@ def hold_c411(prowlarr, settings, state):
     print(f"C411 is {'held' if paused else 'open again'} for Radarr, Sonarr and Lidarr")
 
 
-def use_prowlarr(state, now, step):
-    if now < state["backoff_until"]:
+def use_prowlarr(state, now, step, always=False):
+    if now < state["backoff_until"] and not always:
         return
     try:
         step()
@@ -864,14 +948,14 @@ def use_prowlarr(state, now, step):
         print(f"Prowlarr asks to slow down, ratio leaves it alone for {throttled.retry_after // 60:g} minutes")
 
 
-def take(qbt, state, budget, known, release, torrent, category, source, via):
-    qbt.add(torrent, category)
+def take(qbt, state, budget, known, release, torrent, source, via):
+    qbt.add(torrent, FARM)
     known.add(release["infohash"])
     state["sources"][release["infohash"]] = source
-    budget[category] -= release["size"]
+    budget[FARM] -= release["size"]
     budget["slots"] -= 1
     print(
-        f"Grabbed {release['title']} for the {'Zen reserve' if category == ZEN else 'farm'} from {via}, "
+        f"Grabbed {release['title']} for the Farm from {via}, "
         f"{release['seeders']} seeders, {release['leechers']} leechers, {release['size'] / GB:.1f} GB"
     )
 
@@ -891,24 +975,24 @@ def grab_twins(qbt, prowlarr, settings, state, releases, known, budget, now):
     for release in sorted(episodes, key=lambda r: -r["leechers"]):
         if budget["slots"] <= 0 or lookups <= 0:
             return
-        if release["size"] > budget["ratio"]:
+        if release["size"] > budget[FARM]:
             continue
         lookups -= 1
         state["checked"][release["infohash"]] = now
         try:
             twin = find_twin(prowlarr, settings, release, now, searches)
             if twin:
-                take(qbt, state, budget, known, release, twin["torrent"], "ratio", "twin", f"its public twin {twin['title']}")
-                state["twins"][twin["infohash"]] = [release["infohash"], "ratio", now, release["link"]]
+                take(qbt, state, budget, known, release, twin["torrent"], "twin", f"its public twin {twin['title']}")
+                state["twins"][twin["infohash"]] = [release["infohash"], FARM, now, release["link"]]
         except Throttled:
             raise
         except Exception as error:
             print(f"Cannot look for a twin of {release['title']}: {error}")
 
 
-def take_from_tracker(qbt, prowlarr, state, budget, known, release, category, source, via):
+def take_from_tracker(qbt, prowlarr, state, budget, known, release, source, via):
     try:
-        take(qbt, state, budget, known, release, prowlarr.torrent(release), category, source, via)
+        take(qbt, state, budget, known, release, prowlarr.torrent(release), source, via)
     except Throttled:
         raise
     except Exception as error:
@@ -921,9 +1005,9 @@ def grab_free(qbt, prowlarr, settings, state, releases, known, budget, now):
     for release in pick_free(releases, known, settings["free_max_size"]):
         if budget["slots"] <= 0:
             return
-        if release["infohash"] in known or release["size"] > budget["ratio"]:
+        if release["infohash"] in known or release["size"] > budget[FARM]:
             continue
-        if take_from_tracker(qbt, prowlarr, state, budget, known, release, "ratio", "freeleech", "the tracker, freeleech"):
+        if take_from_tracker(qbt, prowlarr, state, budget, known, release, "freeleech", "the tracker, freeleech"):
             state["free"][release["infohash"]] = now
 
 
@@ -931,9 +1015,9 @@ def hunt_zen(qbt, prowlarr, settings, state, releases, known, budget, now):
     for release in pick_rare(releases, known, settings["zen_hunt"]):
         if budget["slots"] <= 0 or len(state["grabbed"]) >= settings["zen_hunt_per_day"]:
             return
-        if release["infohash"] in known or release["size"] > min(budget[ZEN], budget["download"]):
+        if release["infohash"] in known or release["size"] > min(budget[FARM], budget["download"]):
             continue
-        if take_from_tracker(qbt, prowlarr, state, budget, known, release, ZEN, "zen-hunt", "the tracker"):
+        if take_from_tracker(qbt, prowlarr, state, budget, known, release, "zen-hunt", "the tracker"):
             state["grabbed"][release["infohash"]] = now
             budget["download"] -= release["size"]
 
@@ -947,11 +1031,10 @@ def pending(state, torrents):
 
 
 def grab(qbt, prowlarr, settings, state, torrents, account, now):
-    downloading = sum(1 for t in torrents.values() if t["category"] in FARM + (ZEN,) and t["progress"] < 1)
+    downloading = sum(1 for t in torrents.values() if t["category"] == FARM and t["progress"] < 1)
     budget = {
         "slots": settings["max_downloading"] - downloading,
-        "ratio": settings["farm_size"] - size_of(torrents, FARM),
-        ZEN: settings["zen_size"] - size_of(torrents, (ZEN,)),
+        FARM: settings["farm_size"] - size_of(torrents, FARM),
         "download": 0 if state["paused"] else download_left(account, settings) - pending(state, torrents),
     }
     if budget["slots"] <= 0 or not settings["indexers"]:
@@ -970,12 +1053,14 @@ def run_once(qbt, prowlarr, c411, settings, state, now):
     torrents = {t["hash"].lower(): {**t, "hash": t["hash"].lower()} for t in qbt.torrents()}
     record(state, torrents, settings, now)
     report(state, now)
-    use_prowlarr(state, now, lambda: hold_c411(prowlarr, settings, state))
+    use_prowlarr(state, now, lambda: hold_c411(prowlarr, settings, state), always=True)
+    adopt(qbt, settings, state, torrents)
+    migrate(qbt, settings, torrents)
     drop_twins(qbt, state, torrents)
     use_prowlarr(state, now, lambda: seed_twins(qbt, prowlarr, settings, state, torrents, now))
-    clean_farm(qbt, settings, state, torrents, now)
-    adopt(qbt, settings, state, torrents)
-    clean_zen(qbt, settings, torrents)
+    clean_public(qbt, settings, state, torrents)
+    clean_farm(qbt, settings, state, torrents)
+    tag(qbt, settings, state, torrents)
     use_prowlarr(state, now, lambda: grab(qbt, prowlarr, settings, state, torrents, account, now))
     torrents = {t["hash"].lower(): {**t, "hash": t["hash"].lower()} for t in qbt.torrents()}
     return summary(state, torrents, settings, account, now)
@@ -1006,23 +1091,21 @@ def settings_from_env():
         "indexers": ids("RATIO_GRAB_INDEXER_IDS"),
         "twin_indexers": ids("RATIO_TWIN_INDEXER_IDS"),
         "cross_seed_key": os.environ.get("CROSS_SEED_API_KEY", ""),
-        "farm_size": number("RATIO_MAX_SIZE_GB") * GB,
-        "zen_size": number("RATIO_ZEN_MAX_SIZE_GB", 50) * GB,
+        "farm_size": positive("RATIO_MAX_SIZE_GB", 100) * GB,
         "floor": positive("RATIO_FLOOR", 1.2),
         "paused_profile": "Paused",
         "zen_hunt_per_day": 3,
         "zen_hunt": {"min_size": GB, "max_size": 5 * GB},
         "free_max_size": 5 * GB,
         "min_seeding": number("RATIO_MIN_SEEDING_DAYS") * DAY,
-        "stale_after": 7 * DAY,
-        "stale_upload": 0.2,
+        "public_seeding": 14 * DAY,
         "max_downloading": 2,
         "twin_lookups": 10,
         "twin_max_age_hours": 24,
         "twin_min_leechers": 1,
         "twin_recheck": 2 * 3600,
         "twin_seed_after": 3600,
-        "library_categories": ("radarr", "tv-sonarr", "lidarr", "lazylibrarian"),
+        "library_categories": ("movies", "shows", "music", "books"),
         "adopt_after": 6 * 3600,
         "tracker_seeders_in_peers": 2,
     }
@@ -1051,7 +1134,7 @@ def main():
         try:
             latest["summary"] = run_once(qbt, prowlarr, c411, settings, state, time.time())
         except Exception as error:
-            print(f"Cannot run the farm and the Zen reserve: {error}")
+            print(f"Cannot run the Farm: {error}")
         try:
             save_state(state_path, state)
         except OSError as error:
