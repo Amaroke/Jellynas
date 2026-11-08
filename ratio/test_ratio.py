@@ -1302,6 +1302,7 @@ class Page(unittest.TestCase):
         self.assertIn(">Badge Prime<", body)
         self.assertIn(">Plus faible ratio par jour<", body)
         self.assertIn(">0,120 par jour<", body)
+        self.assertIn(">Même release prise sur un tracker public, gratuite sur C411<", body)
 
     def test_the_time_axis_always_spans_30_days(self):
         _, body = self.page({**BOARD, "history": [entry(30)]}, "?part=1")

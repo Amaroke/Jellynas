@@ -938,6 +938,16 @@ TEXT = {
         "disk": "Farm disk", "free": "Free", "of": "of {budget} {gb}",
         "best": "Best ratio per day", "worst": "Lowest ratio per day",
         "per_day": "{v} a day", "card": "ratio {ratio}, note {note}, {size}, {days}", "days": "{n} days",
+        "explain": {
+            "paid": "Bought with download on C411",
+            "twin": "Same release taken from a public tracker, free on C411",
+            "freeleech": "C411 freeleech, download not counted",
+            "cross-seed": "Library file found again on C411, no download",
+            "library": "Movie or show of the Library kept for Zen",
+            "volume-hunt": "Small rare torrent for the Quests",
+            "public": "Public tracker copy, leaves within two weeks",
+            "unknown": "Source not recorded",
+        },
     },
     "fr": {
         "gb": "Go", "decimal": ",", "empty": "Pas encore d'historique, ratio note son premier jour après son premier passage.",
@@ -957,6 +967,16 @@ TEXT = {
         "disk": "Disque de la Farm", "free": "Libre", "of": "sur {budget} {gb}",
         "best": "Meilleur ratio par jour", "worst": "Plus faible ratio par jour",
         "per_day": "{v} par jour", "card": "ratio {ratio}, note {note}, {size}, {days}", "days": "{n} jours",
+        "explain": {
+            "paid": "Payé en download sur C411",
+            "twin": "Même release prise sur un tracker public, gratuite sur C411",
+            "freeleech": "Freeleech C411, download non compté",
+            "cross-seed": "Fichier de la Library retrouvé sur C411, sans download",
+            "library": "Film ou série de la Library gardé pour le Zen",
+            "volume-hunt": "Petit torrent rare pour les Quêtes",
+            "public": "Copie d'un tracker public, part sous deux semaines",
+            "unknown": "Source non enregistrée",
+        },
     },
 }
 STYLE = """
@@ -1017,13 +1037,12 @@ polygon.area { stroke: none; fill-opacity: 0.14; }
 .donut .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-size: 11px; color: var(--muted); }
 .donut .center b { color: var(--green); font-size: 20px; font-weight: 600; line-height: 1.1; }
 .legend { list-style: none; margin: 0; padding: 0; font-size: 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.legend li { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.legend li { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: 0 6px; min-width: 0; }
 .swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
 .ranking li { display: grid; grid-template-columns: auto 1fr auto; gap: 0 6px; font-size: 12px; min-width: 0; padding: 3px 0; border-top: 1px solid rgba(255, 255, 255, 0.05); }
 .ranking li:first-child { border-top: 0; }
 .ranking .swatch { align-self: center; }
 .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.legend .name { flex: 1; }
 .figure { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
 .meta { grid-column: 2 / -1; color: var(--muted); font-size: 11px; }
 .empty { color: var(--muted); }
@@ -1218,7 +1237,8 @@ def donut(farm, words):
         legend.append(
             f'<li><span class="swatch" style="background:{color}"></span>'
             f'<span class="name">{html.escape(s["source"])}</span>'
-            f'<span class="figure">{html.escape(size_text(s["gb"], words))}</span></li>'
+            f'<span class="figure">{html.escape(size_text(s["gb"], words))}</span>'
+            f'<span class="meta">{html.escape(words["explain"].get(s["source"], ""))}</span></li>'
         )
         start += part
     legend.append(
