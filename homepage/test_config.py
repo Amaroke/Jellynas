@@ -134,6 +134,14 @@ class HomepageConfigTest(unittest.TestCase):
         compose = (HOMEPAGE / "compose.yaml").read_text(encoding="utf-8")
         self.assertIn("./custom.css:/app/config/custom.css:ro", compose)
 
+    def test_the_board_of_ratio_grows_to_its_full_height_on_a_phone(self):
+        script = (HOMEPAGE / "custom.js").read_text(encoding="utf-8")
+        self.assertIn('addEventListener("message"', script)
+        self.assertIn("ratioBoardHeight", script)
+        self.assertIn("frame.contentWindow !== event.source", script)
+        compose = (HOMEPAGE / "compose.yaml").read_text(encoding="utf-8")
+        self.assertIn("./custom.js:/app/config/custom.js:ro", compose)
+
     def test_every_variable_is_documented(self):
         documented = set(re.findall(r"^([A-Z][A-Z0-9_]*)=", (ROOT / ".env.example").read_text(encoding="utf-8"), re.MULTILINE))
         for path in included_compose_files():

@@ -1,5 +1,7 @@
+import base64
 import contextlib
 import datetime
+import hashlib
 import http.server
 import io
 import json
@@ -1283,11 +1285,10 @@ class Page(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
-    def test_the_first_part_shows_the_big_figures_and_three_curves_without_any_script(self):
+    def test_the_first_part_shows_the_big_figures_and_three_curves(self):
         headers, body = self.page(BOARD, "?part=1")
         self.assertTrue(headers["Content-Type"].startswith("text/html"))
         self.assertIn("default-src 'none'", headers["Content-Security-Policy"])
-        self.assertNotIn("<script", body)
         self.assertNotRegex(body, r"\b(src|href)=")
         values = re.findall(r'<span class="value">([^<]+)</span>', body)
         self.assertEqual(values, ["2.00", "20.0 GB", "60.0 GB", "30.0 GB", "25"])
@@ -1296,6 +1297,17 @@ class Page(unittest.TestCase):
         self.assertEqual(re.findall(r"<figcaption>([^<]+)", body), ["Account ratio", "Zen", "Upload and download"])
         self.assertIn(">floor 1.2<", body)
         self.assertNotIn('class="quests"', body)
+
+    def test_the_only_script_tells_homepage_the_height_of_the_board_on_a_phone(self):
+        headers, body = self.page(BOARD, "?part=1")
+        scripts = re.findall(r"<script>(.*?)</script>", body, re.DOTALL)
+        self.assertEqual(len(scripts), 1)
+        self.assertIn("ratioBoardHeight", scripts[0])
+        self.assertIn("(max-width: 640px)", scripts[0])
+        digest = base64.b64encode(hashlib.sha256(scripts[0].encode()).digest()).decode()
+        self.assertIn(f"script-src 'sha256-{digest}'", headers["Content-Security-Policy"])
+        self.assertNotRegex(body, r"b(src|href)=")
+        self.assertIn("@media (max-width: 640px)", body)
 
     def test_the_second_part_shows_each_step_the_farm_disk_and_the_rankings(self):
         _, body = self.page(BOARD, "?part=2")
