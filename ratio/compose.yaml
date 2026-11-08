@@ -18,11 +18,10 @@ services:
       RATIO_TRACKER: ${RATIO_TRACKER:-}
       RATIO_GRAB_INDEXER_IDS: ${RATIO_GRAB_INDEXER_IDS:-}
       RATIO_TWIN_INDEXER_IDS: ${RATIO_TWIN_INDEXER_IDS:-}
-      RATIO_MAX_SIZE_GB: ${RATIO_MAX_SIZE_GB}
+      RATIO_MAX_SIZE_GB: ${RATIO_MAX_SIZE_GB:-}
       RATIO_MIN_SEEDING_DAYS: ${RATIO_MIN_SEEDING_DAYS}
       C411_PROFILE_API_KEY: ${C411_PROFILE_API_KEY:-}
       RATIO_FLOOR: ${RATIO_FLOOR:-}
-      RATIO_ZEN_MAX_SIZE_GB: ${RATIO_ZEN_MAX_SIZE_GB:-}
     labels:
       kuma.ratio.docker.name: ratio
       docker-volume-backup.stop-during-backup: "true"

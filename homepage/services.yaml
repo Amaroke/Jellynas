@@ -99,55 +99,25 @@
                   to: Open
     - Farm:
         icon: mdi-sprout-#34d399
-        description: Torrents seeded only for upload
+        description: C411 torrents seeded for their Zen
         widget:
           type: customapi
           url: http://ratio:8000/summary
           refreshInterval: 60000
           mappings:
-            - field: farm.torrents
-              label: Torrents
-              format: number
-            - field: farm.downloading
-              label: Downloading
+            - field: farm.seeds
+              label: Seeds
               format: number
             - field: farm.size_gb
-              label: Size
+              label: Used
               format: float
               suffix: " GB"
             - field: farm.fill
               label: Full
               format: percent
-    - Zen reserve:
-        icon: mdi-meditation-#38bdf8
-        description: Rare torrents kept for their Zen
-        widget:
-          type: customapi
-          url: http://ratio:8000/summary
-          refreshInterval: 60000
-          mappings:
-            - field: zen.torrents
-              label: Torrents
+            - field: farm.downloading
+              label: Downloading
               format: number
-            - field: zen.size_gb
-              label: Size
-              format: float
-              suffix: " GB"
-            - field: zen.fill
-              label: Full
-              format: percent
-    - Sources:
-        icon: mdi-chart-donut-#f472b6
-        description: Upload / download of each Source
-        widget:
-          type: customapi
-          url: http://ratio:8000/summary
-          refreshInterval: 60000
-          display: dynamic-list
-          mappings:
-            items: sources
-            name: name
-            label: figures
     - autobrr:
         icon: autobrr.svg
         description: IRC announces

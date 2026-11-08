@@ -98,7 +98,7 @@ flowchart LR
         autobrr("autobrr<br/>freeleech")
         crossseed("cross-seed")
         qbitmanage("qbit_manage")
-        ratioscript("ratio<br/>farm, Zen reserve")
+        ratioscript("ratio<br/>Farm")
     end
 
     subgraph observation["Observation"]
@@ -191,7 +191,7 @@ flowchart LR
 - **Required**: [TrueNAS SCALE](https://www.truenas.com/download-truenas-community-edition/) installed, on a machine or a virtual machine, with a pool. [ADR 0007](docs/adr/0007-the-nas-runs-on-the-docker-of-truenas-scale.md) records why. Any Linux host with Docker Compose works too, with its own paths and ids in `.env`.
 - **Recommended**: a VPN with port forwarding, here AirVPN. ProtonVPN, Mullvad or any provider Gluetun supports work too. Without a VPN, a seedbox such as Ultra.cc, Seedhost or Whatbox can download in place of the NAS, or the NAS downloads with the home IP, at your own risk.
 - **Optional**: a domain, here at OVH. Cloudflare, Gandi, Porkbun or any registrar with an API that [caddy-dns](https://github.com/caddy-dns) supports work too. Without a domain, a free dynamic DNS subdomain from DuckDNS, deSEC or dynv6 does the same job, or the NAS stays on the local network only.
-- **Optional**: an account on a private tracker, here C411. Any private tracker works, minus the Zen reserve, which only C411 pays for.
+- **Optional**: an account on a private tracker, here C411. Any private tracker works, minus the Zen, which only C411 pays.
 
 Each optional part is a set of services in `compose.yaml`. To leave one out, comment its lines in a pull request, and doco-cd removes them once merged:
 
@@ -248,8 +248,7 @@ Both roots live outside the repo, at the paths set in `DATA_ROOT` and `APPDATA_R
 ```text
 <DATA_ROOT>
 ├── torrents
-│   ├── ratio
-│   ├── zen
+│   ├── farm
 │   ├── cross-seed
 │   └── soulseek
 └── media
@@ -265,7 +264,7 @@ Create both roots, the folder of the archives, the recycle bins of Radarr and So
 
 ```bash
 . <(grep -E '^(DATA_ROOT|APPDATA_ROOT|BACKUP_ROOT|PUID|PGID)=' .env)
-mkdir -p "$BACKUP_ROOT" "$DATA_ROOT"/torrents/{ratio,zen,cross-seed} "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,recyclarr,autobrr,cross-seed,qbit_manage,ratio,slskd,suwayomi}
+mkdir -p "$BACKUP_ROOT" "$DATA_ROOT"/torrents/{farm,cross-seed} "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,recyclarr,autobrr,cross-seed,qbit_manage,ratio,slskd,suwayomi}
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
@@ -526,7 +525,7 @@ In Tools > Options > Downloads, set "Default Save Path" to `/data/torrents`, unc
 
 ### Downloads and seeding
 
-Each finished torrent keeps seeding from the torrents tree for a while, to give back to other peers. qBittorrent stops it once it reaches its seeding goal, then the tool that sent it removes it. Each import is a copy, so a downloaded file sits twice on the disk until then: keep enough free space for every torrent still seeding. In Tools > Options, set:
+Each finished torrent keeps seeding from the torrents tree for a while, to give back to other peers. A private torrent stops at its seeding goal, then the tool that sent it removes it, unless ratio moved it into the Farm. ratio removes a public torrent after two weeks. Each import is a copy, so a downloaded file sits twice on the disk until then: keep enough free space for every torrent still seeding. In Tools > Options, set:
 
 | Screen | Setting | Value |
 | --- | --- | --- |
@@ -535,7 +534,7 @@ Each finished torrent keeps seeding from the torrents tree for a while, to give 
 | BitTorrent | Privacy | DHT and PeX checked, Local Peer Discovery unchecked since the container has no local peers |
 | Connection | Connections Limits | 1000 connections in all and 200 per torrent, upload slots unchecked in all and per torrent, so no swarm waits for a free slot |
 | BitTorrent | Torrent Queueing | 3 active downloads, 30 active uploads, 35 active torrents, "Do not count slow torrents in these limits" checked so a dead torrent never holds a place |
-| BitTorrent | Seeding Limits | Ratio 2 and total seeding time 20160 minutes (14 days), whichever comes first, then "Stop torrent" |
+| BitTorrent | Seeding Limits | All unchecked. ratio unchecks them itself, since it removes the public torrents and keeps the Farm seeding |
 | Advanced | Network interface | `tun0`, so qBittorrent only ever uses the VPN, on top of the Gluetun kill switch |
 | Advanced | Upload slots behavior | Upload rate based, so qBittorrent opens slots while upload bandwidth is left |
 | Advanced | Upload choking algorithm | Fastest upload, so the peers that take the most are served first |
@@ -568,7 +567,7 @@ In Indexers, click "Add Indexer", pick a tracker and fill in what it asks for, a
 
 ### Seeding goals of private trackers
 
-A private tracker bans an account for a hit and run. For each private indexer, in Indexers, edit it, click "Show Advanced", and set "Seed Ratio" and "Seed Time" in minutes to the minimums of its rules page. Prowlarr syncs them to Radarr, Sonarr and Lidarr, which hand them to qBittorrent with each torrent, so "Remove Completed" never removes a private torrent before the tracker allows it. An indexer left empty uses the global seeding limits of qBittorrent.
+A private tracker bans an account for a hit and run. For each private indexer, in Indexers, edit it, click "Show Advanced", and set "Seed Ratio" and "Seed Time" in minutes to the minimums of its rules page. Prowlarr syncs them to Radarr, Sonarr and Lidarr, which hand them to qBittorrent with each torrent, so "Remove Completed" never removes a private torrent before the tracker allows it. Leave no private indexer empty: with the global seeding limits of qBittorrent off, its torrent would seed forever unless ratio moves it into the Farm.
 
 ## Radarr
 
@@ -591,10 +590,10 @@ In Settings > Media Management, click "Show Advanced" at the top, then:
 
 ### Download client
 
-1. In qBittorrent, right-click "Categories" in the left panel, pick "Add category", and enter `radarr` as the category and `/data/torrents/movies` as the save path.
+1. In qBittorrent, right-click "Categories" in the left panel, pick "Add category", and enter `movies` as the category and `/data/torrents/movies` as the save path. ratio creates it by itself once it runs.
 2. In Radarr, Settings > Download Clients, click "+" and pick qBittorrent.
 3. Enter `gluetun` as the host, since qBittorrent shares its network, `8080` as the port, and the qBittorrent login.
-4. Set "Category" to `radarr`.
+4. Set "Category" to `movies`.
 5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding goal, Radarr removes it and its files from the torrents tree, and the movie stays in the Library.
 6. Click "Test", then "Save".
 
@@ -628,10 +627,10 @@ In Settings > Media Management, click "Show Advanced" at the top, then:
 
 ### Download client
 
-1. In qBittorrent, add a category `tv-sonarr` with `/data/torrents/shows` as the save path.
+1. In qBittorrent, add a category `shows` with `/data/torrents/shows` as the save path.
 2. In Sonarr, Settings > Download Clients, click "+" and pick qBittorrent.
 3. Enter `gluetun` as the host, `8080` as the port, and the qBittorrent login.
-4. Set "Category" to `tv-sonarr`.
+4. Set "Category" to `shows`.
 5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding goal, Sonarr removes it and its files from the torrents tree, and the episodes stay in the Library.
 6. Click "Test", then "Save".
 
@@ -709,10 +708,10 @@ In Settings > Profiles, edit the quality profile of the root folder, check "Upgr
 
 For qBittorrent:
 
-1. In qBittorrent, add a category `lidarr` with `/data/torrents/music` as the save path.
+1. In qBittorrent, add a category `music` with `/data/torrents/music` as the save path.
 2. In Lidarr, Settings > Download Clients, click "+" and pick qBittorrent.
 3. Enter `gluetun` as the host, `8080` as the port, and the qBittorrent login.
-4. Set "Category" to `lidarr`.
+4. Set "Category" to `music`.
 5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding goal, Lidarr removes it and its files from the torrents tree, and the album stays in the Library.
 6. Click "Test", then "Save".
 
@@ -754,10 +753,10 @@ In Config > Processing, set "eBook Library Folder" to `/data/media/books` and ch
 
 ### Download client
 
-1. In qBittorrent, add a category `lazylibrarian` with `/data/torrents/books` as the save path.
+1. In qBittorrent, add a category `books` with `/data/torrents/books` as the save path.
 2. In LazyLibrarian, Config > Downloaders, under Torrents, check qBitTorrent.
 3. Enter `gluetun` as "qBitTorrent Host", `8080` as "qBitTorrent Port", and the qBittorrent login.
-4. Set "qBitTorrent Label/Category" to `lazylibrarian` and "Download directory" to `/data/torrents/books`, which LazyLibrarian sees at the same path.
+4. Set "qBitTorrent Label/Category" to `books` and "Download directory" to `/data/torrents/books`, which LazyLibrarian sees at the same path.
 5. Check "Keep seeding after processing" and "Do not delete if still seeding", so LazyLibrarian never removes a torrent before qBittorrent stops it at its seeding goal.
 6. Click "Test qBitTorrent", then "Save changes".
 
@@ -1064,14 +1063,14 @@ Each track posts a message with its cover and Pause, Skip and Stop buttons, and 
 
 Requires [qBittorrent](#qbittorrent), [Prowlarr](#prowlarr), [Radarr](#radarr) and [Sonarr](#sonarr).
 
-The Admin keeps a good ratio on C411, a French private tracker, with torrents grabbed only to seed, without touching the Library. The same tools work with any private tracker, except the Zen reserve, which only C411 pays for. [ADR 0009](docs/adr/0009-ratio-farms-from-twins-and-keeps-a-zen-reserve.md) records why:
+The Admin keeps a good ratio on C411, a French private tracker, with torrents grabbed only to seed, without touching the Library. The same tools work with any private tracker, except the Zen, which only C411 pays. [ADR 0009](docs/adr/0009-ratio-farms-from-twins-and-keeps-a-zen-reserve.md) records why:
 
-- ratio, `ratio/ratio.py`, runs the Farm and the Zen reserve. It grabs freeleech releases and Twins for the Farm, Rare releases for the Zen reserve under the Ratio floor of the account, downloads each from its Twin on a public tracker when one exists, and cleans both.
+- ratio, `ratio/ratio.py`, runs the Farm. It grabs freeleech releases, Twins and, over the Ratio floor of the account, Rare releases for the Farm, downloads each from its Twin on a public tracker when one exists, and cleans both.
 - cross-seed finds the torrents of qBittorrent on C411 and seeds them there too, from hardlinks in `/data/torrents/cross-seed`, without downloading them again. qBittorrent tells it about every finished torrent.
 - qbit_manage tags every torrent by tracker. It removes nothing.
 - autobrr stays available for a tracker that announces on IRC. C411 does not.
 
-Radarr and Sonarr only import their own category, so a torrent of the Farm or the Zen reserve never reaches the Library. None of these tools sees the media tree. autobrr and ratio see no folder at all, cross-seed and qbit_manage see only the torrents tree.
+Radarr and Sonarr only import their own category, so a torrent of the Farm never reaches the Library. None of these tools sees the media tree. autobrr and ratio see no folder at all, cross-seed and qbit_manage see only the torrents tree.
 
 ### Risks
 
@@ -1081,7 +1080,7 @@ Radarr and Sonarr only import their own category, so a torrent of the Farm or th
 
 ### Login
 
-In `.env`, set `QBITTORRENT_USER` and `QBITTORRENT_PASSWORD` to the qBittorrent login. cross-seed, qbit_manage and ratio use it. ratio creates the `ratio` and `zen` categories in qBittorrent by itself.
+In `.env`, set `QBITTORRENT_USER` and `QBITTORRENT_PASSWORD` to the qBittorrent login. cross-seed, qbit_manage and ratio use it. ratio creates the `movies`, `shows`, `music`, `books` and `farm` categories in qBittorrent by itself.
 
 ### Public tracker for Twins
 
@@ -1107,9 +1106,9 @@ autobrr joins the IRC announce channel of each tracker and grabs a release the m
    | General | Size | Min `1 GB`, max `30 GB`, so one grab never takes most of the Farm |
    | General | Max downloads | `5` per day |
    | Advanced | Freeleech | Checked, so a grab never costs ratio |
-   | Actions | Action | qBittorrent, the client above, with `ratio` as the category |
+   | Actions | Action | qBittorrent, the client above, with `farm` as the category |
 
-5. Save, and leave the filter enabled. A matching announce then shows up in qBittorrent in the `ratio` category within seconds, and in the Releases page of autobrr.
+5. Save, and leave the filter enabled. A matching announce then shows up in qBittorrent in the `farm` category within seconds, and in the Releases page of autobrr.
 
 autobrr reaches IRC and the tracker from the home IP. Only qBittorrent goes through the VPN, as for Radarr and Sonarr.
 
@@ -1129,13 +1128,13 @@ cross-seed searches the private indexers of Prowlarr for torrents that hold the 
    docker compose logs cross-seed
    ```
 
-ratio sets "Run external program on torrent finished" in qBittorrent, Tools > Options > Downloads, to a `curl` that sends the hash of each finished torrent to cross-seed, single episodes included. cross-seed then searches C411 at once, while its swarm is still hungry, and adds each match in the `cross-seed-link` category. It also searches each new torrent again once a day for two weeks. Leave public indexers out of `CROSS_SEED_INDEXER_IDS`, a public torrent brings no ratio.
+ratio sets "Run external program on torrent finished" in qBittorrent, Tools > Options > Downloads, to a `curl` that sends the hash of each finished torrent to cross-seed, single episodes included. cross-seed then searches C411 at once, while its swarm is still hungry, and adds each match in the `farm` category. It also searches each new torrent again once a day for two weeks. Leave public indexers out of `CROSS_SEED_INDEXER_IDS`, a public torrent brings no ratio.
 
 To check the hook, open View > Log in qBittorrent once a torrent finishes: it shows the `curl` command it ran. cross-seed then names the torrent in its logs.
 
 ### qbit_manage
 
-qbit_manage tags every torrent by tracker every 10 minutes. ratio is the only tool that removes a torrent of the Farm or the Zen reserve, and Radarr and Sonarr still remove their own. Its config lives in its appdata folder, since its web UI edits it. `qbit_manage/config.yml` is the starting point.
+qbit_manage tags every torrent by tracker every 10 minutes. ratio is the only tool that removes a torrent of the Farm or a public torrent, and Radarr, Sonarr and Lidarr still remove the private torrents they keep. Its config lives in its appdata folder, since its web UI edits it. `qbit_manage/config.yml` is the starting point.
 
 1. Copy it, replacing the file qbit_manage uses:
 
@@ -1156,19 +1155,19 @@ ratio, `ratio/ratio.py`, runs every 10 minutes. It reads qBittorrent, Prowlarr a
 1. **Holds the Ratio floor.** It reads the Account ratio of C411 once per run with `C411_PROFILE_API_KEY`, its uploaded total over its downloaded total, credit included. Under `RATIO_FLOOR`, 1.2 by default, or when the profile cannot be read, ratio spends no download on C411 and moves the C411 indexer of Prowlarr onto a sync profile named Paused, which it creates with RSS, automatic and interactive search off. Prowlarr pushes it to Radarr, Sonarr and Lidarr, whose sync level must stay Full Sync, so they stop downloading from C411, while ratio and cross-seed still read it. Every torrent keeps seeding, since seeding never goes through Prowlarr. LazyLibrarian ignores sync profiles and still sees C411. Once the Account ratio is back over the floor, ratio puts C411 back on the other profile. A paid grab never takes the Account ratio under the floor.
 2. **Counts.** It keeps the Ledger in `${APPDATA_ROOT}/ratio/state.json`, which gives the Deficit or the Surplus of the C411 account. A torrent belongs to C411 when its announce URL holds `RATIO_TRACKER`.
 3. **Drops Twins.** Once cross-seed seeds the C411 copy of a Twin, it removes the Nyaa copy. The hardlink of cross-seed keeps the data. cross-seed searches C411 by the Nyaa title, so it misses a Twin that C411 lists under another title, such as Sgt Frog for Sergent Keroro. One hour after the grab, when the C411 copy is still missing, ratio adds the C411 torrent itself, stopped, in the folder of the Nyaa copy, gives its files the Nyaa names and checks it. Once the check is complete, ratio starts the C411 copy and removes the Nyaa copy without its files, which the C411 copy now seeds. When adding the C411 copy fails, ratio waits one hour before the next try, then twice longer each time, up to a day.
-4. **Cleans the Farm.** The Farm is the `ratio` and `cross-seed-link` categories. A torrent that uploaded less than 0.2 times its size in the last 7 days leaves it. So do the torrents that upload the least for their seeding time once the Farm holds more than `RATIO_MAX_SIZE_GB`. A C411 torrent that leaves and is still Rare moves to the Zen reserve when it has room, any other is removed with its files. No torrent leaves before `RATIO_MIN_SEEDING_DAYS`.
-5. **Adopts Library torrents.** A C411 torrent of Radarr or Sonarr that finished at least 6 hours ago, so it is imported, and is still Rare moves to the Zen reserve when it has room. Radarr and Sonarr only watch their own category, so they no longer remove it, and it seeds for Zen without any new download. Its file then takes its space twice, once in the Library and once in the torrents tree.
-6. **Cleans the Zen reserve.** The Zen reserve is the `zen` category, up to `RATIO_ZEN_MAX_SIZE_GB`. A torrent leaves once it is no longer Rare, and the least Rare leave first when it is full.
-7. **Grabs Twins.** It reads the newest movies and shows of each indexer in `RATIO_GRAB_INDEXER_IDS`, while fewer than 2 torrents of the Farm and the Zen reserve are downloading. For each episode at most 24 hours old with at least one leecher, it searches `RATIO_TWIN_INDEXER_IDS` for its episode and language, for example `S03E06 VOSTFR`, and keeps a result of the same release group whose size is within 5 %, since Nyaa rounds its sizes. It then downloads both torrent files and compares the length of every file. When they match, the release is a Twin: ratio downloads it from Nyaa into the Farm, for free, outside any quota or pause, and cross-seed seeds its C411 copy. Up to 10 episodes are checked per run, and each one again 2 hours later at most.
+4. **Files every torrent.** qBittorrent holds five categories: `movies`, `shows`, `music` and `books` for Radarr, Sonarr, Lidarr and LazyLibrarian, and `farm` for the Farm. ratio moves the torrents of the old `ratio`, `zen` and `cross-seed-link` categories into `farm`, and those of `radarr`, `tv-sonarr`, `lidarr` and `lazylibrarian` into the new name of their category once they finished 6 hours ago. It removes each old category once it is empty, so switch the category of Radarr, Sonarr, Lidarr and LazyLibrarian first. A moved torrent keeps its files where they are, since a Twin and its C411 copy may share them. A torrent moved into `farm` loses its own share limits and seeds again if it was stopped. ratio tags every public torrent `public`, and every C411 torrent with its Source: `paid`, `twin`, `freeleech`, `cross-seed`, `library` or `zen-hunt`. A torrent is public when its working tracker is not C411, qBittorrent does not mark it private and the Ledger does not know it, so a C411 torrent whose tracker is down never counts as public.
+5. **Adopts Library torrents.** A C411 torrent of `movies`, `shows`, `music` or `books` that finished at least 6 hours ago, so it is imported, moves into the Farm when it fits in its budget. Radarr, Sonarr and Lidarr only watch their own category, so they no longer remove it, and it keeps paying Zen without any new download. Its file then takes its space twice, once in the Library and once in the torrents tree.
+6. **Cleans the public torrents and the Farm.** A public torrent of one of the five categories leaves after 14 days of seeding, whatever its ratio, or once a C411 torrent seeds the same files, at least 6 hours after it finished. Nothing leaves the Farm while it holds less than `RATIO_MAX_SIZE_GB`, 100 by default. Over it, the C411 torrents that pay the least Zen for their size leave first, never before `RATIO_MIN_SEEDING_DAYS`. ratio estimates the Zen of a torrent per night as C411 does, a note of 1 plus 0.10 from 7 days of seeding, 0.25 from 30, 0.35 from 90 and 0.50 from 180, plus 0.25 when it is Rare, times a weight of 0.25 GB plus its size over 4.25 GB, which rises slower beyond 4 GB.
+7. **Grabs Twins.** It reads the newest movies and shows of each indexer in `RATIO_GRAB_INDEXER_IDS`, while fewer than 2 torrents of the Farm are downloading. For each episode at most 24 hours old with at least one leecher, it searches `RATIO_TWIN_INDEXER_IDS` for its episode and language, for example `S03E06 VOSTFR`, and keeps a result of the same release group whose size is within 5 %, since Nyaa rounds its sizes. It then downloads both torrent files and compares the length of every file. When they match, the release is a Twin: ratio downloads it from Nyaa into the Farm, for free, outside any quota or pause, and cross-seed seeds its C411 copy. Up to 10 episodes are checked per run, and each one again 2 hours later at most.
 8. **Grabs from C411.**
    - for the Farm, a freeleech release of C411, whose `downloadvolumefactor` is 0, up to 5 GB with at least one seeder, the most leechers first. It is free, never counts in the Deficit, and stays allowed under the floor,
-   - for the Zen reserve, a Rare release between 1 and 5 GB with at least one seeder, the fewest seeders first, at most 3 times a day, only over the floor and only while its size fits in the download left before the floor.
+   - a Rare release between 1 and 5 GB with at least one seeder, the fewest seeders first, at most 3 times a day, only over the floor and only while its size fits in the download left before the floor.
 
    ratio no longer pays C411 for fresh releases to farm upload, see [ADR 0011](docs/adr/0011-the-farm-earns-zen-first-under-a-ratio-floor.md).
 
-Prowlarr answers 429 when an indexer is queried too often. ratio leaves at least 2 seconds between two requests to Prowlarr, fetches each torrent file once per run, and leaves Prowlarr alone for as long as a 429 asks, an hour when it does not say.
+Prowlarr answers 429 when an indexer is queried too often. ratio leaves at least 2 seconds between two requests to Prowlarr, fetches each torrent file once per run, and leaves Prowlarr alone for as long as a 429 asks, an hour when it does not say. Holding or releasing C411 at the floor still goes through meanwhile.
 
-C411 counts each seeder twice in the peers it gives Prowlarr, 87 seeders and no leecher show up as 174 peers, so ratio takes the leechers of C411 as the peers minus twice the seeders. A torrent is Rare when C411 counts at most 24 seeders for it under 1 GB, 50 up to 100 GB, and 199 beyond, the thresholds of the Swarm Keeper class. Each Zen is worth 1 GB of upload in the shop of C411, so the Zen reserve also builds the ratio.
+C411 counts each seeder twice in the peers it gives Prowlarr, 87 seeders and no leecher show up as 174 peers, so ratio takes the leechers of C411 as the peers minus twice the seeders. A torrent is Rare when C411 counts at most 24 seeders for it under 1 GB, 50 up to 100 GB, and 199 beyond, the thresholds of the Swarm Keeper class. Each Zen is worth 1 GB of upload in the shop of C411, so the Farm also builds the ratio.
 
 In `.env`, set the `RATIO_*` values, then recreate it with `docker restart doco-cd`. Its logs name each grab, move and removal:
 
@@ -1176,13 +1175,13 @@ In `.env`, set the `RATIO_*` values, then recreate it with `docker restart doco-
 docker compose logs ratio
 ```
 
-Once a day, the logs also hold one line per Source: paid grab, Twin, freeleech, cross-seed of the Library, Library download, Zen hunt, or unknown for the torrents removed before ratio kept Sources. Each line gives the torrents, the GB downloaded and uploaded and their ratio, the same over the last 7 days, and the days seeded in the Zen reserve. The state file holds the same figures under `report`:
+Once a day, the logs also hold one line per Source: paid grab, Twin, freeleech, cross-seed of the Library, Library download, Zen hunt, or unknown for the torrents removed before ratio kept Sources. Each line gives the torrents, the GB downloaded and uploaded and their ratio, the same over the last 7 days, and the days seeded in the Farm. The state file holds the same figures under `report`:
 
 ```sh
 docker compose logs ratio | grep Source
 ```
 
-After each run, ratio also serves a summary at `http://ratio:8000/summary`, on the Compose network only, for [Homepage](#homepage): the Account with its ratio, the floor, whether downloads are paused, its Zen and its upload of the last 7 days, the Ledger with its ratio and its Surplus, the fill of the Farm and of the Zen reserve, and one line per Source. It holds no key and changes nothing.
+After each run, ratio also serves a summary at `http://ratio:8000/summary`, on the Compose network only, for [Homepage](#homepage): the Account with its ratio, the floor, whether downloads are paused, its Zen and its upload of the last 7 days, the Ledger with its ratio and its Surplus, the Farm with the Seed count, its size, its budget and its downloads, and one line per Source. It holds no key and changes nothing.
 
 To start the Deficit over, for example once the ratio on the tracker has a buffer, stop ratio, delete its state file and start it again. Every other limit above is fixed in `settings_from_env` of `ratio/ratio.py`.
 
@@ -1351,7 +1350,7 @@ The Uptime Kuma tile counts the services up and down from a status page. In Upti
 
 ### Open
 
-Open `https://homepage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `HOMEPAGE_PASSWORD`. The playback controls of Jellyfin stay off, so Homepage only reads the services. A tile whose service is down, or whose key is wrong, shows an error in place of its figures. The Ratio group shows the summary of ratio in four tiles: the Account, the Farm, the Zen reserve and the Sources. The tiles of Recyclarr, Caddy, LazyLibrarian and Indexarr show no figures, since Homepage has no widget for them.
+Open `https://homepage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `HOMEPAGE_PASSWORD`. The playback controls of Jellyfin stay off, so Homepage only reads the services. A tile whose service is down, or whose key is wrong, shows an error in place of its figures. The Ratio group shows the summary of ratio in two tiles: the Account, and the Farm with the Seed count, the disk it uses and its downloads. The tiles of Recyclarr, Caddy, LazyLibrarian and Indexarr show no figures, since Homepage has no widget for them.
 
 ## Backup
 

@@ -16,7 +16,7 @@ module.exports = {
 		`qbittorrent:http://${encodeURIComponent(env.QBITTORRENT_USER)}:${encodeURIComponent(env.QBITTORRENT_PASSWORD)}@gluetun:8080`,
 	],
 	useClientTorrents: true,
-	linkCategory: "cross-seed-link",
+	linkCategory: "farm",
 	linkDirs: ["/data/torrents/cross-seed"],
 	linkType: "hardlink",
 	flatLinking: false,

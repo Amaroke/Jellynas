@@ -17,13 +17,11 @@ directory:
   root_dir: /data/torrents
 
 cat:
-  radarr: /data/torrents/movies
-  tv-sonarr: /data/torrents/shows
-  lidarr: /data/torrents/music
-  lazylibrarian: /data/torrents/books
-  ratio: /data/torrents/ratio
-  zen: /data/torrents/zen
-  cross-seed-link: /data/torrents/cross-seed/*
+  movies: /data/torrents/movies
+  shows: /data/torrents/shows
+  music: /data/torrents/music
+  books: /data/torrents/books
+  farm: /data/torrents/farm
 
 tracker:
   other:
