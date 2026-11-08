@@ -24,7 +24,6 @@ from ratio import (
     bdecode,
     is_rare,
     load_state,
-    nightly_zen,
     parse_torznab,
     run_once,
     save_state,
@@ -85,6 +84,7 @@ class FakeQBittorrent:
         self.limited = []
         self.pinned = []
         self.cats = {name: {} for name in ("movies", "shows", "music", "books", "farm")}
+        self.names = {}
 
     def torrents(self):
         return [dict(t) for t in self.list]
@@ -94,7 +94,7 @@ class FakeQBittorrent:
         self.added.append((name, category) if save_path is None else (name, category, save_path))
 
     def files(self, infohash):
-        return [{"name": f"{infohash}.mkv", "size": 7}]
+        return [{"name": name, "size": size} for name, size in self.names.get(infohash, [(f"{infohash}.dat", 7)])]
 
     def match_files(self, infohash, wanted):
         self.matched.append((infohash, wanted))
@@ -268,7 +268,7 @@ def empty_state(**changes):
     return {
         "transfers": {}, "hunted": {}, "twins": {}, "free": {}, "checked": {}, "paused": False,
         "sources": {}, "history": {}, "zen": {}, "report": {}, "account": [], "held": None, "backoff_until": 0,
-        "stuck": {}, "restore": {}, "kinds": {}, "hunt_at": {}, "daily": [], "scores": {}, **changes,
+        "stuck": {}, "restore": {}, "kinds": {}, "hunt_at": {}, "daily": [], **changes,
     }
 
 
@@ -360,7 +360,7 @@ class Twins(unittest.TestCase):
         twins = {"public": ["hungry", "ratio", NOW - 3600, "http://prowlarr/hungry.torrent"]}
         run(qbt, state=empty_state(twins=twins))
         self.assertEqual(qbt.added, [("hungry", "farm", "/data/torrents/farm")])
-        self.assertEqual(qbt.matched, [("hungry", [{"name": "public.mkv", "size": 7}])])
+        self.assertEqual(qbt.matched, [("hungry", [{"name": "public.dat", "size": 7}])])
 
     def test_a_twin_sharing_its_files_with_the_tracker_copy_leaves_them_on_disk(self):
         qbt = FakeQBittorrent([
@@ -1132,29 +1132,46 @@ class Board(unittest.TestCase):
             "slices": [{"source": "public", "gb": 4}, {"source": "twin", "gb": 3}, {"source": "volume-hunt", "gb": 0.5}],
         })
 
-    def test_the_zen_of_a_torrent_adds_up_once_a_night(self):
-        t = torrent("kept", size_gb=1, seeders=100)
-        state = empty_state()
-        board_of_run(FakeQBittorrent([t]), state)
-        board_of_run(FakeQBittorrent([t]), state, NOW + 600)
-        board_of_run(FakeQBittorrent([t]), state, NOW + DAY)
-        self.assertAlmostEqual(state["scores"]["kept"][0], 2 * nightly_zen(t))
-        board_of_run(FakeQBittorrent(), state, NOW + 2 * DAY)
-        self.assertEqual(state["scores"], {})
-
-    def test_the_best_earned_the_most_and_the_worst_earn_the_least_for_their_size(self):
+    def test_the_rankings_go_by_ratio_per_day_of_seeding(self):
         held = [
-            torrent("a", size_gb=1, uploaded_gb=10), torrent("b", size_gb=1, uploaded_gb=6),
-            torrent("c", size_gb=1, uploaded_gb=4), torrent("d", size_gb=1, uploaded_gb=2),
-            torrent("big", size_gb=20, uploaded_gb=3), torrent("e", size_gb=1, uploaded_gb=1),
-            torrent("loading", size_gb=1, progress=0.5),
+            torrent("a", size_gb=1, uploaded_gb=10), torrent("b", size_gb=1, uploaded_gb=6, seeding_days=2),
+            torrent("c", size_gb=2, uploaded_gb=8), torrent("d", size_gb=1, uploaded_gb=2),
+            torrent("big", size_gb=20, uploaded_gb=3), torrent("e", size_gb=1, uploaded_gb=1, seeding_days=20),
+            torrent("loading", size_gb=1, progress=0.5), torrent("fresh", size_gb=1, seeding_days=0.5),
         ]
-        board = board_of_run(FakeQBittorrent(held), empty_state(sources={"a": "twin"}))
-        self.assertEqual([c["name"] for c in board["best"]], ["Torrent a", "Torrent b", "Torrent c"])
+        board = board_of_run(FakeQBittorrent(held), empty_state(sources={"b": "twin"}))
+        self.assertEqual([c["name"] for c in board["best"]], ["Torrent b", "Torrent a", "Torrent c"])
         self.assertEqual([c["name"] for c in board["worst"]], ["Torrent big", "Torrent e", "Torrent d"])
-        best = board["best"][0]
-        self.assertEqual((best["source"], best["size_gb"], best["days"]), ("twin", 1, 10))
-        self.assertGreater(best["score_gb"], 10)
+        self.assertEqual(board["best"][0], {
+            "name": "Torrent b", "source": "twin", "ratio": 6.0, "per_day": 3.0, "note": 1.0, "size_gb": 1, "days": 2,
+        })
+
+
+class Kinds(unittest.TestCase):
+    def test_a_c411_torrent_takes_the_category_of_its_largest_files_once(self):
+        qbt = FakeQBittorrent([torrent("show"), torrent("book"), torrent("game"), torrent("misc")])
+        qbt.names = {
+            "show": [("Show.S01E01.mkv", 900), ("Show.nfo", 1)],
+            "book": [("Book.epub", 5), ("cover.jpg", 2)],
+            "game": [("Tetris.gbc", 1)],
+        }
+        state = run(qbt)
+        self.assertEqual(state["kinds"], {"show": "Films & Vidéos", "book": "Ebook", "game": "Emulation", "misc": ""})
+        qbt.names = {"misc": [("Model.stl", 3)]}
+        run(qbt, state=state, now=NOW + 600)
+        self.assertEqual(state["kinds"]["misc"], "")
+
+    def test_a_public_or_unfinished_torrent_is_not_read(self):
+        qbt = FakeQBittorrent([
+            torrent("public", tracker="http://nyaa.tracker.wf/announce", seeding_days=1), torrent("loading", progress=0.5),
+        ])
+        self.assertEqual(run(qbt)["kinds"], {})
+
+    def test_the_seeds_of_each_kind_count_for_the_diversity_challenge(self):
+        qbt = FakeQBittorrent([torrent(f"s{i}", size_gb=0.5) for i in range(30)] + [torrent(f"b{i}", size_gb=0.5) for i in range(10)])
+        qbt.names = {**{f"s{i}": [("x.mkv", 9)] for i in range(30)}, **{f"b{i}": [("x.epub", 9)] for i in range(10)}}
+        challenges = {c["key"]: c for c in board_of_run(qbt)["challenges"]}
+        self.assertEqual([s["progress"] for s in challenges["diversity"]["steps"]][:2], [25, 35])
 
 
 def entry(n, **changes):
@@ -1178,8 +1195,8 @@ BOARD = {
         challenge("category", (50, 100, 250, 500), 60),
     ],
     "farm": {"budget_gb": 100, "slices": [{"source": "twin", "gb": 30.5}, {"source": "volume-hunt", "gb": 9.5}]},
-    "best": [{"name": "Frieren 01", "source": "twin", "score_gb": 12.4, "rate": 0.5, "size_gb": 1.4, "days": 20}],
-    "worst": [{"name": "Old book", "source": "volume-hunt", "score_gb": 0.1, "rate": 0.002, "size_gb": 0.9, "days": 30}],
+    "best": [{"name": "Frieren 01", "source": "twin", "ratio": 2.4, "per_day": 0.12, "note": 1.35, "size_gb": 1.4, "days": 20}],
+    "worst": [{"name": "Old book", "source": "volume-hunt", "ratio": 0.06, "per_day": 0.002, "note": 1.1, "size_gb": 0.9, "days": 30}],
 }
 
 
@@ -1229,19 +1246,23 @@ class Page(unittest.TestCase):
         self.assertIn(">Free<", body)
         self.assertIn(">60.0 GB<", body)
         self.assertIn("Frieren 01", body)
-        self.assertIn("12.4 GB earned", body)
+        self.assertIn(">0.120 a day<", body)
+        self.assertIn("Twin, ratio 2.40, note 1.35, 1.40 GB, 20 days", body)
+        self.assertIn(">Best ratio per day<", body)
+        self.assertIn(">Lowest ratio per day<", body)
         self.assertIn("Old book", body)
         self.assertNotIn('class="kpis"', body)
 
     def test_the_french_page_speaks_french(self):
         _, body = self.page(BOARD, "?lang=fr")
-        self.assertIn('<html lang="fr">', body)
+        self.assertIn('<html lang="fr" class="standalone">', body)
         self.assertIn(">Ratio du compte<", body)
         self.assertIn(">plancher 1,2<", body)
         self.assertIn(">20,0 Go<", body)
         self.assertIn("<h3>Volume de seed</h3>", body)
         self.assertIn(">Badge Prime<", body)
-        self.assertIn(">Les moins rentables<", body)
+        self.assertIn(">Plus faible ratio par jour<", body)
+        self.assertIn(">0,120 par jour<", body)
 
     def test_the_time_axis_always_spans_30_days(self):
         _, body = self.page({**BOARD, "history": [entry(30)]}, "?part=1")
@@ -1253,8 +1274,15 @@ class Page(unittest.TestCase):
         self.assertEqual(len(re.findall(r'<polyline class="line c-ratio"', body)), 1)
         self.assertEqual(len(re.findall(r'<line class="dot c-ratio"', body)), 1)
 
-    def test_without_a_part_the_page_shows_both(self):
+    def test_a_part_has_no_background_of_its_own_so_homepage_shows_through(self):
+        for part in ("1", "2"):
+            _, body = self.page(BOARD, f"?part={part}")
+            self.assertIn('<html lang="en">', body)
+            self.assertNotRegex(body.split("html.standalone")[0], r"color-scheme")
+
+    def test_without_a_part_the_page_shows_both_on_a_dark_background(self):
         _, body = self.page(BOARD)
+        self.assertIn('<html lang="en" class="standalone">', body)
         self.assertIn('class="kpis"', body)
         self.assertIn('class="quests"', body)
 

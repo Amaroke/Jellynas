@@ -2,3 +2,9 @@ li.service[data-name="Farm board"] .service-title,
 li.service[data-name="Farm quests"] .service-title {
   display: none;
 }
+
+li.service[data-name="Farm board"] .service-block,
+li.service[data-name="Farm quests"] .service-block {
+  background: transparent !important;
+  margin: 0 !important;
+}

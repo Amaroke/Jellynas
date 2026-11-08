@@ -66,6 +66,13 @@ QUEST_CATEGORIES = {
     "Imprimante 3D": "108010",
 }
 ANIME = "102060,105070"
+FILE_KINDS = {
+    FILMS: {"mkv", "mp4", "avi", "m2ts", "ts", "mov", "wmv", "webm", "m4v"},
+    "Ebook": {"epub", "pdf", "mobi", "azw3", "cbz", "cbr", "djvu", "fb2"},
+    "Audio": {"mp3", "flac", "m4a", "m4b", "ogg", "opus", "wav", "aac", "alac", "ape"},
+    "Emulation": {"nes", "sfc", "smc", "gb", "gbc", "gba", "nds", "3ds", "n64", "z64", "chd", "cue", "rvz", "wbfs", "nsp", "xci", "md", "sms", "gg", "pce", "a26"},
+    "Imprimante 3D": {"stl", "3mf", "obj", "gcode", "step", "stp"},
+}
 KINDS = {"movies": FILMS, "shows": FILMS, "music": "Audio", "books": "Ebook"}
 TORZNAB = "{http://torznab.com/schemas/2015/feed}attr"
 
@@ -439,7 +446,6 @@ def load_state(path):
         "kinds": state.get("kinds", {}),
         "hunt_at": state.get("hunt_at", {}),
         "daily": state.get("daily", []),
-        "scores": state.get("scores", {}),
     }
 
 
@@ -586,6 +592,26 @@ def record_kinds(state, torrents, settings):
         del state["kinds"][infohash]
 
 
+def kind_of_files(files):
+    sizes = {}
+    for f in files:
+        extension = f["name"].rsplit(".", 1)[-1].lower() if "." in f["name"] else ""
+        kind = next((k for k, extensions in FILE_KINDS.items() if extension in extensions), None)
+        if kind:
+            sizes[kind] = sizes.get(kind, 0) + f["size"]
+    return max(sizes, key=sizes.get) if sizes else ""
+
+
+def classify(qbt, state, settings, torrents):
+    for t in torrents.values():
+        if t["hash"] in state["kinds"] or not is_c411(state, settings, t) or t["progress"] < 1:
+            continue
+        try:
+            state["kinds"][t["hash"]] = kind_of_files(qbt.files(t["hash"]))
+        except Exception as error:
+            print(f"Cannot read the files of {t['name']}: {error}")
+
+
 def gigabytes(size):
     return round(size / GB, 2)
 
@@ -705,25 +731,16 @@ def quests_of(state, settings, torrents):
     return {"name": name, "progress": progress, "target": target, "shown": f"{progress} of {target} {unit}"}
 
 
-def score_torrents(state, settings, torrents, today):
-    scores = state["scores"]
-    for t in seeded_on_c411(state, settings, torrents):
-        zen, day = scores.get(t["hash"], [0, None])
-        scores[t["hash"]] = [zen + nightly_zen(t), today] if day != today else [zen, day]
-    for infohash in [h for h in scores if h not in torrents]:
-        del scores[infohash]
-
-
 def card_of(state, t):
-    zen = state["scores"].get(t["hash"], [0])[0]
-    score = t["uploaded"] / GB + zen
     days = t["seeding_time"] / DAY
+    ratio = t["uploaded"] / max(t["size"], 1)
     source = state["sources"].get(t["hash"])
     return {
         "name": t["name"],
         "source": source if source in SOURCES else "unknown",
-        "score_gb": round(score, 2),
-        "rate": round(score / max(t["size"] / GB, 0.001) / max(days, 1), 4),
+        "ratio": round(ratio, 3),
+        "per_day": round(ratio / max(days, 1), 4),
+        "note": round(note_of(t), 2),
         "size_gb": gigabytes(t["size"]),
         "days": int(days),
     }
@@ -736,9 +753,9 @@ def board_of(state, settings, torrents):
         source = state["sources"].get(t["hash"]) if is_c411(state, settings, t) else PUBLIC
         source = source if source in SOURCES or source == PUBLIC else "unknown"
         slices[source] = slices.get(source, 0) + t["size"]
-    cards = [card_of(state, t) for t in farm if is_c411(state, settings, t) and t["progress"] >= 1]
-    best = sorted(cards, key=lambda c: -c["score_gb"])[:3]
-    worst = sorted((c for c in cards if all(c is not b for b in best)), key=lambda c: c["rate"])[:3]
+    cards = [card_of(state, t) for t in farm if is_c411(state, settings, t) and t["progress"] >= 1 and t["seeding_time"] >= DAY]
+    best = sorted(cards, key=lambda c: -c["per_day"])[:3]
+    worst = sorted((c for c in cards if all(c is not b for b in best)), key=lambda c: c["per_day"])[:3]
     return {
         "history": [dict(e) for e in state["daily"]],
         "challenges": [
@@ -811,7 +828,6 @@ def record_day(state, settings, torrents, account, now):
     daily.append(entry)
     oldest = (today - datetime.timedelta(days=HISTORY_DAYS - 1)).isoformat()
     daily[:] = [e for e in daily if e["day"] >= oldest]
-    score_torrents(state, settings, torrents, today.isoformat())
 
 
 def read_account(c411, state, now):
@@ -925,8 +941,8 @@ TEXT = {
         },
         "max": "Every step",
         "disk": "Farm disk", "free": "Free", "of": "of {budget} {gb}",
-        "best": "Best torrents", "worst": "Least worth their space",
-        "score": "{v} {gb} earned", "rate": "{v} {gb} per {gb} a day", "days": "{n} days",
+        "best": "Best ratio per day", "worst": "Lowest ratio per day",
+        "per_day": "{v} a day", "card": "ratio {ratio}, note {note}, {size}, {days}", "days": "{n} days",
         "sources": {**SOURCES, PUBLIC: "Public"},
     },
     "fr": {
@@ -945,8 +961,8 @@ TEXT = {
         },
         "max": "Tous les paliers",
         "disk": "Disque de la Farm", "free": "Libre", "of": "sur {budget} {gb}",
-        "best": "Meilleurs torrents", "worst": "Les moins rentables",
-        "score": "{v} {gb} rapportés", "rate": "{v} {gb} par {gb} et par jour", "days": "{n} jours",
+        "best": "Meilleur ratio par jour", "worst": "Plus faible ratio par jour",
+        "per_day": "{v} par jour", "card": "ratio {ratio}, note {note}, {size}, {days}", "days": "{n} jours",
         "sources": {
             "paid": "Grab payant", "twin": "Twin", "freeleech": "Freeleech", "cross-seed": "Cross-seed de la Library",
             "library": "Téléchargement de la Library", "zen-hunt": "Zen hunt", "volume-hunt": "Volume hunt",
@@ -955,54 +971,67 @@ TEXT = {
     },
 }
 STYLE = """
-:root { color-scheme: dark; --text: #e2e8f0; --muted: #94a3b8; --line: rgba(148, 163, 184, 0.22);
+:root { --text: #e2e8f0; --muted: #94a3b8; --line: rgba(148, 163, 184, 0.22);
   --violet: #a78bfa; --green: #34d399; --amber: #fbbf24; --blue: #60a5fa; --rose: #fb7185; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: transparent; color: var(--text);
-  font: 13px/1.35 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-main { display: flex; flex-direction: column; gap: 14px; height: 100vh; padding: 10px 12px; overflow: auto; }
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px 20px; }
-.kpi { display: flex; flex-direction: column; min-width: 0; }
+  font: 13px/1.35 Manrope, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+html.standalone { color-scheme: dark; background: radial-gradient(circle at 20% 0%, #2e1065 0%, #0f172a 60%); }
+html.standalone main { height: auto; min-height: 100vh; }
+main { display: flex; flex-direction: column; gap: 10px; height: 100vh; padding: 6px; overflow: auto;
+  scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, 0.35) transparent; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.kpi, figure, .quest { background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025));
+  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 10px; padding: 9px 12px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 6px 18px rgba(0, 0, 0, 0.12); }
+.kpi { position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.kpi::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent, var(--muted)); }
+.ratio { --accent: var(--violet); } .left { --accent: var(--green); } .up { --accent: var(--blue); }
+.down { --accent: var(--rose); } .zen { --accent: var(--amber); }
 .label, figcaption, h3 { color: var(--muted); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; margin: 0; }
-.value { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
+.value { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
 .sub { color: var(--muted); font-size: 12px; min-height: 16px; }
 .ratio .value { color: var(--violet); } .left .value { color: var(--green); } .zen .value { color: var(--amber); }
-.charts, .bottom { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; flex: 1; min-height: 150px; }
+.charts, .bottom { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; flex: 1; min-height: 140px; }
 figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
 figcaption { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
 .key { text-transform: none; letter-spacing: 0; font-size: 11px; }
 .key::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; background: currentColor; }
-.chart { position: relative; flex: 1; min-height: 80px; border-bottom: 1px solid var(--line); }
+.chart { position: relative; flex: 1; min-height: 70px; border-bottom: 1px solid var(--line);
+  background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(25% - 1px), rgba(148, 163, 184, 0.07) calc(25% - 1px), rgba(148, 163, 184, 0.07) 25%); }
 .chart svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .mark { position: absolute; font-size: 10px; color: var(--muted); transform: translateY(-100%); white-space: nowrap; }
 .mark.right { right: 0; } .mark.left { left: 0; }
 .axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; }
 .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+polygon.area { stroke: none; fill-opacity: 0.14; }
+.area.c-ratio { fill: var(--violet); } .area.c-balance { fill: var(--green); } .area.c-up { fill: var(--blue); } .area.c-down { fill: var(--rose); }
 .dot { stroke-width: 6; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .guide { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
 .c-ratio { stroke: var(--violet); color: var(--violet); } .c-balance { stroke: var(--green); color: var(--green); }
-.c-paid { fill: var(--amber); color: var(--amber); } .c-up { stroke: var(--blue); color: var(--blue); }
+.c-paid { fill: var(--amber); fill-opacity: 0.85; color: var(--amber); } .c-up { stroke: var(--blue); color: var(--blue); }
 .c-down { stroke: var(--rose); color: var(--rose); }
-.quests { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; }
-.quest ol, .ranking { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.quests { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.quest ol, .ranking { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
 .quest li { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; font-size: 12px; }
 .quest .reward { color: var(--muted); font-size: 11px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
 .quest .done { color: var(--muted); opacity: 0.55; } .quest .done .step::before { content: "✓ "; color: var(--green); }
 .quest .later { color: var(--muted); opacity: 0.7; }
-.quest .next { color: var(--text); font-weight: 600; } .quest .next .reward { color: var(--amber); }
+.quest .next { color: var(--text); font-weight: 600; background: rgba(251, 191, 36, 0.08); border-radius: 6px; margin: 1px -6px; padding: 2px 6px; } .quest .next .reward { color: var(--amber); }
 .bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 400; color: var(--muted); }
 .bar span { flex: 1; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--amber); }
 .disk { display: flex; gap: 14px; align-items: center; min-height: 0; }
-.donut { position: relative; width: 128px; height: 128px; flex: none; }
+.donut { position: relative; width: 118px; height: 118px; flex: none; }
 .donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-.donut circle { fill: none; stroke-width: 0.32; }
+.donut circle { fill: none; stroke-width: 0.3; }
 .donut .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-size: 11px; color: var(--muted); }
 .donut .center b { color: var(--green); font-size: 20px; font-weight: 600; line-height: 1.1; }
 .legend { list-style: none; margin: 0; padding: 0; font-size: 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .legend li { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
-.ranking li { display: grid; grid-template-columns: auto 1fr auto; gap: 0 6px; font-size: 12px; min-width: 0; }
+.ranking li { display: grid; grid-template-columns: auto 1fr auto; gap: 0 6px; font-size: 12px; min-width: 0; padding: 3px 0; border-top: 1px solid rgba(255, 255, 255, 0.05); }
+.ranking li:first-child { border-top: 0; }
 .ranking .swatch { align-self: center; }
 .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .legend .name { flex: 1; }
@@ -1050,6 +1079,8 @@ def lines(css, offsets, values, top):
                 parts.append(f'<line class="dot {css}" x1="{x:.2f}" y1="{y:.2f}" x2="{x:.2f}" y2="{y:.2f}"/>')
             else:
                 points = " ".join(f"{x_of(a):.2f},{y_of(v, top):.2f}" for a, v in run)
+                base = f"{x_of(run[-1][0]):.2f},100 {x_of(run[0][0]):.2f},100"
+                parts.append(f'<polygon class="area {css}" points="{points} {base}"/>')
                 parts.append(f'<polyline class="line {css}" points="{points}"/>')
             run = []
         if value is not None:
@@ -1205,13 +1236,23 @@ def donut(farm, words):
     )
 
 
-def ranking(title, cards, words, figure):
+def card_text(c, words):
+    return words["card"].format(
+        ratio=figure_text(c["ratio"], 2, words), note=figure_text(c["note"], 2, words),
+        size=size_text(c["size_gb"], words, 2), days=words["days"].format(n=c["days"]),
+    )
+
+
+def per_day_text(c, words):
+    return words["per_day"].format(v=figure_text(c["per_day"], 3, words))
+
+
+def ranking(title, cards, words):
     rows = "".join(
         f'<li><span class="swatch" style="background:{COLORS.get(c["source"], COLORS["unknown"])}"></span>'
         f'<span class="name" title="{html.escape(c["name"])}">{html.escape(c["name"])}</span>'
-        f'<span class="figure">{html.escape(figure(c))}</span>'
-        f'<span class="meta">{html.escape(words["sources"].get(c["source"], c["source"]))}, '
-        f'{html.escape(size_text(c["size_gb"], words, 2))}, {html.escape(words["days"].format(n=c["days"]))}</span></li>'
+        f'<span class="figure">{html.escape(per_day_text(c, words))}</span>'
+        f'<span class="meta">{html.escape(words["sources"].get(c["source"], c["source"]))}, {html.escape(card_text(c, words))}</span></li>'
         for c in cards
     )
     return f'<figure><figcaption>{html.escape(title)}</figcaption><ol class="ranking">{rows}</ol></figure>'
@@ -1219,14 +1260,8 @@ def ranking(title, cards, words, figure):
 
 def goals(board, words, pick):
     columns = "".join(quest_column(c, words, pick) for c in board["challenges"])
-    best = ranking(
-        words["best"], board["best"], words,
-        lambda c: words["score"].format(v=figure_text(c["score_gb"], 1, words), gb=words["gb"]),
-    )
-    worst = ranking(
-        words["worst"], board["worst"], words,
-        lambda c: words["rate"].format(v=figure_text(c["rate"], 3, words), gb=words["gb"]),
-    )
+    best = ranking(words["best"], board["best"], words)
+    worst = ranking(words["worst"], board["worst"], words)
     return f'<section class="quests">{columns}</section><section class="bottom">{donut(board["farm"], words)}{best}{worst}</section>'
 
 
@@ -1239,7 +1274,7 @@ def board_page(board, part=None, language="en"):
     else:
         body = (trends(board["history"], words) if part != "2" else "") + (goals(board, words, pick) if part != "1" else "")
     return (
-        f'<!doctype html><html lang="{language}"><head><meta charset="utf-8">'
+        f'<!doctype html><html lang="{language}"{"" if part else ' class="standalone"'}><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>Farm</title><style>{STYLE}</style></head><body><main>{body}</main></body></html>"
     )
@@ -1666,6 +1701,7 @@ def run_once(qbt, prowlarr, c411, settings, state, now):
     weigh_floor(state, account, settings)
     torrents = {t["hash"].lower(): {**t, "hash": t["hash"].lower()} for t in qbt.torrents()}
     record(state, torrents, settings, now)
+    classify(qbt, state, settings, torrents)
     report(state, now)
     use_prowlarr(state, now, lambda: hold_c411(prowlarr, settings, state), always=True)
     adopt(qbt, settings, state, torrents)
