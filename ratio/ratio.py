@@ -40,8 +40,8 @@ SEED_STEPS = (100, 150, 200, 250, 300)
 CONTRIBUTION_SHARES = ("62.5", "75", "100", "100", "100", "100")
 DURATION_STEPS = ((25, 7), (100, 30), (150, 90), (250, 180), (300, 365))
 HISTORY_DAYS = 30
-SOURCES = ("paid", "twin", "freeleech", "cross-seed", "library", "volume-hunt", "unknown")
-RETIRED_SOURCES = {"zen-hunt": "volume-hunt"}
+SOURCES = ("paid", "free", "library", "volume-hunt", "unknown")
+RETIRED_SOURCES = {"zen-hunt": "volume-hunt", "twin": "free", "freeleech": "free", "cross-seed": "free"}
 FILMS = "Films & Vidéos"
 QUEST_CATEGORIES = {
     FILMS: "102000,102010,102030,102050,102060,102070,102080,102090,105000,105060,105070,105080",
@@ -499,12 +499,8 @@ def twin_copies(state):
 def source_of(state, settings, copies, t):
     if t is None:
         return "unknown"
-    if t["hash"] in copies:
-        return "twin"
-    if t["hash"] in state["free"]:
-        return "freeleech"
-    if t["category"] == FARM:
-        return "cross-seed"
+    if t["hash"] in copies or t["hash"] in state["free"] or t["category"] == FARM:
+        return "free"
     if is_library(settings, t["category"]):
         return "library"
     return "unknown"
@@ -666,19 +662,6 @@ def seeded_on_c411(state, settings, torrents):
     return [t for t in torrents.values() if is_c411(state, settings, t) and is_seeding(t)]
 
 
-def farm_of(state, settings, torrents):
-    held = [t for t in torrents.values() if t["category"] == FARM]
-    size = sum(t["size"] for t in held)
-    limit = settings["farm_size"]
-    return {
-        "seeds": len(seeded_on_c411(state, settings, torrents)),
-        "size_gb": gigabytes(size),
-        "budget_gb": gigabytes(limit),
-        "fill": round(100 * size / limit, 1) if limit else 0,
-        "downloading": sum(1 for t in held if t["progress"] < 1),
-    }
-
-
 def challenges_of(state, settings, torrents):
     seeded = seeded_on_c411(state, settings, torrents)
     kinds = [state["kinds"].get(t["hash"]) for t in seeded]
@@ -699,48 +682,6 @@ def challenges_of(state, settings, torrents):
     ]
 
 
-def step_name(key, index, target):
-    if key == "contribution":
-        return f"{target} torrents at {CONTRIBUTION_SHARES[index]} % of their best note"
-    if key == "duration":
-        return f"{target} seeds for {DURATION_STEPS[index][1]} days"
-    if key == "diversity":
-        return f"25 seeds in {index + 1} categor{'y' if index == 0 else 'ies'}"
-    if key == "category":
-        return f"{target} seeds in one category" if index < 2 else f"{target} seeds in {FILMS}"
-    return f"Seed count {target}"
-
-
-def quest_steps(state, settings, torrents):
-    for key, steps, _ in challenges_of(state, settings, torrents):
-        unit = "torrents" if key == "contribution" else "seeds"
-        for index, (target, progress) in enumerate(steps):
-            yield step_name(key, index, target), progress, target, unit
-
-
-def quests_of(state, settings, torrents):
-    left = [step for step in quest_steps(state, settings, torrents) if step[1] < step[2]]
-    if not left:
-        return {"name": "every Quest reached", "progress": None, "target": None, "shown": "done"}
-    name, progress, target, unit = max(left, key=lambda step: step[1] / step[2])
-    return {"name": name, "progress": progress, "target": target, "shown": f"{progress} of {target} {unit}"}
-
-
-def card_of(state, t):
-    days = t["seeding_time"] / DAY
-    ratio = t["uploaded"] / max(t["size"], 1)
-    source = state["sources"].get(t["hash"])
-    return {
-        "name": t["name"],
-        "source": source if source in SOURCES else "unknown",
-        "ratio": round(ratio, 3),
-        "per_day": round(ratio / max(days, 1), 4),
-        "note": round(note_of(t), 2),
-        "size_gb": gigabytes(t["size"]),
-        "days": int(days),
-    }
-
-
 def board_of(state, settings, torrents):
     farm = [t for t in torrents.values() if t["category"] == FARM]
     slices = {}
@@ -748,9 +689,6 @@ def board_of(state, settings, torrents):
         source = state["sources"].get(t["hash"]) if is_c411(state, settings, t) else PUBLIC
         source = source if source in SOURCES or source == PUBLIC else "unknown"
         slices[source] = slices.get(source, 0) + t["size"]
-    cards = [card_of(state, t) for t in farm if is_c411(state, settings, t) and t["progress"] >= 1 and t["seeding_time"] >= DAY]
-    best = sorted(cards, key=lambda c: -c["per_day"])[:3]
-    worst = sorted((c for c in cards if all(c is not b for b in best)), key=lambda c: c["per_day"])[:3]
     return {
         "history": [dict(e) for e in state["daily"]],
         "challenges": [
@@ -761,8 +699,9 @@ def board_of(state, settings, torrents):
             "budget_gb": gigabytes(settings["farm_size"]),
             "slices": [{"source": s, "gb": gigabytes(size)} for s, size in sorted(slices.items(), key=lambda i: -i[1])],
         },
-        "best": best,
-        "worst": worst,
+        "sources": [
+            {"source": s, **f} for s, f in sorted(figures_by_source(state).items(), key=lambda i: -i[1]["uploaded_gb"])
+        ],
     }
 
 
@@ -771,8 +710,7 @@ def waiting_board(state, settings):
         "history": [dict(e) for e in state["daily"]],
         "challenges": [],
         "farm": {"budget_gb": gigabytes(settings["farm_size"]), "slices": []},
-        "best": [],
-        "worst": [],
+        "sources": [],
     }
 
 
@@ -848,12 +786,15 @@ def download_left(account, settings):
 
 def account_of(account, state, settings, now):
     if account is None:
-        return {"ratio": None, "floor": settings["floor"], "paused": True, "zen": None, "week_uploaded_gb": None}
+        return {
+            "ratio": None, "floor": settings["floor"], "left_gb": None, "paused": True, "zen": None, "week_uploaded_gb": None,
+        }
     older = [s for s in state["account"] if s[0] <= now - WEEK]
     week_start = (older[-1] if older else state["account"][0])[1]
     return {
         "ratio": share(account["uploaded"], account["downloaded"]),
         "floor": settings["floor"],
+        "left_gb": gigabytes(download_left(account, settings)),
         "paused": state["paused"],
         "zen": account["zen"],
         "week_uploaded_gb": gigabytes(account["uploaded"] - week_start),
@@ -885,14 +826,12 @@ def summary(state, torrents, settings, account, now):
             "week_ratio": share(week_uploaded, week_downloaded),
         },
         "account": account_of(account, state, settings, now),
-        "farm": farm_of(state, settings, torrents),
-        "quests": quests_of(state, settings, torrents),
         "sources": sources,
     }
 
 
 COLORS = {
-    "paid": "#f472b6", "twin": "#a78bfa", "freeleech": "#34d399", "cross-seed": "#60a5fa", "library": "#38bdf8",
+    "paid": "#f472b6", "free": "#34d399", "library": "#38bdf8",
     "volume-hunt": "#fb923c", "unknown": "#94a3b8", PUBLIC: "#64748b",
 }
 REWARDS = {
@@ -936,13 +875,11 @@ TEXT = {
         },
         "max": "Every step",
         "disk": "Farm disk", "free": "Free", "of": "of {budget} {gb}",
-        "best": "Best ratio per day", "worst": "Lowest ratio per day",
-        "per_day": "{v} a day", "card": "ratio {ratio}, note {note}, {size}, {days}", "days": "{n} days",
+        "earned": "Earned by Source", "columns": ("Source", "Torrents", "Down", "Up", "Ratio"), "total": "Total",
+        "week": "7 days: {down} down, {up} up, ratio {ratio}, {days} days in the Farm",
         "explain": {
             "paid": "Bought with download on C411",
-            "twin": "Same release taken from a public tracker, free on C411",
-            "freeleech": "C411 freeleech, download not counted",
-            "cross-seed": "Library file found again on C411, no download",
+            "free": "No download counted on C411: Twin, freeleech or cross-seed of the Library",
             "library": "Movie or show of the Library kept for Zen",
             "volume-hunt": "Small rare torrent for the Quests",
             "public": "Public tracker copy, leaves within two weeks",
@@ -965,13 +902,11 @@ TEXT = {
         },
         "max": "Tous les paliers",
         "disk": "Disque de la Farm", "free": "Libre", "of": "sur {budget} {gb}",
-        "best": "Meilleur ratio par jour", "worst": "Plus faible ratio par jour",
-        "per_day": "{v} par jour", "card": "ratio {ratio}, note {note}, {size}, {days}", "days": "{n} jours",
+        "earned": "Gains par Source", "columns": ("Source", "Torrents", "Reçu", "Envoyé", "Ratio"), "total": "Total",
+        "week": "7 jours : {down} reçus, {up} envoyés, ratio {ratio}, {days} jours dans la Farm",
         "explain": {
             "paid": "Payé en download sur C411",
-            "twin": "Même release prise sur un tracker public, gratuite sur C411",
-            "freeleech": "Freeleech C411, download non compté",
-            "cross-seed": "Fichier de la Library retrouvé sur C411, sans download",
+            "free": "Aucun download compté sur C411 : Twin, freeleech ou cross-seed de la Library",
             "library": "Film ou série de la Library gardé pour le Zen",
             "volume-hunt": "Petit torrent rare pour les Quêtes",
             "public": "Copie d'un tracker public, part sous deux semaines",
@@ -1021,7 +956,7 @@ polygon.area { stroke: none; fill-opacity: 0.14; }
 .c-paid { fill: var(--amber); fill-opacity: 0.85; color: var(--amber); } .c-up { stroke: var(--blue); color: var(--blue); }
 .c-down { stroke: var(--rose); color: var(--rose); }
 .quests { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
-.quest ol, .ranking { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.quest ol { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
 .quest li { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; font-size: 12px; }
 .quest .reward { color: var(--muted); font-size: 11px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
 .quest .done { color: var(--muted); opacity: 0.55; } .quest .done .step::before { content: "✓ "; color: var(--green); }
@@ -1039,9 +974,15 @@ polygon.area { stroke: none; fill-opacity: 0.14; }
 .legend { list-style: none; margin: 0; padding: 0; font-size: 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .legend li { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: 0 6px; min-width: 0; }
 .swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
-.ranking li { display: grid; grid-template-columns: auto 1fr auto; gap: 0 6px; font-size: 12px; min-width: 0; padding: 3px 0; border-top: 1px solid rgba(255, 255, 255, 0.05); }
-.ranking li:first-child { border-top: 0; }
-.ranking .swatch { align-self: center; }
+.earned table { width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 12px; }
+.earned th { color: var(--muted); font-size: 11px; font-weight: 500; text-align: right; padding: 0 0 3px 6px; }
+.earned td { text-align: right; padding: 3px 0 0 6px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.earned th:first-child, .earned td:first-child { text-align: left; padding-left: 0; }
+.earned tbody tr:nth-child(odd) td, .earned tfoot tr:first-child td { border-top: 1px solid rgba(255, 255, 255, 0.05); }
+.earned tbody tr:first-child td { border-top: 0; }
+.earned td.week { text-align: left; white-space: normal; color: var(--muted); font-size: 11px; padding: 0 0 3px 14px; }
+.earned tfoot td { font-weight: 600; }
+.earned .swatch { display: inline-block; margin-right: 6px; }
 .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .figure { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
 .meta { grid-column: 2 / -1; color: var(--muted); font-size: 11px; }
@@ -1257,33 +1198,49 @@ def donut(farm, words):
     )
 
 
-def card_text(c, words):
-    return words["card"].format(
-        ratio=figure_text(c["ratio"], 2, words), note=figure_text(c["note"], 2, words),
-        size=size_text(c["size_gb"], words, 2), days=words["days"].format(n=c["days"]),
+def earned_rows(name, swatch, f, words):
+    cells = [
+        str(f["torrents"]), size_text(f["downloaded_gb"], words), size_text(f["uploaded_gb"], words),
+        figure_text(f["ratio"], 2, words),
+    ]
+    week = words["week"].format(
+        down=size_text(f["week_downloaded_gb"], words), up=size_text(f["week_uploaded_gb"], words),
+        ratio=figure_text(f["week_ratio"], 2, words),
+        days=figure_text(f["farm_days"], 1, words),
+    )
+    return (
+        f'<tr><td>{swatch}{html.escape(name)}</td>{"".join(f"<td>{html.escape(c)}</td>" for c in cells)}</tr>'
+        f'<tr><td class="week" colspan="5">{html.escape(week)}</td></tr>'
     )
 
 
-def per_day_text(c, words):
-    return words["per_day"].format(v=figure_text(c["per_day"], 3, words))
+def total_of(sources):
+    keys = ("torrents", "downloaded_gb", "uploaded_gb", "week_downloaded_gb", "week_uploaded_gb", "farm_days")
+    sums = {k: sum(f[k] for f in sources) for k in keys}
+    return {
+        **sums,
+        "ratio": share(sums["uploaded_gb"], sums["downloaded_gb"]),
+        "week_ratio": share(sums["week_uploaded_gb"], sums["week_downloaded_gb"]),
+    }
 
 
-def ranking(title, cards, words):
-    rows = "".join(
-        f'<li><span class="swatch" style="background:{COLORS.get(c["source"], COLORS["unknown"])}"></span>'
-        f'<span class="name" title="{html.escape(c["name"])}">{html.escape(c["name"])}</span>'
-        f'<span class="figure">{html.escape(per_day_text(c, words))}</span>'
-        f'<span class="meta">{html.escape(c["source"])}, {html.escape(card_text(c, words))}</span></li>'
-        for c in cards
+def swatch(source):
+    return f'<span class="swatch" style="background:{COLORS.get(source, COLORS["unknown"])}"></span>'
+
+
+def earned(sources, words):
+    head = "".join(f"<th>{html.escape(c)}</th>" for c in words["columns"])
+    body = "".join(earned_rows(f["source"], swatch(f["source"]), f, words) for f in sources)
+    foot = earned_rows(words["total"], "", total_of(sources), words) if sources else ""
+    return (
+        f'<figure class="earned"><figcaption>{html.escape(words["earned"])}</figcaption>'
+        f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody><tfoot>{foot}</tfoot></table></figure>"
     )
-    return f'<figure><figcaption>{html.escape(title)}</figcaption><ol class="ranking">{rows}</ol></figure>'
 
 
 def goals(board, words, pick):
     columns = "".join(quest_column(c, words, pick) for c in board["challenges"])
-    best = ranking(words["best"], board["best"], words)
-    worst = ranking(words["worst"], board["worst"], words)
-    return f'<section class="quests">{columns}</section><section class="bottom">{donut(board["farm"], words)}{best}{worst}</section>'
+    return f'<section class="quests">{columns}</section><section class="bottom">{donut(board["farm"], words)}{earned(board.get("sources", []), words)}</section>'
 
 
 def board_page(board, part=None, language="en"):
@@ -1629,7 +1586,7 @@ def grab_twins(qbt, prowlarr, settings, state, releases, known, budget, now):
         try:
             twin = find_twin(prowlarr, settings, release, now, searches)
             if twin:
-                take(qbt, state, budget, known, release, twin["torrent"], "twin", f"its public twin {twin['title']}")
+                take(qbt, state, budget, known, release, twin["torrent"], "free", f"its public twin {twin['title']}")
                 state["twins"][twin["infohash"]] = [release["infohash"], FARM, now, release["link"]]
                 state["kinds"][release["infohash"]] = FILMS
         except Throttled:
@@ -1655,7 +1612,7 @@ def grab_free(qbt, prowlarr, settings, state, releases, known, budget, now):
             return
         if release["infohash"] in known or release["size"] > budget[FARM]:
             continue
-        if take_from_tracker(qbt, prowlarr, state, budget, known, release, "freeleech", "the tracker, freeleech"):
+        if take_from_tracker(qbt, prowlarr, state, budget, known, release, "free", "the tracker, freeleech"):
             state["free"][release["infohash"]] = now
 
 
@@ -1683,7 +1640,7 @@ def hunt_volume(qbt, prowlarr, settings, state, torrents, known, budget, now):
         if not release["free"] and release["size"] > budget["download"]:
             continue
         free = release["free"]
-        source, via = ("freeleech", "the tracker, freeleech") if free else ("volume-hunt", "the tracker")
+        source, via = ("free", "the tracker, freeleech") if free else ("volume-hunt", "the tracker")
         if not take_from_tracker(qbt, prowlarr, state, budget, known, release, source, via):
             continue
         state["kinds"][release["infohash"]] = kind

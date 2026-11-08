@@ -84,27 +84,15 @@ class HomepageConfigTest(unittest.TestCase):
         self.assertIsNotNone(account)
         self.assertIn("url: http://ratio:8000/summary", account.group(1))
         fields = re.findall(r"- field: (\S+)", account.group(1))
-        self.assertEqual(fields, ["account.ratio", "account.zen", "account.week_uploaded_gb", "account.paused"])
+        self.assertEqual(fields, ["account.ratio", "account.left_gb", "account.zen", "account.week_uploaded_gb"])
         self.assertNotIn("grabs.", text)
 
-    def test_the_farm_tile_reads_the_farm_block_of_ratio(self):
+    def test_the_farm_and_quests_have_no_tile_the_board_shows_them(self):
         text = (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")
-        self.assertNotIn("Zen reserve", tiles())
-        self.assertNotIn("Sources", tiles())
-        farm = re.search(r"^    - Farm:$(.*?)(?=^    - )", text, re.MULTILINE | re.DOTALL)
-        self.assertIsNotNone(farm)
-        self.assertIn("url: http://ratio:8000/summary", farm.group(1))
-        fields = re.findall(r"- field: (\S+)", farm.group(1))
-        self.assertEqual(fields, ["farm.seeds", "farm.size_gb", "farm.fill", "farm.downloading"])
-        self.assertNotIn("zen.", text)
-
-    def test_the_quests_tile_reads_the_quests_block_of_ratio(self):
-        text = (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")
-        quests = re.search(r"^    - Quests:$(.*?)(?=^    - )", text, re.MULTILINE | re.DOTALL)
-        self.assertIsNotNone(quests)
-        self.assertIn("url: http://ratio:8000/summary", quests.group(1))
-        fields = re.findall(r"- field: (\S+)", quests.group(1))
-        self.assertEqual(fields, ["quests.name", "quests.shown"])
+        self.assertNotIn("    - Farm:", text)
+        self.assertNotIn("    - Quests:", text)
+        self.assertNotIn("farm.", text)
+        self.assertNotIn("quests.", text)
 
     def test_the_board_of_ratio_fills_two_iframes_of_their_own_group_in_french(self):
         text = (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")

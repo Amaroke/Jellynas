@@ -618,7 +618,7 @@ class Tags(unittest.TestCase):
     def test_every_c411_torrent_carries_a_tag_of_its_source(self):
         qbt = FakeQBittorrent([torrent("movie", category="movies", size_gb=200), torrent("free")])
         run(qbt, state=empty_state(free={"free": NOW - 100}))
-        self.assertEqual(sorted(qbt.tagged), [("free", "freeleech"), ("movie", "library")])
+        self.assertEqual(sorted(qbt.tagged), [("free", "free"), ("movie", "library")])
 
     def test_a_c411_torrent_whose_tracker_is_down_is_not_public(self):
         qbt = FakeQBittorrent([torrent("c411", category="movies", tracker="", size_gb=200, seeding_days=20)])
@@ -699,7 +699,7 @@ class VolumeHunt(unittest.TestCase):
         state = run(qbt, hunting(small("paid", size_gb=0.1), small("free", size_gb=0.9, free=True)))
         self.assertEqual(qbt.added, [("free", "farm"), ("paid", "farm")])
         self.assertEqual(state["free"], {"free": NOW})
-        self.assertEqual(state["sources"]["free"], "freeleech")
+        self.assertEqual(state["sources"]["free"], "free")
         self.assertEqual(list(state["hunted"]), ["paid"])
 
     def test_under_the_floor_only_a_freeleech_release_is_hunted(self):
@@ -826,11 +826,11 @@ class Sources(unittest.TestCase):
         self.assertEqual(report_of(state, "paid")["downloaded_gb"], 3)
         self.assertEqual(report_of(state, "paid")["uploaded_gb"], 1)
 
-    def test_a_freeleech_grab_is_reported_as_freeleech(self):
+    def test_a_freeleech_grab_is_reported_as_free(self):
         state = run(FakeQBittorrent(), FakeProwlarr([release("free", free=True)]))
         run(FakeQBittorrent([torrent("free", downloaded_gb=3, uploaded_gb=1)]), state=state, now=NOW + DAY)
-        self.assertEqual(state["sources"], {"free": "freeleech"})
-        self.assertEqual(report_of(state, "freeleech")["downloaded_gb"], 0)
+        self.assertEqual(state["sources"], {"free": "free"})
+        self.assertEqual(report_of(state, "free")["downloaded_gb"], 0)
 
     def test_a_volume_hunt_grab_is_reported_as_a_volume_hunt(self):
         qbt = FakeQBittorrent([torrent("old", category="movies", downloaded_gb=10, uploaded_gb=35)])
@@ -838,9 +838,9 @@ class Sources(unittest.TestCase):
         self.assertEqual(state["sources"]["rare"], "volume-hunt")
         self.assertEqual(state["sources"]["old"], "library")
 
-    def test_the_tracker_copy_of_a_twin_is_a_twin_whoever_adds_it(self):
+    def test_the_tracker_copy_of_a_twin_is_free_whoever_adds_it(self):
         state = run(FakeQBittorrent(), FakeProwlarr([episode()], twins=[twin()]))
-        self.assertEqual(state["sources"], {"episode": "twin"})
+        self.assertEqual(state["sources"], {"episode": "free"})
         qbt = FakeQBittorrent([
             torrent("public", tracker="http://nyaa.tracker.wf/announce"),
             torrent("episode", state="stoppedUP", tracker=""),
@@ -848,7 +848,7 @@ class Sources(unittest.TestCase):
         run(qbt, state=state, now=NOW + 600)
         self.assertEqual(state["twins"], {})
         run(FakeQBittorrent([torrent("episode")]), state=state, now=NOW + 1200)
-        self.assertEqual(state["sources"], {"episode": "twin"})
+        self.assertEqual(state["sources"], {"episode": "free"})
 
     def test_library_torrents_and_their_cross_seeds_are_told_apart(self):
         qbt = FakeQBittorrent([
@@ -858,7 +858,7 @@ class Sources(unittest.TestCase):
             torrent("public", category="movies", tracker="http://nyaa.tracker.wf/announce"),
         ])
         state = run(qbt)
-        self.assertEqual(state["sources"], {"movie": "library", "show": "library", "linked": "cross-seed"})
+        self.assertEqual(state["sources"], {"movie": "library", "show": "library", "linked": "free"})
 
     def test_a_tracker_torrent_without_a_source_gets_one_from_what_ratio_sees(self):
         qbt = FakeQBittorrent([
@@ -869,7 +869,7 @@ class Sources(unittest.TestCase):
         transfers = {h: [GB, 0] for h in ("linked", "free", "movie", "gone")}
         state = run(qbt, state=empty_state(transfers=transfers, free={"free": NOW - 100}))
         self.assertEqual(state["sources"], {
-            "linked": "cross-seed", "free": "freeleech", "movie": "library", "gone": "unknown",
+            "linked": "free", "free": "free", "movie": "library", "gone": "unknown",
         })
         self.assertEqual(report_of(state, "unknown")["downloaded_gb"], 1)
 
@@ -878,6 +878,14 @@ class Sources(unittest.TestCase):
         state = run(qbt, state=empty_state(transfers={"kept": [GB, 0]}, sources={"kept": "zen-hunt"}))
         self.assertEqual(state["sources"], {"kept": "volume-hunt"})
         self.assertEqual(qbt.list[0]["tags"], "volume-hunt")
+
+    def test_twin_freeleech_and_cross_seed_become_free(self):
+        qbt = FakeQBittorrent([torrent("a", tags="twin"), torrent("b", tags="freeleech"), torrent("c", tags="cross-seed")])
+        transfers = {h: [GB, 0] for h in "abc"}
+        sources = {"a": "twin", "b": "freeleech", "c": "cross-seed"}
+        state = run(qbt, state=empty_state(transfers=transfers, sources=sources))
+        self.assertEqual(state["sources"], {"a": "free", "b": "free", "c": "free"})
+        self.assertEqual([t["tags"] for t in qbt.list], ["free", "free", "free"])
 
     def test_a_pending_source_that_never_shows_up_is_forgotten(self):
         state = run(FakeQBittorrent(), state=empty_state(sources={"lost": "paid"}))
@@ -952,7 +960,7 @@ class Report(unittest.TestCase):
         again = torrent("kept", seeders=3, seeding_days=1, downloaded_gb=2)
         again["added_on"] = NOW + DAY
         self.run_quietly(FakeQBittorrent([again]), state, NOW + 2 * DAY)
-        figures = report_of(state, "cross-seed")
+        figures = report_of(state, "free")
         self.assertEqual(figures["farm_days"], 2)
         self.assertEqual(figures["week_downloaded_gb"], 2)
 
@@ -977,21 +985,7 @@ class Summary(unittest.TestCase):
             "week_downloaded_gb": 0, "week_uploaded_gb": 0, "week_ratio": None,
         })
 
-    def test_the_farm_shows_the_seed_count_its_fill_and_its_downloads(self):
-        qbt = FakeQBittorrent([
-            torrent("farmed", size_gb=3),
-            torrent("linked", size_gb=2, progress=0.5, seeding_days=0),
-            torrent("kept", size_gb=4, seeders=3),
-            torrent("movie", category="movies", size_gb=200),
-            torrent("stopped", size_gb=1, state="stoppedUP"),
-            torrent("public", size_gb=1, tracker=PUBLIC),
-        ])
-        qbt.start = lambda hashes: None
-        summary = summary_of(qbt, indexers=[])
-        self.assertEqual(summary["farm"], {"seeds": 3, "size_gb": 11, "budget_gb": 100, "fill": 11.0, "downloading": 1})
-        self.assertNotIn("zen", summary)
-
-    def test_the_account_shows_its_ratio_its_zen_and_its_upload_of_the_week(self):
+    def test_the_account_shows_its_ratio_what_is_left_before_the_floor_its_zen_and_its_upload_of_the_week(self):
         state = empty_state(account=[
             [NOW - 8 * DAY, 50 * GB, 20 * GB, 10],
             [NOW - 7 * DAY, 55 * GB, 25 * GB, 15],
@@ -999,9 +993,11 @@ class Summary(unittest.TestCase):
         ])
         summary = summary_of(FakeQBittorrent(), state, indexers=[])
         self.assertEqual(summary["account"], {
-            "ratio": 2.0, "floor": 1.2, "paused": False, "zen": 25, "week_uploaded_gb": 5,
+            "ratio": 2.0, "floor": 1.2, "left_gb": 20, "paused": False, "zen": 25, "week_uploaded_gb": 5,
         })
         self.assertNotIn("grabs", summary)
+        self.assertNotIn("farm", summary)
+        self.assertNotIn("quests", summary)
 
     def test_a_new_account_counts_its_week_from_its_first_reading(self):
         state = empty_state(account=[[NOW - 2 * DAY, 57 * GB, 28 * GB, 20]])
@@ -1010,7 +1006,7 @@ class Summary(unittest.TestCase):
     def test_an_unreadable_account_shows_the_pause_and_no_figures(self):
         summary = summary_of(FakeQBittorrent(), c411=FakeC411(broken=True), indexers=[])
         self.assertEqual(summary["account"], {
-            "ratio": None, "floor": 1.2, "paused": True, "zen": None, "week_uploaded_gb": None,
+            "ratio": None, "floor": 1.2, "left_gb": None, "paused": True, "zen": None, "week_uploaded_gb": None,
         })
 
     def test_each_source_is_listed_by_name_with_its_figures(self):
@@ -1019,39 +1015,6 @@ class Summary(unittest.TestCase):
         self.assertEqual(summary["sources"], [
             {"name": "library", "figures": "1 torrent, 2.0 / 4.0 GB, ratio 0.50"},
         ])
-
-    def test_the_next_quest_is_the_closest_step_not_reached(self):
-        held = [torrent(f"t{i}", size_gb=0.1, seeding_days=1, seeders=100) for i in range(112)]
-        quests = summary_of(FakeQBittorrent(held), indexers=[])["quests"]
-        self.assertEqual(quests, {"name": "Seed count 150", "progress": 112, "target": 150, "shown": "112 of 150 seeds"})
-
-    def test_the_seeds_of_a_category_count_for_the_category_quests(self):
-        held, kinds = filled("Ebook", 40, seeding_days=1, seeders=100)
-        quests = summary_of(FakeQBittorrent(held), empty_state(kinds=kinds), indexers=[])["quests"]
-        self.assertEqual(quests, {"name": "50 seeds in one category", "progress": 40, "target": 50, "shown": "40 of 50 seeds"})
-
-    def test_the_seeds_of_several_categories_count_25_each(self):
-        held, kinds = all_filled(seeding_days=1, seeders=100)
-        more, names = filled("Ebook", 20, prefix="x", seeding_days=1, seeders=100)
-        kinds.update(names)
-        quests = summary_of(FakeQBittorrent(held + more), empty_state(kinds=kinds), indexers=[])["quests"]
-        self.assertEqual(quests["name"], "Seed count 150")
-        self.assertEqual(quests["progress"], 145)
-
-    def test_long_seeding_and_a_good_note_count_for_their_quests(self):
-        rare = [torrent(f"r{i}", size_gb=0.1, seeding_days=1, seeders=3) for i in range(45)]
-        old = [torrent(f"o{i}", size_gb=0.1, seeding_days=8, seeders=100) for i in range(4)]
-        quests = summary_of(FakeQBittorrent(rare + old), indexers=[])["quests"]
-        self.assertEqual(quests, {
-            "name": "50 torrents at 62.5 % of their best note", "progress": 49, "target": 50, "shown": "49 of 50 torrents",
-        })
-
-    def test_every_quest_reached_shows_none_left(self):
-        held = [torrent(f"t{i}", size_gb=0.01, seeding_days=400, seeders=3) for i in range(600)]
-        names = ["Films & Vidéos"] * 500 + [n for n in QUEST_CATEGORIES if n != "Films & Vidéos" for _ in range(25)]
-        kinds = {f"t{i}": name for i, name in enumerate(names)}
-        quests = summary_of(FakeQBittorrent(held), empty_state(kinds=kinds), indexers=[], farm_size=1000 * GB)["quests"]
-        self.assertEqual(quests, {"name": "every Quest reached", "progress": None, "target": None, "shown": "done"})
 
     def test_the_time_of_the_summary_is_an_iso_date(self):
         self.assertEqual(summary_of(FakeQBittorrent())["updated_at"], "2027-01-15T08:00:00+00:00")
@@ -1154,25 +1117,25 @@ class Board(unittest.TestCase):
             torrent("public", size_gb=4, tracker="http://nyaa.tracker.wf/announce", seeding_days=1),
             torrent("movie", category="movies", size_gb=200),
         ])
-        state = empty_state(sources={"twin1": "twin", "twin2": "twin", "hunt": "volume-hunt"})
+        state = empty_state(sources={"twin1": "free", "twin2": "free", "hunt": "volume-hunt"})
         farm = board_of_run(qbt, state)["farm"]
         self.assertEqual(farm, {
             "budget_gb": 100,
-            "slices": [{"source": "public", "gb": 4}, {"source": "twin", "gb": 3}, {"source": "volume-hunt", "gb": 0.5}],
+            "slices": [{"source": "public", "gb": 4}, {"source": "free", "gb": 3}, {"source": "volume-hunt", "gb": 0.5}],
         })
 
-    def test_the_rankings_go_by_ratio_per_day_of_seeding(self):
-        held = [
-            torrent("a", size_gb=1, uploaded_gb=10), torrent("b", size_gb=1, uploaded_gb=6, seeding_days=2),
-            torrent("c", size_gb=2, uploaded_gb=8), torrent("d", size_gb=1, uploaded_gb=2),
-            torrent("big", size_gb=20, uploaded_gb=3), torrent("e", size_gb=1, uploaded_gb=1, seeding_days=20),
-            torrent("loading", size_gb=1, progress=0.5), torrent("fresh", size_gb=1, seeding_days=0.5),
-        ]
-        board = board_of_run(FakeQBittorrent(held), empty_state(sources={"b": "twin"}))
-        self.assertEqual([c["name"] for c in board["best"]], ["Torrent b", "Torrent a", "Torrent c"])
-        self.assertEqual([c["name"] for c in board["worst"]], ["Torrent big", "Torrent e", "Torrent d"])
-        self.assertEqual(board["best"][0], {
-            "name": "Torrent b", "source": "twin", "ratio": 6.0, "per_day": 3.0, "note": 1.0, "size_gb": 1, "days": 2,
+    def test_the_board_sums_the_ledger_by_source_most_uploaded_first(self):
+        qbt = FakeQBittorrent([
+            torrent("paid", downloaded_gb=4, uploaded_gb=2),
+            torrent("free", downloaded_gb=0, uploaded_gb=5),
+            torrent("library", category="movies", seeders=100, downloaded_gb=10, uploaded_gb=1),
+        ])
+        state = empty_state(sources={"paid": "paid", "free": "free", "library": "library"})
+        sources = board_of_run(qbt, state)["sources"]
+        self.assertEqual([s["source"] for s in sources], ["free", "paid", "library"])
+        self.assertEqual(sources[1], {
+            "source": "paid", "torrents": 1, "downloaded_gb": 4, "uploaded_gb": 2, "ratio": 0.5,
+            "week_downloaded_gb": 0, "week_uploaded_gb": 0, "week_ratio": None, "farm_days": 0.0,
         })
 
 
@@ -1223,9 +1186,13 @@ BOARD = {
         challenge("diversity", (25, 50, 75, 100, 125), 25),
         challenge("category", (50, 100, 250, 500), 60),
     ],
-    "farm": {"budget_gb": 100, "slices": [{"source": "twin", "gb": 30.5}, {"source": "volume-hunt", "gb": 9.5}]},
-    "best": [{"name": "Frieren 01", "source": "twin", "ratio": 2.4, "per_day": 0.12, "note": 1.35, "size_gb": 1.4, "days": 20}],
-    "worst": [{"name": "Old book", "source": "volume-hunt", "ratio": 0.06, "per_day": 0.002, "note": 1.1, "size_gb": 0.9, "days": 30}],
+    "farm": {"budget_gb": 100, "slices": [{"source": "free", "gb": 30.5}, {"source": "volume-hunt", "gb": 9.5}]},
+    "sources": [
+        {"source": "free", "torrents": 12, "downloaded_gb": 0, "uploaded_gb": 80.5, "ratio": None,
+         "week_downloaded_gb": 0, "week_uploaded_gb": 20.25, "week_ratio": None, "farm_days": 40.5},
+        {"source": "paid", "torrents": 3, "downloaded_gb": 10, "uploaded_gb": 15, "ratio": 1.5,
+         "week_downloaded_gb": 2, "week_uploaded_gb": 3, "week_ratio": 1.5, "farm_days": 9},
+    ],
 }
 
 
@@ -1267,7 +1234,7 @@ class Page(unittest.TestCase):
         self.assertNotRegex(body, r"b(src|href)=")
         self.assertIn("@media (max-width: 640px)", body)
 
-    def test_the_second_part_shows_each_step_the_farm_disk_and_the_rankings(self):
+    def test_the_second_part_shows_each_step_the_farm_disk_and_the_earnings_by_source(self):
         _, body = self.page(BOARD, "?part=2")
         self.assertEqual(
             re.findall(r"<h3>([^<]+)</h3>", body),
@@ -1284,12 +1251,13 @@ class Page(unittest.TestCase):
         self.assertIn("40 %", body)
         self.assertIn(">Free<", body)
         self.assertIn(">60.0 GB<", body)
-        self.assertIn("Frieren 01", body)
-        self.assertIn(">0.120 a day<", body)
-        self.assertIn("twin, ratio 2.40, note 1.35, 1.40 GB, 20 days", body)
-        self.assertIn(">Best ratio per day<", body)
-        self.assertIn(">Lowest ratio per day<", body)
-        self.assertIn("Old book", body)
+        self.assertIn(">Earned by Source<", body)
+        self.assertIn("<th>Source</th><th>Torrents</th><th>Down</th><th>Up</th><th>Ratio</th>", body)
+        self.assertIn("free</td><td>12</td><td>0.0 GB</td><td>80.5 GB</td><td>-</td>", body)
+        self.assertIn(">7 days: 2.0 GB down, 3.0 GB up, ratio 1.50, 9.0 days in the Farm<", body)
+        self.assertIn("<td>Total</td><td>15</td><td>10.0 GB</td><td>95.5 GB</td><td>9.55</td>", body)
+        self.assertIn(">7 days: 2.0 GB down, 23.2 GB up, ratio 11.62, 49.5 days in the Farm<", body)
+        self.assertNotIn("a day", body)
         self.assertNotIn('class="kpis"', body)
 
     def test_the_french_page_speaks_french(self):
@@ -1300,9 +1268,9 @@ class Page(unittest.TestCase):
         self.assertIn(">20,0 Go<", body)
         self.assertIn("<h3>Volume de seed</h3>", body)
         self.assertIn(">Badge Prime<", body)
-        self.assertIn(">Plus faible ratio par jour<", body)
-        self.assertIn(">0,120 par jour<", body)
-        self.assertIn(">Même release prise sur un tracker public, gratuite sur C411<", body)
+        self.assertIn(">Gains par Source<", body)
+        self.assertIn(">7 jours : 2,0 Go reçus, 3,0 Go envoyés, ratio 1,50, 9,0 jours dans la Farm<", body)
+        self.assertIn(">Aucun download compté sur C411 : Twin, freeleech ou cross-seed de la Library<", body)
 
     def test_the_time_axis_always_spans_30_days(self):
         _, body = self.page({**BOARD, "history": [entry(30)]}, "?part=1")
