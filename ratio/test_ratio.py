@@ -1391,7 +1391,10 @@ class Setup(unittest.TestCase):
     def test_categories_and_the_cross_seed_hook_are_set(self):
         qbt = FakeQBittorrent()
         qbt.cats = {}
-        qbt.prefs = {"max_ratio_enabled": True, "max_seeding_time_enabled": True, "max_inactive_seeding_time_enabled": True}
+        qbt.prefs = {
+            "max_ratio_enabled": True, "max_seeding_time_enabled": True, "max_inactive_seeding_time_enabled": True,
+            "queueing_enabled": True,
+        }
         run(qbt, cross_seed_key="secret")
         self.assertEqual(qbt.made, {
             "movies": "/data/torrents/movies", "shows": "/data/torrents/shows", "music": "/data/torrents/music",
@@ -1400,6 +1403,7 @@ class Setup(unittest.TestCase):
         self.assertFalse(qbt.prefs["max_ratio_enabled"])
         self.assertFalse(qbt.prefs["max_seeding_time_enabled"])
         self.assertFalse(qbt.prefs["max_inactive_seeding_time_enabled"])
+        self.assertFalse(qbt.prefs["queueing_enabled"])
         self.assertTrue(qbt.prefs["autorun_enabled"])
         self.assertIn('X-Api-Key: secret', qbt.prefs["autorun_program"])
         self.assertIn("infoHash=%I", qbt.prefs["autorun_program"])
