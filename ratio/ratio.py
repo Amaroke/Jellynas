@@ -74,6 +74,7 @@ FILE_KINDS = {
     "Imprimante 3D": {"stl", "3mf", "obj", "gcode", "step", "stp"},
 }
 KINDS = {"movies": FILMS, "shows": FILMS, "music": "Audio", "books": "Ebook"}
+TWIN_ATTEMPTS = 3
 TORZNAB = "{http://torznab.com/schemas/2015/feed}attr"
 
 
@@ -202,9 +203,10 @@ class QBittorrent:
 
 
 class Throttled(Exception):
-    def __init__(self, retry_after):
+    def __init__(self, retry_after, disabled=False):
         super().__init__(f"Prowlarr asks to wait {retry_after} seconds")
         self.retry_after = retry_after
+        self.disabled = disabled
 
 
 def wait_of(header):
@@ -286,7 +288,11 @@ class Prowlarr:
                 return response.read()
         except urllib.error.HTTPError as error:
             if error.code == 429:
-                raise Throttled(wait_of(error.headers.get("Retry-After"))) from error
+                try:
+                    disabled = b"disabled" in error.read()
+                except OSError:
+                    disabled = False
+                raise Throttled(wait_of(error.headers.get("Retry-After")), disabled) from error
             raise
         finally:
             self.last = time.monotonic()
@@ -442,6 +448,7 @@ def load_state(path):
         "held": state.get("held"),
         "backoff_until": state.get("backoff_until", 0),
         "stuck": state.get("stuck", {}),
+        "given_up": state.get("given_up", {}),
         "restore": state.get("restore", {}),
         "kinds": state.get("kinds", {}),
         "hunt_at": state.get("hunt_at", {}),
@@ -574,6 +581,8 @@ def record(state, torrents, settings, now):
         del state["hunted"][infohash]
     for infohash in [h for h in state["free"] if h not in torrents and h in state["transfers"]]:
         del state["free"][infohash]
+    for infohash in [h for h, at in state["given_up"].items() if at < now - WEEK]:
+        del state["given_up"][infohash]
     for infohash in [h for h, at in state["checked"].items() if at < now - 2 * DAY]:
         del state["checked"][infohash]
     record_sources(state, torrents, settings)
@@ -1342,13 +1351,28 @@ def seed_twins(qbt, prowlarr, settings, state, torrents, now):
         attempts, next_at = state["stuck"].get(twin, [0, 0])
         if now < next_at:
             continue
+        added, refused = False, False
         try:
-            qbt.add(prowlarr.torrent({"page": "", "link": link}), FARM, public["save_path"])
+            try:
+                torrent_file = prowlarr.torrent({"page": "", "link": link})
+            except urllib.error.HTTPError as error:
+                refused = 400 <= error.code < 500
+                raise
+            qbt.add(torrent_file, FARM, public["save_path"])
+            added = True
             qbt.match_files(original, qbt.files(twin))
         except Throttled:
             raise
         except Exception as error:
-            wait = min(settings["twin_seed_after"] * 2**attempts, DAY)
+            if refused or attempts + 1 >= TWIN_ATTEMPTS:
+                if added:
+                    qbt.delete([original], delete_files=False)
+                del state["twins"][twin]
+                state["stuck"].pop(twin, None)
+                state["given_up"][original] = now
+                print(f"Gave up the tracker copy of {public['name']}, its public copy seeds alone until it leaves: {error}")
+                continue
+            wait = settings["twin_seed_after"] * 2**attempts
             state["stuck"][twin] = [attempts + 1, now + wait]
             print(f"Cannot seed the tracker copy of {public['name']}, next try in {wait // 60:g} minutes: {error}")
             continue
@@ -1565,7 +1589,8 @@ def use_prowlarr(state, now, step, always=False):
         step()
     except Throttled as throttled:
         state["backoff_until"] = now + throttled.retry_after
-        print(f"Prowlarr asks to slow down, ratio leaves it alone for {throttled.retry_after // 60:g} minutes")
+        why = "has disabled the indexer after failures" if throttled.disabled else "asks to slow down"
+        print(f"Prowlarr {why}, ratio leaves it alone for {throttled.retry_after // 60:g} minutes")
 
 
 def take(qbt, state, budget, known, release, torrent, source, via):
@@ -1688,7 +1713,7 @@ def grab(qbt, prowlarr, settings, state, torrents, account, now):
     }
     if budget["slots"] <= 0 or not settings["indexers"]:
         return
-    known = set(torrents) | twin_copies(state)
+    known = set(torrents) | twin_copies(state) | set(state["given_up"])
     releases = fetch(settings, lambda indexer: prowlarr.newest(indexer, now))
     grab_twins(qbt, prowlarr, settings, state, releases, known, budget, now)
     grab_free(qbt, prowlarr, settings, state, releases, known, budget, now)
@@ -1707,11 +1732,11 @@ def run_once(qbt, prowlarr, c411, settings, state, now):
     adopt(qbt, settings, state, torrents)
     migrate(qbt, settings, torrents)
     drop_twins(qbt, state, torrents)
-    use_prowlarr(state, now, lambda: seed_twins(qbt, prowlarr, settings, state, torrents, now))
     clean_public(qbt, settings, state, torrents)
     clean_farm(qbt, settings, state, torrents)
     tag(qbt, settings, state, torrents)
     use_prowlarr(state, now, lambda: grab(qbt, prowlarr, settings, state, torrents, account, now))
+    use_prowlarr(state, now, lambda: seed_twins(qbt, prowlarr, settings, state, torrents, now))
     torrents = {t["hash"].lower(): {**t, "hash": t["hash"].lower()} for t in qbt.torrents()}
     record_day(state, settings, torrents, account, now)
     return {**summary(state, torrents, settings, account, now), "board": board_of(state, settings, torrents)}

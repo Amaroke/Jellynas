@@ -150,7 +150,7 @@ def torrent_file(name, lengths):
 
 
 class FakeProwlarr:
-    def __init__(self, newest=(), twins=(), files=None, throttle=None, broken=(), hunt=None):
+    def __init__(self, newest=(), twins=(), files=None, throttle=None, broken=(), hunt=None, refused=(), disabled=False):
         self.feed = list(newest)
         self.hunt = hunt or {}
         self.hunts = []
@@ -158,6 +158,9 @@ class FakeProwlarr:
         self.files = files or {}
         self.throttle = throttle
         self.broken = set(broken)
+        self.refused = set(refused)
+        self.disabled = disabled
+        self.log = []
         self.queries = []
         self.reads = 0
         self.fetched = []
@@ -166,8 +169,9 @@ class FakeProwlarr:
 
     def newest(self, indexer, now):
         self.reads += 1
+        self.log.append("newest")
         if self.throttle:
-            raise Throttled(self.throttle)
+            raise Throttled(self.throttle, self.disabled)
         return list(self.feed)
 
     def category(self, indexer, cats, now):
@@ -181,6 +185,9 @@ class FakeProwlarr:
     def torrent(self, release):
         infohash = release.get("infohash") or release["link"].rsplit("/", 1)[1].removesuffix(".torrent")
         self.fetched.append(infohash)
+        self.log.append(f"torrent {infohash}")
+        if infohash in self.refused:
+            raise urllib.error.HTTPError(release["link"], 403, "Forbidden", {}, None)
         if infohash in self.broken:
             raise RuntimeError("the tracker refused the torrent file")
         return torrent_file(infohash, self.files.get(infohash, [7]))
@@ -268,7 +275,7 @@ def empty_state(**changes):
     return {
         "transfers": {}, "hunted": {}, "twins": {}, "free": {}, "checked": {}, "paused": False,
         "sources": {}, "history": {}, "zen": {}, "report": {}, "account": [], "held": None, "backoff_until": 0,
-        "stuck": {}, "restore": {}, "kinds": {}, "hunt_at": {}, "daily": [], **changes,
+        "stuck": {}, "restore": {}, "kinds": {}, "hunt_at": {}, "daily": [], "given_up": {}, **changes,
     }
 
 
@@ -379,6 +386,68 @@ class Twins(unittest.TestCase):
         self.assertEqual(prowlarr.fetched, ["hungry", "hungry"])
         run(qbt, prowlarr, state, now=NOW + 3 * 3600)
         self.assertEqual(prowlarr.fetched, ["hungry", "hungry", "hungry"])
+
+    def test_a_tracker_copy_is_given_up_after_its_third_failure(self):
+        qbt = FakeQBittorrent([torrent("public", tracker="http://nyaa.tracker.wf/announce")])
+        state = empty_state(twins={"public": ["hungry", "ratio", NOW - 3600, "http://prowlarr/hungry.torrent"]})
+        prowlarr = FakeProwlarr(broken={"hungry"})
+        for hours in range(6):
+            run(qbt, prowlarr, state, now=NOW + 3600 * hours)
+        self.assertEqual(prowlarr.fetched, ["hungry"] * 3)
+        self.assertEqual((state["twins"], state["stuck"]), ({}, {}))
+        self.assertEqual(qbt.deleted, [])
+
+    def test_a_tracker_copy_given_up_is_not_grabbed_again_for_a_week(self):
+        qbt = FakeQBittorrent([torrent("public", tracker="http://nyaa.tracker.wf/announce")])
+        state = empty_state(twins={"public": ["hungry", "ratio", NOW - 3600, "http://prowlarr/hungry.torrent"]})
+        run(qbt, FakeProwlarr(refused={"hungry"}), state)
+        prowlarr = FakeProwlarr([release("hungry", free=True)])
+        run(qbt, prowlarr, state, now=NOW + DAY)
+        self.assertEqual(qbt.added, [])
+        run(qbt, prowlarr, state, now=NOW + 8 * DAY)
+        self.assertEqual(qbt.added, [("hungry", "farm")])
+
+    def test_a_qbittorrent_refusal_is_not_a_tracker_refusal(self):
+        qbt = FakeQBittorrent([torrent("public", tracker="http://nyaa.tracker.wf/announce")])
+
+        def conflict(infohash, wanted):
+            raise urllib.error.HTTPError("http://gluetun:8080", 409, "Conflict", {}, None)
+
+        qbt.match_files = conflict
+        state = empty_state(twins={"public": ["hungry", "ratio", NOW - 3600, "http://prowlarr/hungry.torrent"]})
+        run(qbt, FakeProwlarr(), state)
+        self.assertIn("public", state["twins"])
+        self.assertEqual(state["stuck"]["public"][0], 1)
+
+    def test_a_tracker_copy_given_up_after_its_add_leaves_no_stopped_copy(self):
+        qbt = FakeQBittorrent([torrent("public", tracker="http://nyaa.tracker.wf/announce")])
+
+        def mismatch(infohash, wanted):
+            raise RuntimeError("the files differ")
+
+        qbt.match_files = mismatch
+        state = empty_state(twins={"public": ["hungry", "ratio", NOW - 3600, "http://prowlarr/hungry.torrent"]})
+        for hours in range(6):
+            run(qbt, FakeProwlarr(), state, now=NOW + 3600 * hours)
+        self.assertEqual(state["twins"], {})
+        self.assertEqual(qbt.deleted, ["hungry"])
+        self.assertEqual(qbt.kept, ["hungry"])
+
+    def test_a_tracker_copy_the_tracker_refuses_is_given_up_at_once(self):
+        qbt = FakeQBittorrent([torrent("public", tracker="http://nyaa.tracker.wf/announce")])
+        state = empty_state(twins={"public": ["hungry", "ratio", NOW - 3600, "http://prowlarr/hungry.torrent"]})
+        prowlarr = FakeProwlarr(refused={"hungry"})
+        run(qbt, prowlarr, state)
+        run(qbt, prowlarr, state, now=NOW + DAY)
+        self.assertEqual(prowlarr.fetched, ["hungry"])
+        self.assertEqual(state["twins"], {})
+
+    def test_the_tracker_copies_wait_for_the_search_of_the_run(self):
+        qbt = FakeQBittorrent([torrent("public", tracker="http://nyaa.tracker.wf/announce")])
+        state = empty_state(twins={"public": ["hungry", "ratio", NOW - 3600, "http://prowlarr/hungry.torrent"]})
+        prowlarr = FakeProwlarr()
+        run(qbt, prowlarr, state)
+        self.assertEqual(prowlarr.log[:2], ["newest", "torrent hungry"])
 
     def test_a_tracker_copy_left_stopped_after_its_check_is_started(self):
         qbt = FakeQBittorrent([
@@ -1496,6 +1565,9 @@ class FakeProwlarrServer(http.server.BaseHTTPRequestHandler):
         FakeProwlarrServer.calls.append(("GET", self.path, self.headers.get("X-Api-Key"), None))
         if self.path.startswith("/3/api"):
             self.answer(429, b"", {"Retry-After": "1200"})
+        elif self.path.startswith("/5/api"):
+            body = b'<error code="429" description="Indexer is disabled till 11/08/2026 15:39:18 due to recent failures." />'
+            self.answer(429, body, {"Retry-After": "6614"})
         elif self.path == "/api/v1/appprofile":
             self.answer(200, json.dumps(FakeProwlarrServer.profiles).encode())
         elif self.path == "/api/v1/indexer/3":
@@ -1570,6 +1642,13 @@ class RealProwlarr(unittest.TestCase):
         with self.assertRaises(Throttled) as throttled:
             self.prowlarr.newest("3", NOW)
         self.assertEqual(throttled.exception.retry_after, 1200)
+        self.assertFalse(throttled.exception.disabled)
+
+    def test_a_429_of_an_indexer_disabled_after_failures_says_so(self):
+        with self.assertRaises(Throttled) as throttled:
+            self.prowlarr.newest("5", NOW)
+        self.assertEqual(throttled.exception.retry_after, 6614)
+        self.assertTrue(throttled.exception.disabled)
 
 
 PROFILE = {
