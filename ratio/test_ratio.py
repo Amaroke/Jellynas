@@ -24,6 +24,7 @@ from ratio import (
     bdecode,
     is_rare,
     load_state,
+    nightly_zen,
     parse_torznab,
     run_once,
     save_state,
@@ -191,11 +192,12 @@ class FakeProwlarr:
 
 
 class FakeC411:
-    def __init__(self, uploaded_gb=60, downloaded_gb=30, zen=25, broken=False, earned=None):
+    def __init__(self, uploaded_gb=60, downloaded_gb=30, zen=25, broken=False, earned=None, actual_gb=5):
         self.uploaded = uploaded_gb * GB
         self.downloaded = downloaded_gb * GB
         self.zen = zen
         self.earned = zen if earned is None else earned
+        self.actual = actual_gb * GB
         self.broken = broken
         self.reads = 0
 
@@ -203,7 +205,8 @@ class FakeC411:
         self.reads += 1
         if self.broken:
             raise RuntimeError("Site is currently restricted")
-        return {"uploaded": self.uploaded, "downloaded": self.downloaded, "zen": self.zen, "earned": self.earned}
+        return {"uploaded": self.uploaded, "downloaded": self.downloaded, "zen": self.zen, "earned": self.earned,
+                "actual": self.actual}
 
 
 def under_floor():
@@ -265,7 +268,7 @@ def empty_state(**changes):
     return {
         "transfers": {}, "hunted": {}, "twins": {}, "free": {}, "checked": {}, "paused": False,
         "sources": {}, "history": {}, "zen": {}, "report": {}, "account": [], "held": None, "backoff_until": 0,
-        "stuck": {}, "restore": {}, "kinds": {}, "hunt_at": {}, "daily": [], **changes,
+        "stuck": {}, "restore": {}, "kinds": {}, "hunt_at": {}, "daily": [], "scores": {}, **changes,
     }
 
 
@@ -1015,8 +1018,8 @@ class Summary(unittest.TestCase):
         })
 
     def test_every_quest_reached_shows_none_left(self):
-        held = [torrent(f"t{i}", size_gb=0.01, seeding_days=200, seeders=3) for i in range(300)]
-        names = ["Ebook"] * 100 + [n for n in QUEST_CATEGORIES if n != "Ebook" for _ in range(50)]
+        held = [torrent(f"t{i}", size_gb=0.01, seeding_days=400, seeders=3) for i in range(600)]
+        names = ["Films & Vidéos"] * 500 + [n for n in QUEST_CATEGORIES if n != "Films & Vidéos" for _ in range(25)]
         kinds = {f"t{i}": name for i, name in enumerate(names)}
         quests = summary_of(FakeQBittorrent(held), empty_state(kinds=kinds), indexers=[], farm_size=1000 * GB)["quests"]
         self.assertEqual(quests, {"name": "every Quest reached", "progress": None, "target": None, "shown": "done"})
@@ -1030,10 +1033,8 @@ def day(now):
 
 
 class History(unittest.TestCase):
-    def test_each_day_keeps_one_entry_of_the_account_the_seeds_and_the_sources(self):
-        qbt = FakeQBittorrent([
-            torrent("movie", category="movies", size_gb=2, seeders=100, uploaded_gb=3, downloaded_gb=2),
-        ])
+    def test_each_day_keeps_one_entry_of_the_account_and_the_seed_count(self):
+        qbt = FakeQBittorrent([torrent("movie", category="movies", size_gb=2, seeders=100)])
         state = empty_state()
         run(qbt, state=state, c411=FakeC411(zen=20))
         run(qbt, state=state, now=NOW + 600, c411=FakeC411(zen=21))
@@ -1042,13 +1043,11 @@ class History(unittest.TestCase):
         self.assertEqual([e["day"] for e in state["daily"]], [day(NOW), day(NOW + DAY)])
         self.assertEqual(state["daily"][0]["zen"], 21)
         entry = state["daily"][1]
-        self.assertEqual(entry["ratio"], 2.0)
-        self.assertEqual(entry["floor"], 1.2)
-        self.assertEqual(entry["zen"], 22)
-        self.assertEqual(entry["seeds"], 1)
-        self.assertEqual(list(entry["sources"]), ["library"])
-        self.assertEqual(entry["sources"]["library"]["uploaded_gb"], 3)
-        self.assertAlmostEqual(entry["sources"]["library"]["zen"], 0.089, places=3)
+        self.assertEqual(
+            {k: entry[k] for k in ("ratio", "floor", "left_gb", "uploaded_gb", "actual_gb", "downloaded_gb", "zen", "seeds")},
+            {"ratio": 2.0, "floor": 1.2, "left_gb": 20.0, "uploaded_gb": 60, "actual_gb": 5, "downloaded_gb": 30,
+             "zen": 22, "seeds": 1},
+        )
 
     def test_the_zen_paid_each_night_is_what_the_zen_earned_grew_by(self):
         state = empty_state()
@@ -1081,6 +1080,14 @@ class History(unittest.TestCase):
         self.assertEqual(state["daily"][1]["ratio"], None)
         self.assertEqual(state["daily"][1]["zen_paid"], None)
 
+    def test_the_days_before_the_first_run_come_from_the_account_readings(self):
+        state = empty_state(account=[[NOW - 3 * DAY, 50 * GB, 25 * GB, 10], [NOW - 2 * DAY, 54 * GB, 27 * GB, 14]])
+        run(FakeQBittorrent(), state=state)
+        self.assertEqual([e["day"] for e in state["daily"]], [day(NOW - 3 * DAY), day(NOW - 2 * DAY), day(NOW)])
+        first = state["daily"][0]
+        self.assertEqual((first["ratio"], first["uploaded_gb"], first["downloaded_gb"], first["zen"]), (2.0, 50, 25, 10))
+        self.assertEqual(first["zen_paid"], None)
+
     def test_the_history_survives_a_restart_and_keeps_the_last_30_days(self):
         state = empty_state()
         with tempfile.TemporaryDirectory() as folder, contextlib.redirect_stdout(io.StringIO()):
@@ -1095,87 +1102,172 @@ class History(unittest.TestCase):
         self.assertEqual(days[-1], day(NOW + 39 * DAY))
 
 
+def board_of_run(qbt, state=None, now=NOW, **changes):
+    return summary_of(qbt, state, now, indexers=[], **changes)["board"]
+
+
+class Board(unittest.TestCase):
+    def test_each_challenge_lists_its_steps_with_the_progress_of_the_farm(self):
+        held, kinds = filled("Films & Vidéos", 112, seeding_days=40, seeders=100)
+        challenges = {c["key"]: c for c in board_of_run(FakeQBittorrent(held), empty_state(kinds=kinds))["challenges"]}
+        self.assertEqual(list(challenges), ["seed_volume", "contribution", "duration", "diversity", "category"])
+        steps = {key: [(s["target"], s["progress"]) for s in c["steps"]] for key, c in challenges.items()}
+        self.assertEqual(steps["seed_volume"], [(n, 112) for n in (100, 150, 200, 250, 300)])
+        self.assertEqual(steps["contribution"], [(50, 112), (100, 0), (150, 0), (200, 0), (250, 0), (300, 0)])
+        self.assertEqual(steps["duration"], [(25, 112), (100, 112), (150, 0), (250, 0), (300, 0)])
+        self.assertEqual(steps["diversity"], [(25, 25), (50, 25), (75, 25), (100, 25), (125, 25)])
+        self.assertEqual(steps["category"], [(50, 112), (100, 112), (250, 112), (500, 112)])
+        self.assertEqual([c["max"] for c in challenges.values()], [True, True, True, False, False])
+
+    def test_the_farm_disk_is_split_by_source(self):
+        qbt = FakeQBittorrent([
+            torrent("twin1", size_gb=2), torrent("twin2", size_gb=1), torrent("hunt", size_gb=0.5),
+            torrent("public", size_gb=4, tracker="http://nyaa.tracker.wf/announce", seeding_days=1),
+            torrent("movie", category="movies", size_gb=200),
+        ])
+        state = empty_state(sources={"twin1": "twin", "twin2": "twin", "hunt": "volume-hunt"})
+        farm = board_of_run(qbt, state)["farm"]
+        self.assertEqual(farm, {
+            "budget_gb": 100,
+            "slices": [{"source": "public", "gb": 4}, {"source": "twin", "gb": 3}, {"source": "volume-hunt", "gb": 0.5}],
+        })
+
+    def test_the_zen_of_a_torrent_adds_up_once_a_night(self):
+        t = torrent("kept", size_gb=1, seeders=100)
+        state = empty_state()
+        board_of_run(FakeQBittorrent([t]), state)
+        board_of_run(FakeQBittorrent([t]), state, NOW + 600)
+        board_of_run(FakeQBittorrent([t]), state, NOW + DAY)
+        self.assertAlmostEqual(state["scores"]["kept"][0], 2 * nightly_zen(t))
+        board_of_run(FakeQBittorrent(), state, NOW + 2 * DAY)
+        self.assertEqual(state["scores"], {})
+
+    def test_the_best_earned_the_most_and_the_worst_earn_the_least_for_their_size(self):
+        held = [
+            torrent("a", size_gb=1, uploaded_gb=10), torrent("b", size_gb=1, uploaded_gb=6),
+            torrent("c", size_gb=1, uploaded_gb=4), torrent("d", size_gb=1, uploaded_gb=2),
+            torrent("big", size_gb=20, uploaded_gb=3), torrent("e", size_gb=1, uploaded_gb=1),
+            torrent("loading", size_gb=1, progress=0.5),
+        ]
+        board = board_of_run(FakeQBittorrent(held), empty_state(sources={"a": "twin"}))
+        self.assertEqual([c["name"] for c in board["best"]], ["Torrent a", "Torrent b", "Torrent c"])
+        self.assertEqual([c["name"] for c in board["worst"]], ["Torrent big", "Torrent e", "Torrent d"])
+        best = board["best"][0]
+        self.assertEqual((best["source"], best["size_gb"], best["days"]), ("twin", 1, 10))
+        self.assertGreater(best["score_gb"], 10)
+
+
 def entry(n, **changes):
     return {
-        "day": f"2027-01-{n:02d}", "ratio": 2.0, "floor": 1.2, "zen": 25, "earned": 25, "zen_paid": 3, "seeds": 112,
-        "sources": {"volume-hunt": {"uploaded_gb": n, "zen": 0.5}, "twin": {"uploaded_gb": 2 * n, "zen": 0.3}},
-        **changes,
+        "day": f"2027-01-{n:02d}", "floor": 1.2, "ratio": 2.0, "left_gb": 20.0, "uploaded_gb": 60.0, "actual_gb": 5.0,
+        "downloaded_gb": 30.0, "zen": 25, "earned": 25, "zen_paid": 3, "seeds": 112, **changes,
     }
 
 
-def sections(body):
-    return {re.search(r"<h2>([^<]+)</h2>", part).group(1): part for part in body.split("<section")[1:]}
+def challenge(key, targets, progress, has_max=False):
+    return {"key": key, "steps": [{"target": t, "progress": progress} for t in targets], "max": has_max}
 
 
-class Graphs(unittest.TestCase):
-    def page(self, history, path="/graphs"):
-        server = serve({"history": history}, port=0)
+BOARD = {
+    "history": [entry(n) for n in range(1, 31)],
+    "challenges": [
+        challenge("seed_volume", (100, 150, 200, 250, 300), 112, True),
+        challenge("contribution", (50, 100, 150, 200, 250, 300), 40, True),
+        challenge("duration", (25, 100, 150, 250, 300), 30, True),
+        challenge("diversity", (25, 50, 75, 100, 125), 25),
+        challenge("category", (50, 100, 250, 500), 60),
+    ],
+    "farm": {"budget_gb": 100, "slices": [{"source": "twin", "gb": 30.5}, {"source": "volume-hunt", "gb": 9.5}]},
+    "best": [{"name": "Frieren 01", "source": "twin", "score_gb": 12.4, "rate": 0.5, "size_gb": 1.4, "days": 20}],
+    "worst": [{"name": "Old book", "source": "volume-hunt", "score_gb": 0.1, "rate": 0.002, "size_gb": 0.9, "days": 30}],
+}
+
+
+def items(body, css):
+    return re.findall(rf'<li class="{css}"><span class="step">([^<]+)</span>', body)
+
+
+class Page(unittest.TestCase):
+    def page(self, board, query=""):
+        server = serve({"board": board}, port=0)
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}{path}") as response:
+            with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/graphs{query}") as response:
                 return response.headers, response.read().decode()
         finally:
             server.shutdown()
             server.server_close()
 
-    def test_the_page_draws_four_graphs_in_inline_svg_without_any_script(self):
-        headers, body = self.page([entry(n) for n in range(1, 31)])
+    def test_the_first_part_shows_the_big_figures_and_three_curves_without_any_script(self):
+        headers, body = self.page(BOARD, "?part=1")
         self.assertTrue(headers["Content-Type"].startswith("text/html"))
         self.assertIn("default-src 'none'", headers["Content-Security-Policy"])
         self.assertNotIn("<script", body)
         self.assertNotRegex(body, r"\b(src|href)=")
-        self.assertEqual(list(sections(body)), ["Account ratio", "Zen", "Seed count", "Sources"])
-        for part in sections(body).values():
-            self.assertEqual(part.count("<svg"), 1)
+        values = re.findall(r'<span class="value">([^<]+)</span>', body)
+        self.assertEqual(values, ["2.00", "20.0 GB", "60.0 GB", "30.0 GB", "25"])
+        self.assertIn("5.0 GB real", body)
+        self.assertIn("+3 last night", body)
+        self.assertEqual(re.findall(r"<figcaption>([^<]+)", body), ["Account ratio", "Zen", "Upload and download"])
+        self.assertIn(">floor 1.2<", body)
+        self.assertNotIn('class="quests"', body)
 
-    def test_the_account_ratio_draws_the_floor(self):
-        _, body = self.page([entry(n) for n in range(1, 31)])
-        self.assertIn(">floor 1.2<", sections(body)["Account ratio"])
+    def test_the_second_part_shows_each_step_the_farm_disk_and_the_rankings(self):
+        _, body = self.page(BOARD, "?part=2")
+        self.assertEqual(
+            re.findall(r"<h3>([^<]+)</h3>", body),
+            ["Seed volume", "Minimum contribution", "Seed duration", "Category diversity", "Category volume"],
+        )
+        self.assertEqual(items(body, "done")[:1], ["100 seeds"])
+        self.assertIn("150 seeds", items(body, "next"))
+        self.assertIn("112 / 150", body)
+        self.assertIn("300 seeds", items(body, "later"))
+        self.assertIn("Every step", items(body, "later"))
+        self.assertIn(">150 Zen<", body)
+        self.assertIn(">Prime badge<", body)
+        self.assertEqual(len(re.findall(r'<li class="(?:done|next|later)">', body)), 6 + 7 + 6 + 5 + 4)
+        self.assertIn("40 %", body)
+        self.assertIn(">Free<", body)
+        self.assertIn(">60.0 GB<", body)
+        self.assertIn("Frieren 01", body)
+        self.assertIn("12.4 GB earned", body)
+        self.assertIn("Old book", body)
+        self.assertNotIn('class="kpis"', body)
 
-    def test_the_zen_graph_shows_what_was_paid_each_night_and_the_balance(self):
-        _, body = self.page([entry(1, zen_paid=None), entry(2, zen=28, zen_paid=3)])
-        zen = sections(body)["Zen"]
-        self.assertEqual(zen.count("<rect class=\"paid\""), 1)
-        self.assertIn("class=\"balance\"", zen)
+    def test_the_french_page_speaks_french(self):
+        _, body = self.page(BOARD, "?lang=fr")
+        self.assertIn('<html lang="fr">', body)
+        self.assertIn(">Ratio du compte<", body)
+        self.assertIn(">plancher 1,2<", body)
+        self.assertIn(">20,0 Go<", body)
+        self.assertIn("<h3>Volume de seed</h3>", body)
+        self.assertIn(">Badge Prime<", body)
+        self.assertIn(">Les moins rentables<", body)
 
-    def test_the_seed_count_draws_the_quest_steps_up_to_the_next_one(self):
-        _, body = self.page([entry(n) for n in range(1, 31)])
-        seeds = sections(body)["Seed count"]
-        self.assertIn(">Quest 100<", seeds)
-        self.assertIn(">Quest 150<", seeds)
-        self.assertNotIn(">Quest 200<", seeds)
+    def test_the_time_axis_always_spans_30_days(self):
+        _, body = self.page({**BOARD, "history": [entry(30)]}, "?part=1")
+        self.assertIn('x1="98.33"', body)
+        self.assertIn("<span>01/01</span><span>30/01</span>", body)
 
-    def test_each_source_shows_its_upload_and_its_zen_marked_as_an_estimate(self):
-        _, body = self.page([entry(n) for n in range(1, 31)])
-        sources = sections(body)["Sources"]
-        self.assertIn("Volume hunt", sources)
-        self.assertIn("Twin", sources)
-        self.assertIn(">29.0 GB<", sources)
-        self.assertIn(">58.0 GB<", sources)
-        self.assertIn(">14.5 Zen, estimate<", sources)
-        self.assertIn(">8.7 Zen, estimate<", sources)
-        self.assertIn("29 nights", sources)
+    def test_a_missing_day_leaves_a_gap_in_the_curve(self):
+        _, body = self.page({**BOARD, "history": [entry(1), entry(2), entry(5)]}, "?part=1")
+        self.assertEqual(len(re.findall(r'<polyline class="line c-ratio"', body)), 1)
+        self.assertEqual(len(re.findall(r'<line class="dot c-ratio"', body)), 1)
 
-    def test_a_source_new_in_the_window_counts_its_upload_from_zero(self):
-        first = entry(1, sources={})
-        _, body = self.page([first, entry(2)])
-        self.assertIn(">2.0 GB<", sections(body)["Sources"])
-
-    def test_a_missing_day_leaves_a_gap_on_the_time_axis(self):
-        _, body = self.page([entry(1), entry(2), entry(5)])
-        points = re.search(r'<polyline class="ratio" points="([^"]+)"', body).group(1).split()
-        self.assertEqual(len(points), 2)
-        self.assertEqual(sections(body)["Account ratio"].count('<circle class="ratio"'), 1)
-        self.assertIn("over 5 days", body)
+    def test_without_a_part_the_page_shows_both(self):
+        _, body = self.page(BOARD)
+        self.assertIn('class="kpis"', body)
+        self.assertIn('class="quests"', body)
 
     def test_the_page_answers_with_a_query_or_a_trailing_slash(self):
-        for path in ("/graphs/", "/graphs?refresh=1"):
-            _, body = self.page([entry(1)], path)
-            self.assertIn("<h2>Sources</h2>", body)
+        for query in ("/", "?refresh=1"):
+            _, body = self.page(BOARD, query)
+            self.assertIn('class="quests"', body)
 
     def test_without_history_the_page_says_so(self):
-        _, body = self.page([])
-        self.assertIn("No history yet", body)
-        self.assertNotIn("<svg", body)
+        for board in (None, {**BOARD, "history": []}):
+            _, body = self.page(board)
+            self.assertIn("No history yet", body)
+            self.assertNotIn("<svg", body)
 
 
 class Server(unittest.TestCase):
@@ -1484,7 +1576,9 @@ class RealC411(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
-        self.assertEqual(account, {"uploaded": 59134463945, "downloaded": 28231492173, "zen": 25, "earned": 25})
+        self.assertEqual(account, {
+            "uploaded": 59134463945, "downloaded": 28231492173, "zen": 25, "earned": 25, "actual": 5447372745,
+        })
         self.assertEqual(FakeC411Server.calls, [("/api/user/profile", "Bearer secret")])
 
 
