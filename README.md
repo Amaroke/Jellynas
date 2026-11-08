@@ -1066,7 +1066,7 @@ Requires [qBittorrent](#qbittorrent), [Prowlarr](#prowlarr), [Radarr](#radarr) a
 
 The Admin keeps a good ratio on C411, a French private tracker, with torrents grabbed only to seed, without touching the Library. The same tools work with any private tracker, except the Zen reserve, which only C411 pays for. [ADR 0009](docs/adr/0009-ratio-farms-from-twins-and-keeps-a-zen-reserve.md) records why:
 
-- ratio, `ratio/ratio.py`, runs the Farm and the Zen reserve. It grabs fresh releases with hungry swarms for the Farm, Rare releases for the Zen reserve, downloads each from its Twin on a public tracker when one exists, and cleans both.
+- ratio, `ratio/ratio.py`, runs the Farm and the Zen reserve. It grabs freeleech releases and Twins for the Farm, Rare releases for the Zen reserve under the Ratio floor of the account, downloads each from its Twin on a public tracker when one exists, and cleans both.
 - cross-seed finds the torrents of qBittorrent on C411 and seeds them there too, from hardlinks in `/data/torrents/cross-seed`, without downloading them again. qBittorrent tells it about every finished torrent.
 - qbit_manage tags every torrent by tracker. It removes nothing.
 - autobrr stays available for a tracker that announces on IRC. C411 does not.
@@ -1151,19 +1151,22 @@ qbit_manage tags every torrent by tracker every 10 minutes. ratio is the only to
 
 ### ratio
 
-ratio, `ratio/ratio.py`, runs every 10 minutes. It reads qBittorrent and Prowlarr, then:
+ratio, `ratio/ratio.py`, runs every 10 minutes. It reads qBittorrent, Prowlarr and the profile API of C411, then:
 
-1. **Counts.** It keeps the Ledger in `${APPDATA_ROOT}/ratio/state.json`, which gives the Deficit or the Surplus of the C411 account. A torrent belongs to C411 when its announce URL holds `RATIO_TRACKER`.
-2. **Drops Twins.** Once cross-seed seeds the C411 copy of a Twin, it removes the Nyaa copy. The hardlink of cross-seed keeps the data. cross-seed searches C411 by the Nyaa title, so it misses a Twin that C411 lists under another title, such as Sgt Frog for Sergent Keroro. One hour after the grab, when the C411 copy is still missing, ratio adds the C411 torrent itself, stopped, in the folder of the Nyaa copy, gives its files the Nyaa names and checks it. Once the check is complete, ratio starts the C411 copy and removes the Nyaa copy without its files, which the C411 copy now seeds.
-3. **Cleans the Farm.** The Farm is the `ratio` and `cross-seed-link` categories. A torrent that uploaded less than 0.2 times its size in the last 7 days leaves it. So do the torrents that upload the least for their seeding time once the Farm holds more than `RATIO_MAX_SIZE_GB`. A C411 torrent that leaves and is still Rare moves to the Zen reserve when it has room, any other is removed with its files. No torrent leaves before `RATIO_MIN_SEEDING_DAYS`.
-4. **Adopts Library torrents.** A C411 torrent of Radarr or Sonarr that finished at least 6 hours ago, so it is imported, and is still Rare moves to the Zen reserve when it has room. Radarr and Sonarr only watch their own category, so they no longer remove it, and it seeds for Zen without any new download. Its file then takes its space twice, once in the Library and once in the torrents tree.
-5. **Cleans the Zen reserve.** The Zen reserve is the `zen` category, up to `RATIO_ZEN_MAX_SIZE_GB`. A torrent leaves once it is no longer Rare, and the least Rare leave first when it is full.
-6. **Grabs Twins.** It reads the newest movies and shows of each indexer in `RATIO_GRAB_INDEXER_IDS`, while fewer than 2 torrents of the Farm and the Zen reserve are downloading. For each episode at most 24 hours old with at least one leecher, it searches `RATIO_TWIN_INDEXER_IDS` for its episode and language, for example `S03E06 VOSTFR`, and keeps a result of the same release group whose size is within 5 %, since Nyaa rounds its sizes. It then downloads both torrent files and compares the length of every file. When they match, the release is a Twin: ratio downloads it from Nyaa into the Farm, for free, outside any quota or pause, and cross-seed seeds its C411 copy. Up to 10 episodes are checked per run, and each one again 2 hours later at most.
-7. **Grabs from C411.**
-   - for the Farm, a release at most 1 hour old, between 1 and 5 GB, with at least 10 leechers and 5 leechers per seeder,
-   - for the Zen reserve, a Rare release between 1 and 5 GB with at least one seeder, the fewest seeders first. The Zen reserve comes first while it holds fewer than 15 torrents, the count that gives the Swarm Keeper class its best bonus.
+1. **Holds the Ratio floor.** It reads the Account ratio of C411 once per run with `C411_PROFILE_API_KEY`, its uploaded total over its downloaded total, credit included. Under `RATIO_FLOOR`, 1.2 by default, or when the profile cannot be read, ratio spends no download on C411 and moves the C411 indexer of Prowlarr onto a sync profile named Paused, which it creates with RSS, automatic and interactive search off. Prowlarr pushes it to Radarr, Sonarr and Lidarr, whose sync level must stay Full Sync, so they stop downloading from C411, while ratio and cross-seed still read it. Every torrent keeps seeding, since seeding never goes through Prowlarr. LazyLibrarian ignores sync profiles and still sees C411. Once the Account ratio is back over the floor, ratio puts C411 back on the other profile. A paid grab never takes the Account ratio under the floor.
+2. **Counts.** It keeps the Ledger in `${APPDATA_ROOT}/ratio/state.json`, which gives the Deficit or the Surplus of the C411 account. A torrent belongs to C411 when its announce URL holds `RATIO_TRACKER`.
+3. **Drops Twins.** Once cross-seed seeds the C411 copy of a Twin, it removes the Nyaa copy. The hardlink of cross-seed keeps the data. cross-seed searches C411 by the Nyaa title, so it misses a Twin that C411 lists under another title, such as Sgt Frog for Sergent Keroro. One hour after the grab, when the C411 copy is still missing, ratio adds the C411 torrent itself, stopped, in the folder of the Nyaa copy, gives its files the Nyaa names and checks it. Once the check is complete, ratio starts the C411 copy and removes the Nyaa copy without its files, which the C411 copy now seeds. When adding the C411 copy fails, ratio waits one hour before the next try, then twice longer each time, up to a day.
+4. **Cleans the Farm.** The Farm is the `ratio` and `cross-seed-link` categories. A torrent that uploaded less than 0.2 times its size in the last 7 days leaves it. So do the torrents that upload the least for their seeding time once the Farm holds more than `RATIO_MAX_SIZE_GB`. A C411 torrent that leaves and is still Rare moves to the Zen reserve when it has room, any other is removed with its files. No torrent leaves before `RATIO_MIN_SEEDING_DAYS`.
+5. **Adopts Library torrents.** A C411 torrent of Radarr or Sonarr that finished at least 6 hours ago, so it is imported, and is still Rare moves to the Zen reserve when it has room. Radarr and Sonarr only watch their own category, so they no longer remove it, and it seeds for Zen without any new download. Its file then takes its space twice, once in the Library and once in the torrents tree.
+6. **Cleans the Zen reserve.** The Zen reserve is the `zen` category, up to `RATIO_ZEN_MAX_SIZE_GB`. A torrent leaves once it is no longer Rare, and the least Rare leave first when it is full.
+7. **Grabs Twins.** It reads the newest movies and shows of each indexer in `RATIO_GRAB_INDEXER_IDS`, while fewer than 2 torrents of the Farm and the Zen reserve are downloading. For each episode at most 24 hours old with at least one leecher, it searches `RATIO_TWIN_INDEXER_IDS` for its episode and language, for example `S03E06 VOSTFR`, and keeps a result of the same release group whose size is within 5 %, since Nyaa rounds its sizes. It then downloads both torrent files and compares the length of every file. When they match, the release is a Twin: ratio downloads it from Nyaa into the Farm, for free, outside any quota or pause, and cross-seed seeds its C411 copy. Up to 10 episodes are checked per run, and each one again 2 hours later at most.
+8. **Grabs from C411.**
+   - for the Farm, a freeleech release of C411, whose `downloadvolumefactor` is 0, up to 5 GB with at least one seeder, the most leechers first. It is free, never counts in the Deficit, and stays allowed under the floor,
+   - for the Zen reserve, a Rare release between 1 and 5 GB with at least one seeder, the fewest seeders first, at most 3 times a day, only over the floor and only while its size fits in the download left before the floor.
 
-   A freeleech release of C411, whose `downloadvolumefactor` is 0, is free too and never counts in the Deficit. Otherwise, it pays C411 at most 3 times a day: for the Farm while the Deficit stays under `RATIO_GRAB_MAX_DEFICIT_GB`, for the Zen reserve only once the Surplus reaches `RATIO_ZEN_HUNT_MIN_SURPLUS_GB`.
+   ratio no longer pays C411 for fresh releases to farm upload, see [ADR 0011](docs/adr/0011-the-farm-earns-zen-first-under-a-ratio-floor.md).
+
+Prowlarr answers 429 when an indexer is queried too often. ratio leaves at least 2 seconds between two requests to Prowlarr, fetches each torrent file once per run, and leaves Prowlarr alone for as long as a 429 asks, an hour when it does not say.
 
 C411 counts each seeder twice in the peers it gives Prowlarr, 87 seeders and no leecher show up as 174 peers, so ratio takes the leechers of C411 as the peers minus twice the seeders. A torrent is Rare when C411 counts at most 24 seeders for it under 1 GB, 50 up to 100 GB, and 199 beyond, the thresholds of the Swarm Keeper class. Each Zen is worth 1 GB of upload in the shop of C411, so the Zen reserve also builds the ratio.
 
@@ -1179,7 +1182,7 @@ Once a day, the logs also hold one line per Source: paid grab, Twin, freeleech, 
 docker compose logs ratio | grep Source
 ```
 
-After each run, ratio also serves a summary at `http://ratio:8000/summary`, on the Compose network only, for [Homepage](#homepage): the Ledger with its ratio and its Surplus, the fill of the Farm and of the Zen reserve, the paid grabs of the day, and one line per Source. It holds no key and changes nothing.
+After each run, ratio also serves a summary at `http://ratio:8000/summary`, on the Compose network only, for [Homepage](#homepage): the Account with its ratio, the floor, whether downloads are paused, its Zen and its upload of the last 7 days, the Ledger with its ratio and its Surplus, the fill of the Farm and of the Zen reserve, and one line per Source. It holds no key and changes nothing.
 
 To start the Deficit over, for example once the ratio on the tracker has a buffer, stop ratio, delete its state file and start it again. Every other limit above is fixed in `settings_from_env` of `ratio/ratio.py`.
 
@@ -1348,7 +1351,7 @@ The Uptime Kuma tile counts the services up and down from a status page. In Upti
 
 ### Open
 
-Open `https://homepage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `HOMEPAGE_PASSWORD`. The playback controls of Jellyfin stay off, so Homepage only reads the services. A tile whose service is down, or whose key is wrong, shows an error in place of its figures. The Ratio group shows the summary of ratio in four tiles: the Ledger, the Farm, the Zen reserve and the Sources. The tiles of Recyclarr, Caddy, LazyLibrarian and Indexarr show no figures, since Homepage has no widget for them.
+Open `https://homepage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `HOMEPAGE_PASSWORD`. The playback controls of Jellyfin stay off, so Homepage only reads the services. A tile whose service is down, or whose key is wrong, shows an error in place of its figures. The Ratio group shows the summary of ratio in four tiles: the Account, the Farm, the Zen reserve and the Sources. The tiles of Recyclarr, Caddy, LazyLibrarian and Indexarr show no figures, since Homepage has no widget for them.
 
 ## Backup
 

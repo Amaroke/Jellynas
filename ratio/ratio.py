@@ -140,11 +140,23 @@ class QBittorrent:
             raise RuntimeError("qBittorrent refused the login, check QBITTORRENT_USER and QBITTORRENT_PASSWORD")
 
 
+class Throttled(Exception):
+    def __init__(self, retry_after):
+        super().__init__(f"Prowlarr asks to wait {retry_after} seconds")
+        self.retry_after = retry_after
+
+
+def wait_of(header):
+    return max(int(header), 60) if header and header.strip().isdigit() else 3600
+
+
 class Prowlarr:
-    def __init__(self, url, api_key, tracker_seeders_in_peers):
+    def __init__(self, url, api_key, tracker_seeders_in_peers, spacing=2):
         self.url = url.rstrip("/")
         self.api_key = api_key
         self.tracker_seeders_in_peers = tracker_seeders_in_peers
+        self.spacing = spacing
+        self.last = 0
 
     def newest(self, indexer, now):
         fields = {"t": "search", "cat": "2000,5000", "limit": 100}
@@ -156,14 +168,84 @@ class Prowlarr:
     def torrent(self, release):
         page = re.search(r"nyaa\.si/view/(\d+)", release["page"])
         link = f"https://nyaa.si/download/{page.group(1)}.torrent" if page else release["link"]
-        request = urllib.request.Request(link, headers={"User-Agent": "Mozilla/5.0 (compatible; jellynas-ratio)"})
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return response.read()
+        return self.open(urllib.request.Request(link, headers={"User-Agent": "Mozilla/5.0 (compatible; jellynas-ratio)"}))
 
     def query(self, indexer, fields, now, seeders_in_peers):
         query = urllib.parse.urlencode({**fields, "apikey": self.api_key})
-        with urllib.request.urlopen(f"{self.url}/{indexer}/api?{query}", timeout=60) as response:
-            return parse_torznab(response.read(), now, seeders_in_peers)
+        return parse_torznab(self.open(urllib.request.Request(f"{self.url}/{indexer}/api?{query}")), now, seeders_in_peers)
+
+    def hold(self, indexer, paused, profile_name, restore=None):
+        profiles = self.api("/appprofile")
+        held = next((p for p in profiles if p["name"] == profile_name), None)
+        if held is None:
+            if not paused:
+                return None
+            held = self.api("/appprofile", "POST", {
+                "name": profile_name,
+                "enableRss": False,
+                "enableAutomaticSearch": False,
+                "enableInteractiveSearch": False,
+                "minimumSeeders": 1,
+            })
+        definition = self.api(f"/indexer/{indexer}")
+        before = definition["appProfileId"]
+        if paused == (before == held["id"]):
+            return None
+        if paused:
+            definition["appProfileId"] = held["id"]
+        else:
+            others = [p["id"] for p in profiles if p["id"] != held["id"]]
+            if not others:
+                raise RuntimeError(f"Prowlarr has no sync profile other than {profile_name}")
+            definition["appProfileId"] = restore if restore in others else others[0]
+        self.api(f"/indexer/{indexer}", "PUT", definition)
+        return before
+
+    def api(self, path, method="GET", body=None):
+        request = urllib.request.Request(
+            f"{self.url}/api/v1{path}",
+            data=None if body is None else json.dumps(body).encode(),
+            headers={"X-Api-Key": self.api_key, "Content-Type": "application/json"},
+            method=method,
+        )
+        return json.loads(self.open(request))
+
+    def open(self, request):
+        if not request.full_url.startswith(self.url):
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return response.read()
+        wait = self.last + self.spacing - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return response.read()
+        except urllib.error.HTTPError as error:
+            if error.code == 429:
+                raise Throttled(wait_of(error.headers.get("Retry-After"))) from error
+            raise
+        finally:
+            self.last = time.monotonic()
+
+
+class C411:
+    def __init__(self, api_key, url="https://c411.org/api/user/profile"):
+        self.api_key = api_key
+        self.url = url
+
+    def account(self):
+        if not self.api_key:
+            raise RuntimeError("C411_PROFILE_API_KEY is empty")
+        request = urllib.request.Request(
+            self.url, headers={"Authorization": f"Bearer {self.api_key}", "User-Agent": "jellynas-ratio"}
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            profile = json.load(response)
+        return {
+            "uploaded": profile["transfer"]["uploaded"]["total"],
+            "downloaded": profile["transfer"]["downloaded"]["total"],
+            "zen": profile["zen"]["balance"],
+        }
 
 
 def parse_torznab(xml_bytes, now, seeders_in_peers=1):
@@ -230,22 +312,9 @@ def is_rare(size, seeders):
     return seeders <= rare_limit(size)
 
 
-def hunger(release):
-    return release["leechers"] / max(release["seeders"], 1)
-
-
-def pick_hungry(releases, known, rules):
-    hungry = [
-        r
-        for r in releases
-        if r["infohash"] not in known
-        and rules["min_size"] <= r["size"] <= rules["max_size"]
-        and r["age_hours"] <= rules["max_age_hours"]
-        and r["seeders"] >= 1
-        and r["leechers"] >= rules["min_leechers"]
-        and hunger(r) >= rules["min_leechers_per_seeder"]
-    ]
-    return sorted(hungry, key=lambda r: (hunger(r), r["leechers"]), reverse=True)
+def pick_free(releases, known, max_size):
+    free = [r for r in releases if r["free"] and r["infohash"] not in known and r["seeders"] >= 1 and r["size"] <= max_size]
+    return sorted(free, key=lambda r: -r["leechers"])
 
 
 def pick_rare(releases, known, rules):
@@ -253,6 +322,7 @@ def pick_rare(releases, known, rules):
         r
         for r in releases
         if r["infohash"] not in known
+        and not r["free"]
         and rules["min_size"] <= r["size"] <= rules["max_size"]
         and r["seeders"] >= 1
         and is_rare(r["size"], r["seeders"])
@@ -287,10 +357,6 @@ def is_stale(torrent, samples, settings, now):
     return recent is not None and recent < settings["stale_upload"] * torrent["size"]
 
 
-def deficit(transfers):
-    return sum(downloaded - uploaded for downloaded, uploaded in transfers.values())
-
-
 def size_of(torrents, categories):
     return sum(t["size"] for t in torrents.values() if t["category"] in categories)
 
@@ -313,6 +379,11 @@ def load_state(path):
         "history": state.get("history", {}),
         "zen": state.get("zen", {}),
         "report": state.get("report", {}),
+        "account": state.get("account", []),
+        "held": state.get("held"),
+        "backoff_until": state.get("backoff_until", 0),
+        "stuck": state.get("stuck", {}),
+        "restore": state.get("restore", {}),
     }
 
 
@@ -501,7 +572,42 @@ def fill_of(torrents, categories, limit):
     }
 
 
-def summary(state, torrents, settings, now):
+def read_account(c411, state, now):
+    try:
+        account = c411.account()
+    except Exception as error:
+        print(f"Cannot read the profile of C411, ratio spends no download on C411: {error}")
+        return None
+    samples = state["account"]
+    if not samples or now - samples[-1][0] >= DAY:
+        samples.append([now, account["uploaded"], account["downloaded"], account["zen"]])
+    samples[:] = [s for s in samples if s[0] >= now - WEEK - DAY]
+    return account
+
+
+def is_under_floor(account, settings):
+    return account is None or account["uploaded"] < settings["floor"] * account["downloaded"]
+
+
+def download_left(account, settings):
+    return account["uploaded"] / settings["floor"] - account["downloaded"]
+
+
+def account_of(account, state, settings, now):
+    if account is None:
+        return {"ratio": None, "floor": settings["floor"], "paused": True, "zen": None, "week_uploaded_gb": None}
+    older = [s for s in state["account"] if s[0] <= now - WEEK]
+    week_start = (older[-1] if older else state["account"][0])[1]
+    return {
+        "ratio": share(account["uploaded"], account["downloaded"]),
+        "floor": settings["floor"],
+        "paused": state["paused"],
+        "zen": account["zen"],
+        "week_uploaded_gb": gigabytes(account["uploaded"] - week_start),
+    }
+
+
+def summary(state, torrents, settings, account, now):
     count, downloaded, uploaded, week_downloaded, week_uploaded, _ = [
         sum(column) for column in zip(*(line for _, line in ledger_lines(state)), strict=True)
     ] or [0] * 6
@@ -525,9 +631,9 @@ def summary(state, torrents, settings, now):
             "week_uploaded_gb": gigabytes(week_uploaded),
             "week_ratio": share(week_uploaded, week_downloaded),
         },
+        "account": account_of(account, state, settings, now),
         "farm": fill_of(torrents, FARM, settings["farm_size"]),
         "zen": fill_of(torrents, (ZEN,), settings["zen_size"]),
-        "grabs": {"today": len(state["grabbed"]), "per_day": settings["per_day"], "paused": state["paused"]},
         "sources": sources,
     }
 
@@ -573,18 +679,28 @@ def drop_twins(qbt, state, torrents):
 
 
 def seed_twins(qbt, prowlarr, settings, state, torrents, now):
+    for twin in [t for t in state["stuck"] if t not in state["twins"]]:
+        del state["stuck"][twin]
     for twin, (original, category, grabbed_at, link) in list(state["twins"].items()):
         public = torrents.get(twin)
         if original in torrents or public is None or public["progress"] < 1:
             continue
         if now - grabbed_at < settings["twin_seed_after"]:
             continue
+        attempts, next_at = state["stuck"].get(twin, [0, 0])
+        if now < next_at:
+            continue
         try:
             qbt.add(prowlarr.torrent({"page": "", "link": link}), category, public["save_path"])
             qbt.match_files(original, qbt.files(twin))
+        except Throttled:
+            raise
         except Exception as error:
-            print(f"Cannot seed the tracker copy of {public['name']}: {error}")
+            wait = min(settings["twin_seed_after"] * 2**attempts, DAY)
+            state["stuck"][twin] = [attempts + 1, now + wait]
+            print(f"Cannot seed the tracker copy of {public['name']}, next try in {wait // 60:g} minutes: {error}")
             continue
+        state["stuck"].pop(twin, None)
         print(f"cross-seed missed {public['name']}, its tracker copy now checks the same files")
 
 
@@ -676,18 +792,25 @@ def may_be_twin(release, candidate):
     )
 
 
-def find_twin(prowlarr, settings, release, now, searches):
+def fetched(prowlarr, release, cache):
+    key = ("torrent", release["infohash"])
+    if key not in cache:
+        cache[key] = prowlarr.torrent(release)
+    return cache[key]
+
+
+def find_twin(prowlarr, settings, release, now, cache):
     episode, language = episode_of(release["title"]), language_of(release["title"])
     if not episode or not language:
         return None
     for indexer in settings["twin_indexers"]:
         query = (indexer, f"{episode} {language}")
-        if query not in searches:
-            searches[query] = prowlarr.search(indexer, query[1], now)
-        for candidate in searches[query]:
+        if query not in cache:
+            cache[query] = prowlarr.search(indexer, query[1], now)
+        for candidate in cache[query]:
             if may_be_twin(release, candidate):
-                twin_torrent = prowlarr.torrent(candidate)
-                if file_lengths(twin_torrent) == file_lengths(prowlarr.torrent(release)):
+                twin_torrent = fetched(prowlarr, candidate, cache)
+                if file_lengths(twin_torrent) == file_lengths(fetched(prowlarr, release, cache)):
                     return {**candidate, "torrent": twin_torrent}
     return None
 
@@ -697,35 +820,48 @@ def fetch_newest(prowlarr, settings, now):
     for indexer in settings["indexers"]:
         try:
             releases += prowlarr.newest(indexer, now)
+        except Throttled:
+            raise
         except Exception as error:
             print(f"Cannot read indexer {indexer} from Prowlarr: {error}")
     return releases
 
 
-def may_pay(state, settings, category):
-    if len(state["grabbed"]) >= settings["per_day"]:
-        return False
-    owed = deficit(state["transfers"])
-    if category == ZEN:
-        return -owed >= settings["zen_hunt_surplus"]
-    if owed > settings["max_deficit"]:
-        if not state["paused"]:
-            print(f"Paused: the tracker torrents downloaded {owed / GB:.1f} GB more than they uploaded")
-        state["paused"] = True
-        return False
-    if state["paused"]:
-        print(f"Resumed: the deficit is down to {owed / GB:.1f} GB")
-    state["paused"] = False
-    return True
+def weigh_floor(state, account, settings):
+    paused = is_under_floor(account, settings)
+    if paused and not state["paused"]:
+        print(f"Paused: the Account ratio is unknown or under {settings['floor']:g}, ratio spends no download on C411")
+    if state["paused"] and not paused:
+        print(f"Resumed: the Account ratio is back over {settings['floor']:g}")
+    state["paused"] = paused
 
 
-def wishes(releases, known, settings, torrents):
-    hungry = [(r, "ratio") for r in pick_hungry(releases, known, settings["rules"])]
-    rare = [(r, ZEN) for r in pick_rare(releases, known | {r["infohash"] for r, _ in hungry}, settings["rules"])]
-    zen_count = sum(1 for t in torrents.values() if t["category"] == ZEN)
-    if zen_count < settings["zen_min_torrents"]:
-        return rare + hungry
-    return hungry + rare
+def hold_c411(prowlarr, settings, state):
+    paused = state["paused"]
+    if state["held"] == paused or not settings["indexers"]:
+        return
+    try:
+        for indexer in settings["indexers"]:
+            before = prowlarr.hold(indexer, paused, settings["paused_profile"], state["restore"].get(indexer))
+            if paused and before is not None:
+                state["restore"][indexer] = before
+    except Throttled:
+        raise
+    except Exception as error:
+        print(f"Cannot {'hold' if paused else 'release'} C411 in Prowlarr: {error}")
+        return
+    state["held"] = paused
+    print(f"C411 is {'held' if paused else 'open again'} for Radarr, Sonarr and Lidarr")
+
+
+def use_prowlarr(state, now, step):
+    if now < state["backoff_until"]:
+        return
+    try:
+        step()
+    except Throttled as throttled:
+        state["backoff_until"] = now + throttled.retry_after
+        print(f"Prowlarr asks to slow down, ratio leaves it alone for {throttled.retry_after // 60:g} minutes")
 
 
 def take(qbt, state, budget, known, release, torrent, category, source, via):
@@ -764,57 +900,85 @@ def grab_twins(qbt, prowlarr, settings, state, releases, known, budget, now):
             if twin:
                 take(qbt, state, budget, known, release, twin["torrent"], "ratio", "twin", f"its public twin {twin['title']}")
                 state["twins"][twin["infohash"]] = [release["infohash"], "ratio", now, release["link"]]
+        except Throttled:
+            raise
         except Exception as error:
             print(f"Cannot look for a twin of {release['title']}: {error}")
 
 
-def grab_paid(qbt, prowlarr, settings, state, torrents, releases, known, budget, now):
-    for release, category in wishes(releases, known, settings, torrents):
+def take_from_tracker(qbt, prowlarr, state, budget, known, release, category, source, via):
+    try:
+        take(qbt, state, budget, known, release, prowlarr.torrent(release), category, source, via)
+    except Throttled:
+        raise
+    except Exception as error:
+        print(f"Cannot grab {release['title']}: {error}")
+        return False
+    return True
+
+
+def grab_free(qbt, prowlarr, settings, state, releases, known, budget, now):
+    for release in pick_free(releases, known, settings["free_max_size"]):
         if budget["slots"] <= 0:
             return
-        if release["infohash"] in known or release["size"] > budget[category]:
+        if release["infohash"] in known or release["size"] > budget["ratio"]:
             continue
-        if release["free"]:
-            source, via, ledger = "freeleech", "the tracker, freeleech", state["free"]
-        elif may_pay(state, settings, category):
-            source, via, ledger = "zen-hunt" if category == ZEN else "paid", "the tracker", state["grabbed"]
-        else:
-            continue
-        try:
-            take(qbt, state, budget, known, release, prowlarr.torrent(release), category, source, via)
-        except Exception as error:
-            print(f"Cannot grab {release['title']}: {error}")
-            continue
-        ledger[release["infohash"]] = now
+        if take_from_tracker(qbt, prowlarr, state, budget, known, release, "ratio", "freeleech", "the tracker, freeleech"):
+            state["free"][release["infohash"]] = now
 
 
-def grab(qbt, prowlarr, settings, state, torrents, now):
+def hunt_zen(qbt, prowlarr, settings, state, releases, known, budget, now):
+    for release in pick_rare(releases, known, settings["zen_hunt"]):
+        if budget["slots"] <= 0 or len(state["grabbed"]) >= settings["zen_hunt_per_day"]:
+            return
+        if release["infohash"] in known or release["size"] > min(budget[ZEN], budget["download"]):
+            continue
+        if take_from_tracker(qbt, prowlarr, state, budget, known, release, ZEN, "zen-hunt", "the tracker"):
+            state["grabbed"][release["infohash"]] = now
+            budget["download"] -= release["size"]
+
+
+def pending(state, torrents):
+    return sum(
+        t["size"] * (1 - t["progress"])
+        for t in torrents.values()
+        if t["hash"] in state["transfers"] and t["hash"] not in state["free"] and t["progress"] < 1
+    )
+
+
+def grab(qbt, prowlarr, settings, state, torrents, account, now):
     downloading = sum(1 for t in torrents.values() if t["category"] in FARM + (ZEN,) and t["progress"] < 1)
     budget = {
         "slots": settings["max_downloading"] - downloading,
         "ratio": settings["farm_size"] - size_of(torrents, FARM),
         ZEN: settings["zen_size"] - size_of(torrents, (ZEN,)),
+        "download": 0 if state["paused"] else download_left(account, settings) - pending(state, torrents),
     }
     if budget["slots"] <= 0 or not settings["indexers"]:
         return
     known = set(torrents) | twin_copies(state)
     releases = fetch_newest(prowlarr, settings, now)
     grab_twins(qbt, prowlarr, settings, state, releases, known, budget, now)
-    grab_paid(qbt, prowlarr, settings, state, torrents, releases, known, budget, now)
+    grab_free(qbt, prowlarr, settings, state, releases, known, budget, now)
+    hunt_zen(qbt, prowlarr, settings, state, releases, known, budget, now)
 
 
-def run_once(qbt, prowlarr, settings, state, now):
+def run_once(qbt, prowlarr, c411, settings, state, now):
     prepare(qbt, settings)
+    account = read_account(c411, state, now)
+    weigh_floor(state, account, settings)
     torrents = {t["hash"].lower(): {**t, "hash": t["hash"].lower()} for t in qbt.torrents()}
     record(state, torrents, settings, now)
     report(state, now)
+    use_prowlarr(state, now, lambda: hold_c411(prowlarr, settings, state))
     drop_twins(qbt, state, torrents)
-    seed_twins(qbt, prowlarr, settings, state, torrents, now)
+    use_prowlarr(state, now, lambda: seed_twins(qbt, prowlarr, settings, state, torrents, now))
     clean_farm(qbt, settings, state, torrents, now)
     adopt(qbt, settings, state, torrents)
     clean_zen(qbt, settings, torrents)
-    grab(qbt, prowlarr, settings, state, torrents, now)
-    return summary(state, {t["hash"].lower(): {**t, "hash": t["hash"].lower()} for t in qbt.torrents()}, settings, now)
+    use_prowlarr(state, now, lambda: grab(qbt, prowlarr, settings, state, torrents, account, now))
+    torrents = {t["hash"].lower(): {**t, "hash": t["hash"].lower()} for t in qbt.torrents()}
+    return summary(state, torrents, settings, account, now)
 
 
 def number(name, default=None):
@@ -823,6 +987,13 @@ def number(name, default=None):
         return float(value)
     except (TypeError, ValueError):
         sys.exit(f"Set {name} in .env to a number, then recreate ratio")
+
+
+def positive(name, default):
+    value = number(name, default)
+    if value <= 0:
+        sys.exit(f"Set {name} in .env to a number over 0, then recreate ratio")
+    return value
 
 
 def ids(name):
@@ -837,13 +1008,14 @@ def settings_from_env():
         "cross_seed_key": os.environ.get("CROSS_SEED_API_KEY", ""),
         "farm_size": number("RATIO_MAX_SIZE_GB") * GB,
         "zen_size": number("RATIO_ZEN_MAX_SIZE_GB", 50) * GB,
-        "zen_min_torrents": 15,
-        "zen_hunt_surplus": number("RATIO_ZEN_HUNT_MIN_SURPLUS_GB", 20) * GB,
+        "floor": positive("RATIO_FLOOR", 1.2),
+        "paused_profile": "Paused",
+        "zen_hunt_per_day": 3,
+        "zen_hunt": {"min_size": GB, "max_size": 5 * GB},
+        "free_max_size": 5 * GB,
         "min_seeding": number("RATIO_MIN_SEEDING_DAYS") * DAY,
         "stale_after": 7 * DAY,
         "stale_upload": 0.2,
-        "max_deficit": number("RATIO_GRAB_MAX_DEFICIT_GB", 5) * GB,
-        "per_day": 3,
         "max_downloading": 2,
         "twin_lookups": 10,
         "twin_max_age_hours": 24,
@@ -853,13 +1025,6 @@ def settings_from_env():
         "library_categories": ("radarr", "tv-sonarr", "lidarr", "lazylibrarian"),
         "adopt_after": 6 * 3600,
         "tracker_seeders_in_peers": 2,
-        "rules": {
-            "min_size": GB,
-            "max_size": 5 * GB,
-            "max_age_hours": 1,
-            "min_leechers": 10,
-            "min_leechers_per_seeder": 5,
-        },
     }
 
 
@@ -875,6 +1040,7 @@ def main():
         os.environ.get("PROWLARR_API_KEY", ""),
         settings["tracker_seeders_in_peers"],
     )
+    c411 = C411(os.environ.get("C411_PROFILE_API_KEY", ""))
     state_path = "/state/state.json"
     state = load_state(state_path)
     latest = {}
@@ -883,7 +1049,7 @@ def main():
         print("RATIO_GRAB_INDEXER_IDS is empty, ratio grabs nothing and only cleans")
     while True:
         try:
-            latest["summary"] = run_once(qbt, prowlarr, settings, state, time.time())
+            latest["summary"] = run_once(qbt, prowlarr, c411, settings, state, time.time())
         except Exception as error:
             print(f"Cannot run the farm and the Zen reserve: {error}")
         try:

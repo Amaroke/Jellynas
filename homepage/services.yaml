@@ -72,27 +72,26 @@
           fields: ["slskStatus", "downloads", "uploads", "sharedFiles"]
 
 - Ratio:
-    - Ratio:
+    - Account:
         icon: mdi-scale-balance-#a78bfa
-        description: Ledger of C411, every torrent ever seeded
+        description: Account on C411, downloads paused under the Ratio floor
         widget:
           type: customapi
           url: http://ratio:8000/summary
           refreshInterval: 60000
           mappings:
-            - field: ledger.ratio
+            - field: account.ratio
               label: Ratio
               format: float
-            - field: ledger.surplus_gb
-              label: Surplus
-              format: float
-              suffix: " GB"
-            - field: ledger.week_uploaded_gb
+            - field: account.zen
+              label: Zen
+              format: number
+            - field: account.week_uploaded_gb
               label: Up, 7 days
               format: float
               suffix: " GB"
-            - field: grabs.paused
-              label: Paid grabs
+            - field: account.paused
+              label: Downloads
               remap:
                 - value: true
                   to: Paused
@@ -137,9 +136,6 @@
             - field: zen.fill
               label: Full
               format: percent
-            - field: grabs.today
-              label: Paid today
-              format: number
     - Sources:
         icon: mdi-chart-donut-#f472b6
         description: Upload / download of each Source
