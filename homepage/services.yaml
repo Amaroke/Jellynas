@@ -153,7 +153,6 @@
           src: https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs?lang=fr&part=1
           classes: h-96
           referrerPolicy: same-origin
-          allowScrolling: "no"
           loadingStrategy: lazy
           refreshInterval: 600000
     - Farm quests:
@@ -164,7 +163,6 @@
           src: https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs?lang=fr&part=2
           classes: h-96
           referrerPolicy: same-origin
-          allowScrolling: "no"
           loadingStrategy: lazy
           refreshInterval: 600000
 

@@ -117,15 +117,20 @@ class HomepageConfigTest(unittest.TestCase):
             self.assertIn("type: iframe", body, name)
             self.assertIn(src + part, body, name)
             self.assertIn("classes: h-96", body, name)
+            self.assertNotIn("allowScrolling", body, name)
         settings = (HOMEPAGE / "settings.yaml").read_text(encoding="utf-8")
         self.assertRegex(settings, r"(?m)^  Graphs:\n(    .*\n)*    columns: 1$")
 
-    def test_the_cards_of_the_board_hide_their_title(self):
+    def test_the_cards_of_the_board_hide_their_title_and_the_frame_around_it(self):
         css = (HOMEPAGE / "custom.css").read_text(encoding="utf-8")
-        rule = re.search(r"([^{}]*)\{([^}]*)\}", css)
-        selectors = {s.strip() for s in rule.group(1).split(",")}
-        self.assertEqual(selectors, {f'li.service[data-name="{name}"] .service-title' for name in BOARD_CARDS})
-        self.assertIn("display: none", rule.group(2))
+        rules = {
+            frozenset(s.strip() for s in selectors.split(",")): body
+            for selectors, body in re.findall(r"([^{}]*)\{([^}]*)\}", css)
+        }
+        for part, declaration in ((".service-title", "display: none"), (".service-block", "background: transparent")):
+            selectors = frozenset(f'li.service[data-name="{name}"] {part}' for name in BOARD_CARDS)
+            self.assertIn(selectors, rules)
+            self.assertIn(declaration, rules[selectors])
         compose = (HOMEPAGE / "compose.yaml").read_text(encoding="utf-8")
         self.assertIn("./custom.css:/app/config/custom.css:ro", compose)
 
