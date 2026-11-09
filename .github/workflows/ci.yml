@@ -49,7 +49,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: docker run --rm -v "$PWD:/repo" -w /repo hadolint/hadolint:v2.12.0 hadolint services/*/Dockerfile
+      - run: docker run --rm -v "$PWD:/repo" -w /repo hadolint/hadolint:v2.15.1 hadolint services/*/Dockerfile
       - run: |
           cp .env.example .env
           docker compose build
