@@ -1,5 +1,24 @@
 # Jellynas
 
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request to `main`, on every push to `main`, and by hand. Its jobs run in parallel and every tool version is pinned, so Renovate keeps them up to date:
+
+| Job | Checks |
+| --- | --- |
+| Secrets | gitleaks scans the whole git history for a committed secret |
+| Compose | `compose.yaml` and the doco-cd compose file parse with `.env.example` |
+| Images | hadolint lints every Dockerfile, then every image with a `build` builds |
+| YAML | yamllint passes in strict mode |
+| JSON | every tracked `.json` file parses |
+| Python | the `unittest` tests pass |
+| Lint | shellcheck passes on the shell scripts and ruff on the Python |
+| Renovate | `renovate.json` is a valid Renovate config |
+| Markdown | markdownlint passes on every `.md` file |
+| Actions | actionlint checks the workflows, then zizmor audits their security |
+
+=== A REWORK ===
+
 A personal media server built on Jellyfin, shared with Friends over the internet.
 
 Every tool here is maintained open source software, picked by the Admin, and the picks may change over time. None of them is an obligation: the repo is a base that runs as is and that you can adapt. Some picks, such as OVH, AirVPN, C411, Nyaa and the French quality profiles, only come from the Admin being French. Each section names equivalent tools and says in a few words why a pick was made, so you can tell when another fits you better.

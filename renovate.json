@@ -20,7 +20,7 @@
     {
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
-      "matchStrings": ["(?<depName>ghcr\\.io/gitleaks/gitleaks|rhysd/actionlint):(?<currentValue>v?\\d+\\.\\d+\\.\\d+)"],
+      "matchStrings": ["(?<depName>ghcr\\.io/gitleaks/gitleaks|rhysd/actionlint|hadolint/hadolint):(?<currentValue>v?\\d+\\.\\d+\\.\\d+)"],
       "datasourceTemplate": "docker"
     },
     {
