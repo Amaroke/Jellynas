@@ -31,7 +31,7 @@
     },
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^caddy/Dockerfile$/"],
+      "managerFilePatterns": ["/^services/caddy/Dockerfile$/"],
       "matchStrings": ["--with (?<depName>\\S+)@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
       "datasourceTemplate": "go"
     }

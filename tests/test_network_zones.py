@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DOCO_CD = ROOT / "doco-cd" / "compose.yaml"
+DOCO_CD = ROOT / "services" / "doco-cd" / "compose.yaml"
 PUBLIC_ALIASES = {"jellyfin.${DOMAIN}", "seerr.${DOMAIN}"}
 ZONE_MEMBERS = {
     "jellyfin-zone": {"caddy", "jellyfin"},
@@ -134,7 +134,7 @@ class NetworkZonesTest(unittest.TestCase):
 
     def test_only_caddy_names_jellyfin_and_seerr_directly(self):
         paths = [path for path in included_compose_files() if path.parent.name != "caddy"]
-        paths += sorted((ROOT / "homepage").glob("*.yaml")) + sorted((ROOT / "music-bot").glob("*.py"))
+        paths += sorted((ROOT / "services" / "homepage").glob("*.yaml")) + sorted((ROOT / "services" / "music-bot").glob("*.py"))
         for path in paths:
             text = path.read_text(encoding="utf-8")
             for address in DIRECT_ADDRESSES:

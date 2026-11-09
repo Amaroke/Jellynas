@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-UPTIME_KUMA = ROOT / "uptime-kuma" / "compose.yaml"
+UPTIME_KUMA = ROOT / "services" / "uptime-kuma" / "compose.yaml"
 WITHOUT_MONITOR = {"uptime-kuma"}
 MONITOR_TYPES = {"http", "docker"}
 LABEL = re.compile(r"^      kuma\.([a-z0-9-]+)\.([a-z_]+)\.([a-z_]+): (.*)$")

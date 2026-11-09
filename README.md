@@ -193,10 +193,10 @@ flowchart LR
 Each optional part is a set of services in `compose.yaml`. To leave one out, comment its lines in a pull request, and doco-cd removes them once merged:
 
 - Without a private tracker, comment `autobrr`, `cross-seed`, `ratio` and `farm-report`.
-- Without a VPN, comment `gluetun`, `slskd` and `suwayomi`, remove `network_mode` and `depends_on` from `qbittorrent/compose.yaml`, and replace `gluetun:8080` with `qbittorrent:8080` in `caddy/Caddyfile`, `cross-seed/config.js`, `ratio/ratio.py` and `homepage/services.yaml`. Soulseek shows the IP of each user to the others, so slskd never runs without the VPN, and Suwayomi never fetches a manga site from the home IP.
+- Without a VPN, comment `gluetun`, `slskd` and `suwayomi`, remove `network_mode` and `depends_on` from `services/qbittorrent/compose.yaml`, and replace `gluetun:8080` with `qbittorrent:8080` in `services/caddy/Caddyfile`, `services/cross-seed/config.js`, `services/ratio/ratio.py` and `services/homepage/services.yaml`. Soulseek shows the IP of each user to the others, so slskd never runs without the VPN, and Suwayomi never fetches a manga site from the home IP.
 - Without a domain, comment `caddy` and publish the port of each web UI in its own `compose.yaml`, reachable over plain HTTP on the local network only.
 
-Remove the tiles of the services left out from `homepage/services.yaml` too.
+Remove the tiles of the services left out from `services/homepage/services.yaml` too.
 
 `./scripts/verify.sh` only checks the services that `compose.yaml` still includes.
 
@@ -285,7 +285,7 @@ Jellyfin and Seerr face the internet, so a flaw in either must not land next to 
 
 qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal zone, and the Beszel agent the network of the Host. A service of the internal zone that needs Jellyfin or Seerr, such as Homepage, Uptime Kuma or the Music bot, reaches it through Caddy at its public name, so the zones only open towards Jellyfin and Seerr, never from them. `python3 -m unittest` checks the members of each zone. Jellyfin and Seerr face the internet, so a flaw in one of them should not land next to Radarr, qBittorrent or Dozzle.
 
-Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS provider, swap the `caddy-dns/ovh` module in `caddy/Dockerfile` for its own, and its settings in the `acme_dns` and `dynamic_dns` blocks of `caddy/Caddyfile` and in `.env`.
+Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS provider, swap the `caddy-dns/ovh` module in `services/caddy/Dockerfile` for its own, and its settings in the `acme_dns` and `dynamic_dns` blocks of `services/caddy/Caddyfile` and in `.env`.
 
 ### DNS zone
 
@@ -370,10 +370,10 @@ The settings made in the web UIs of the services live in the appdata root, not i
 [doco-cd](https://doco.cd) is a container, outside the NAS project, that polls `main` every 3 minutes and deploys `compose.yaml` with `.env`, as set in `.doco-cd.yml`. Komodo or Portainer can do the same with a web UI and a database the NAS does not need. doco-cd pulls, so nothing opens on the router, and no workflow of a public pull request can run on the NAS. Start doco-cd once from the Clone, its first poll starts the whole NAS:
 
 ```sh
-docker compose -f doco-cd/compose.yaml up -d
+docker compose -f services/doco-cd/compose.yaml up -d
 ```
 
-Each deploy runs from a copy of the merged revision, kept in the data volume of doco-cd. It recreates the services whose compose definition or image changed, and those that mount a file of the repo that changed, such as `ratio/ratio.py`. It rebuilds Caddy from its Dockerfile, and removes the services commented out in `compose.yaml`. A failed deploy is retried at the next poll.
+Each deploy runs from a copy of the merged revision, kept in the data volume of doco-cd. It recreates the services whose compose definition or image changed, and those that mount a file of the repo that changed, such as `services/ratio/ratio.py`. It rebuilds Caddy from its Dockerfile, and removes the services commented out in `compose.yaml`. A failed deploy is retried at the next poll.
 
 doco-cd reaches Docker through its socket, which gives it full control of the machine, like any tool that runs Compose. Its logs name each deploy, and the reason of each failed one:
 
@@ -391,7 +391,7 @@ Renovate opens the updates of doco-cd itself and never merges them. Once one is 
 
 ```sh
 git pull --ff-only
-docker compose -f doco-cd/compose.yaml up -d
+docker compose -f services/doco-cd/compose.yaml up -d
 ```
 
 ### Renovate
@@ -837,7 +837,7 @@ An approved Request is then searched by Radarr or Sonarr, downloaded by qBittorr
 
 Requires [Requests](#requests).
 
-Recyclarr creates the quality profiles of Radarr and Sonarr, so that most downloads already match the Library format and Tdarr rarely has to re-encode. It sees no media file and only talks to the Radarr and Sonarr APIs. Profilarr can replace it, or the profiles of the [TRaSH Guides](https://trash-guides.info/) copied by hand. Its config is `recyclarr/recyclarr.yml`, with a few custom formats of our own in `recyclarr/custom-formats`, and it syncs again every day at midnight.
+Recyclarr creates the quality profiles of Radarr and Sonarr, so that most downloads already match the Library format and Tdarr rarely has to re-encode. It sees no media file and only talks to the Radarr and Sonarr APIs. Profilarr can replace it, or the profiles of the [TRaSH Guides](https://trash-guides.info/) copied by hand. Its config is `services/recyclarr/recyclarr.yml`, with a few custom formats of our own in `services/recyclarr/custom-formats`, and it syncs again every day at midnight.
 
 Each tool gets two profiles, built from the French profiles of the [TRaSH Guides](https://trash-guides.info/Radarr/radarr-setup-quality-profiles-french-en/):
 
@@ -860,7 +860,7 @@ Sync right away instead of waiting for midnight:
 docker compose exec recyclarr recyclarr sync
 ```
 
-Each tool ends with a `Completed` line and no error. Lines about `conflicting scores` are expected: they show the config overriding a TRaSH score. Run the same command after changing anything under `recyclarr/`.
+Each tool ends with a `Completed` line and no error. Lines about `conflicting scores` are expected: they show the config overriding a TRaSH score. Run the same command after changing anything under `services/recyclarr/`.
 
 ### Assign the profiles
 
@@ -888,7 +888,7 @@ Requires [Radarr](#radarr) and [Sonarr](#sonarr).
 
 Tdarr normalises every video of the Library to MKV H265 within 1920x1080, one compact format that most devices play directly, offline on a phone included. MP4 holds subtitles and several audio tracks poorly, and H264 makes much larger files. Unmanic or FileFlows can replace it. It sees only the movies, shows and anime folders, under the same paths as Radarr and Sonarr, and never the torrents tree, so a torrent still seeding is never touched. Its work files go to `<APPDATA_ROOT>/tdarr/cache`.
 
-The flow, `tdarr/flow.json`, picks the tracks of each file, embeds the subtitle files of Bazarr, replaces the original as MKV and asks Radarr or Sonarr to rescan its folder, following the rules of [Languages](#languages).
+The flow, `services/tdarr/flow.json`, picks the tracks of each file, embeds the subtitle files of Bazarr, replaces the original as MKV and asks Radarr or Sonarr to rescan its folder, following the rules of [Languages](#languages).
 
 ### Login
 
@@ -906,8 +906,8 @@ The flow, `tdarr/flow.json`, picks the tracks of each file, embeds the subtitle 
 
 Tdarr keeps its flows in its own database, so the repo holds the flow as an export.
 
-1. In Flows, click "Import JSON Flow Template", paste the content of `tdarr/flow.json`, and create the flow.
-2. After pulling a change to `tdarr/flow.json`, import it again and pick "Update Existing Flow".
+1. In Flows, click "Import JSON Flow Template", paste the content of `services/tdarr/flow.json`, and create the flow.
+2. After pulling a change to `services/tdarr/flow.json`, import it again and pick "Update Existing Flow".
 
 ### Libraries
 
@@ -981,11 +981,11 @@ A NAS set up before anime got French and English subtitles still gives them Fren
 2. In Bazarr, Settings > Languages, delete the `French and Japanese` profile, remove Japanese from "Languages Filter", and save. No work carries the `anime` tag any more, so no sync gives it back that profile.
 3. In Series, click "Mass Edit", select every anime, pick `French and English` as the profile, and save. Do the same in Movies for every anime movie.
 4. In Settings > Providers, delete Jimaku.cc. In the Metadata tab, delete AniDB, and save.
-5. Import `tdarr/flow.json` again in Tdarr, as [Tdarr](#tdarr) describes.
+5. Import `services/tdarr/flow.json` again in Tdarr, as [Tdarr](#tdarr) describes.
 
 ### Subtitles embedded by Tdarr
 
-The Library holds no subtitle file: Tdarr embeds each one into its video, so a Friend who downloads a video gets its subtitles. When Bazarr finds a subtitle after Tdarr has processed the video, it puts the video back in the Tdarr queue with `bazarr/tdarr_requeue.py`, which reads `TDARR_API_KEY` from `.env`. In Settings > Subtitles:
+The Library holds no subtitle file: Tdarr embeds each one into its video, so a Friend who downloads a video gets its subtitles. When Bazarr finds a subtitle after Tdarr has processed the video, it puts the video back in the Tdarr queue with `services/bazarr/tdarr_requeue.py`, which reads `TDARR_API_KEY` from `.env`. In Settings > Subtitles:
 
 1. Under "Embedded Subtitles", leave "Use Embedded Subtitles" checked, so an embedded track counts as found and is never downloaded again.
 2. Under "Upgrading Subtitles", uncheck "Upgrade Previously Downloaded Subtitles". An upgrade would add a second track of the same language to the video.
@@ -1034,7 +1034,7 @@ Radarr and Sonarr give Indexarr the title, the year and the poster of each work.
 
 ### Folders to scan
 
-The folders are set in `indexarr/compose.yaml`, not in the web UI: `/data/media/movies` for movies, `/data/media/shows` and `/data/media/anime` for series. With `RADARR_API_KEY` and `SONARR_API_KEY` set, Indexarr takes the list of works and files from Radarr and Sonarr, then reads the tracks of each file from these folders. It refreshes the catalog every 24 hours. To refresh it at once, after a large import, click "Scan" in its web UI. The first scan reads every file of the Library and takes a while.
+The folders are set in `services/indexarr/compose.yaml`, not in the web UI: `/data/media/movies` for movies, `/data/media/shows` and `/data/media/anime` for series. With `RADARR_API_KEY` and `SONARR_API_KEY` set, Indexarr takes the list of works and files from Radarr and Sonarr, then reads the tracks of each file from these folders. It refreshes the catalog every 24 hours. To refresh it at once, after a large import, click "Scan" in its web UI. The first scan reads every file of the Library and takes a while.
 
 ## Music bot
 
@@ -1080,7 +1080,7 @@ Requires [qBittorrent](#qbittorrent), [Prowlarr](#prowlarr), [Radarr](#radarr) a
 
 The Admin keeps a good ratio on C411, a French private tracker, with torrents grabbed only to seed, without touching the Library. The same tools work with any private tracker, except the Zen, which only C411 pays. Paid grabs of fresh releases lost the race against seedboxes, so the Farm works first for Zen, paid every night per torrent seeded, and takes upload as a bonus:
 
-- ratio, `ratio/ratio.py`, runs the Farm. It grabs freeleech releases, Twins and, over the Ratio floor of the account, small Rare releases of the Volume hunt for the Farm, downloads each from its Twin on a public tracker when one exists, and cleans both.
+- ratio, `services/ratio/ratio.py`, runs the Farm. It grabs freeleech releases, Twins and, over the Ratio floor of the account, small Rare releases of the Volume hunt for the Farm, downloads each from its Twin on a public tracker when one exists, and cleans both.
 - cross-seed finds the torrents of qBittorrent on C411 and seeds them there too, from hardlinks in `/data/torrents/cross-seed`, without downloading them again. qBittorrent tells it about every finished torrent.
 - autobrr stays available for a tracker that announces on IRC. C411 does not.
 
@@ -1128,7 +1128,7 @@ autobrr reaches IRC and the tracker from the home IP. Only qBittorrent goes thro
 
 ### cross-seed
 
-cross-seed searches the private indexers of Prowlarr for torrents that hold the same data as one already in qBittorrent, and adds them seeding from a hardlink, without downloading anything. Its config is `cross-seed/config.js`, which reads every value from `.env`.
+cross-seed searches the private indexers of Prowlarr for torrents that hold the same data as one already in qBittorrent, and adds them seeding from a hardlink, without downloading anything. Its config is `services/cross-seed/config.js`, which reads every value from `.env`.
 
 1. In `.env`, set `CROSS_SEED_API_KEY` to a new key, and `CROSS_SEED_INDEXER_IDS` to the ids of the private indexers to search, C411 only. Prowlarr shows the id of an indexer in its Torznab URL, `http://prowlarr:9696/<id>/api`, in Indexers when you edit it.
 
@@ -1148,7 +1148,7 @@ To check the hook, open View > Log in qBittorrent once a torrent finishes: it sh
 
 ### ratio
 
-ratio, `ratio/ratio.py`, runs every 10 minutes. It reads qBittorrent, Prowlarr and the profile API of C411, then:
+ratio, `services/ratio/ratio.py`, runs every 10 minutes. It reads qBittorrent, Prowlarr and the profile API of C411, then:
 
 1. **Holds the Ratio floor.** It reads the Account ratio of C411 once per run with `C411_PROFILE_API_KEY`, its uploaded total over its downloaded total, credit included. Under `RATIO_FLOOR`, 1.2 by default, or when the profile cannot be read, ratio spends no download on C411 and moves the C411 indexer of Prowlarr onto a sync profile named Paused, which it creates with RSS, automatic and interactive search off. Prowlarr pushes it to Radarr, Sonarr and Lidarr, whose sync level must stay Full Sync, so they stop downloading from C411, while ratio and cross-seed still read it. Every torrent keeps seeding, since seeding never goes through Prowlarr. LazyLibrarian ignores sync profiles and still sees C411. Once the Account ratio is back over the floor, ratio puts C411 back on the other profile. A paid grab never takes the Account ratio under the floor.
 2. **Counts.** It keeps the Ledger in `${APPDATA_ROOT}/ratio/state.json`, which gives the Deficit or the Surplus of the C411 account. A torrent belongs to C411 when its announce URL holds `RATIO_TRACKER`.
@@ -1180,13 +1180,13 @@ After each run, ratio also serves a summary at `http://ratio:8000/summary`, on t
 
 ratio also keeps one entry per day in `daily` of its state file, the last 30 days, so a restart or a deploy keeps them: the Account ratio, the download left before the floor, the uploaded total with the credit bought with Zen and the real upload, the downloaded total, the Zen balance, the Zen paid that night, which is the growth of the total Zen earned since the entry of the day before, and the Seed count. On its first run it fills the days it already read from the profile, about a week.
 
-ratio draws a board at `https://ratio.lan.<DOMAIN>/graphs`, in inline SVG and HTML that loads no script, in English or with `?lang=fr` in French. `?part=1` shows the big figures of the account and three curves on a fixed axis of 30 days: the Account ratio with the floor, the Zen paid each night with the balance, and the uploaded and downloaded totals. `?part=2` shows every step of the five challenges of the Seed and Specialization paths of the Swarm Keeper class, with its reward, the reached steps faded and the next one with its progress, then the disk of the Farm split by Source, and a table of what each Source earned since the Ledger began, most uploaded first: its torrents, download, upload and ratio, then its download, upload and ratio of the last 7 days and its days in the Farm, with a total. `?part=disk` shows only the disk of the Farm, and `pad=<height>` adds a margin around any part and sets its height in pixels. The Volume category steps of 250 and 500 seeds count Films & Vidéos, the specialization category of the Admin. Homepage embeds both parts, in French, in two iframes of 384 pixels, the largest fixed height its styles hold, and `homepage/custom.css` hides the title of both cards and the frame Homepage draws around an iframe. Homepage gives the iframe a light color scheme, so the board declares none and stays transparent, while the page opened alone has its own dark background. Caddy only routes `/graphs` on that lan name, `/summary` stays on the Compose network.
+ratio draws a board at `https://ratio.lan.<DOMAIN>/graphs`, in inline SVG and HTML that loads no script, in English or with `?lang=fr` in French. `?part=1` shows the big figures of the account and three curves on a fixed axis of 30 days: the Account ratio with the floor, the Zen paid each night with the balance, and the uploaded and downloaded totals. `?part=2` shows every step of the five challenges of the Seed and Specialization paths of the Swarm Keeper class, with its reward, the reached steps faded and the next one with its progress, then the disk of the Farm split by Source, and a table of what each Source earned since the Ledger began, most uploaded first: its torrents, download, upload and ratio, then its download, upload and ratio of the last 7 days and its days in the Farm, with a total. `?part=disk` shows only the disk of the Farm, and `pad=<height>` adds a margin around any part and sets its height in pixels. The Volume category steps of 250 and 500 seeds count Films & Vidéos, the specialization category of the Admin. Homepage embeds both parts, in French, in two iframes of 384 pixels, the largest fixed height its styles hold, and `services/homepage/custom.css` hides the title of both cards and the frame Homepage draws around an iframe. Homepage gives the iframe a light color scheme, so the board declares none and stays transparent, while the page opened alone has its own dark background. Caddy only routes `/graphs` on that lan name, `/summary` stays on the Compose network.
 
-To start the Deficit over, for example once the ratio on the tracker has a buffer, stop ratio, delete its state file and start it again. Every other limit above is fixed in `settings_from_env` of `ratio/ratio.py`.
+To start the Deficit over, for example once the ratio on the tracker has a buffer, stop ratio, delete its state file and start it again. Every other limit above is fixed in `settings_from_env` of `services/ratio/ratio.py`.
 
 ### Farm report
 
-farm-report, `farm-report/report.py`, posts the board of ratio to a channel of the Discord server dedicated to the NAS, the one of the [Discord alerts](#discord-alerts), every hour. Its message holds two pictures, the first part of the board, the trends, and the Farm disk, without the challenges, in violet, or in rose when the downloads of C411 are paused under the Ratio floor.
+farm-report, `services/farm-report/report.py`, posts the board of ratio to a channel of the Discord server dedicated to the NAS, the one of the [Discord alerts](#discord-alerts), every hour. Its message holds two pictures, the first part of the board, the trends, and the Farm disk, without the challenges, in violet, or in rose when the downloads of C411 are paused under the Ratio floor.
 
 Each day at 6:00, it posts a new message, then edits that one every hour until the next day at 6:00. The message of the day before keeps its last state, so the channel holds one message per day. The id of the message of the day sits in `${APPDATA_ROOT}/farm-report/state.json`. A message deleted in Discord is posted again at the next hour. When ratio does not answer, farm-report changes nothing and tries again at the next hour.
 
@@ -1240,7 +1240,7 @@ Beszel shows the processor, the memory, the disks, the network and the temperatu
    ```
 
 3. In `.env`, set `BESZEL_AGENT_KEY` to the line it prints, between double quotes since it holds a space, then restart doco-cd to apply `.env`.
-4. Open `https://beszel.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. The system `NAS`, set in `beszel/compose.yaml`, turns up within a minute, with a `Data` disk for the data root.
+4. Open `https://beszel.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. The system `NAS`, set in `services/beszel/compose.yaml`, turns up within a minute, with a `Data` disk for the data root.
 
 ### Alerts
 
@@ -1283,7 +1283,7 @@ labels:
   kuma.radarr.http.url: http://radarr:7878/ping
 ```
 
-The defaults of every monitor, its interval of 60 seconds, the Discord notification and the Docker host `NAS`, sit in `AUTOKUMA__DEFAULT_SETTINGS` in `uptime-kuma/compose.yaml`. `python3 -m unittest` checks that every service has a monitor.
+The defaults of every monitor, its interval of 60 seconds, the Discord notification and the Docker host `NAS`, sit in `AUTOKUMA__DEFAULT_SETTINGS` in `services/uptime-kuma/compose.yaml`. `python3 -m unittest` checks that every service has a monitor.
 
 The monitors of Jellyfin and Seerr also alert before the certificate expires. Inside the NAS their public names lead straight to Caddy, so they check Caddy, its certificate and the service, but neither the port forward of the router nor the DNS record: only a check from outside the home, such as a free monitor of UptimeRobot, covers those.
 
@@ -1316,7 +1316,7 @@ Requires [Bazarr](#bazarr), [Suwayomi](#suwayomi), [Private tracker ratio](#priv
 
 Homepage is the start page of the Admin: one tile per service, grouped as in [Architecture](#architecture), with a link to its lan name and its live figures, such as the Requests waiting in Seerr, the queues of Radarr, Sonarr and Lidarr, the manga of Suwayomi, the torrents of qBittorrent, the public IP and the country of the VPN, and the free space of the data disk, plus the board of ratio in two iframes. Homarr or Dashy can replace it.
 
-Its config is `homepage/settings.yaml`, `homepage/services.yaml` and `homepage/widgets.yaml`. They hold no key and no personal value: Homepage reads each one from `.env`, through the `HOMEPAGE_VAR_` variables of `homepage/compose.yaml`. Homepage pastes each value into the YAML before reading it, so a value it reads must hold no single quote, or the whole page stays empty. This is why it reads qBittorrent with an API key rather than its password. Homepage calls the APIs itself, so no key ever reaches the browser. It sees no file of the data root, only the empty folder `<DATA_ROOT>/.homepage`, which gives it the free space of the data disk. `./scripts/verify.sh` checks that it mounts neither the media tree nor the torrents tree.
+Its config is `services/homepage/settings.yaml`, `services/homepage/services.yaml` and `services/homepage/widgets.yaml`. They hold no key and no personal value: Homepage reads each one from `.env`, through the `HOMEPAGE_VAR_` variables of `services/homepage/compose.yaml`. Homepage pastes each value into the YAML before reading it, so a value it reads must hold no single quote, or the whole page stays empty. This is why it reads qBittorrent with an API key rather than its password. Homepage calls the APIs itself, so no key ever reaches the browser. It sees no file of the data root, only the empty folder `<DATA_ROOT>/.homepage`, which gives it the free space of the data disk. `./scripts/verify.sh` checks that it mounts neither the media tree nor the torrents tree.
 
 ### Login
 

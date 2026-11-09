@@ -7,11 +7,10 @@ import time
 
 import discord
 from discord import app_commands
+from jellyfin import Jellyfin
 from player import Player
 from rules import NICKNAME, ROLE, activity, control_refusal, play_refusal, should_leave
 from status import Status, serve, summary
-
-from jellyfin import Jellyfin
 
 STATUS_PORT = 8000
 TICK_SECONDS = 15
