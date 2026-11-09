@@ -42,7 +42,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         body = self.body()
         self.server.calls.append(("POST", self.path, body))
         message = str(len(self.server.messages) + 1)
-        self.server.messages[message] = body["content"]
+        self.server.messages[message] = body["embeds"][0]["description"]
         self.answer(200, {"id": message})
 
     def do_PATCH(self):
@@ -52,7 +52,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if message not in self.server.messages:
             self.answer(404, {"message": "Unknown Message"})
             return
-        self.server.messages[message] = body["content"]
+        self.server.messages[message] = body["embeds"][0]["description"]
         self.answer(200, {"id": message})
 
 
@@ -81,8 +81,16 @@ class PublishTest(unittest.TestCase):
         self.publish()
         method, path, body = self.discord.calls[0]
         self.assertEqual(("POST", "/1234/abcd?wait=true"), (method, path))
-        self.assertEqual("https://jellyfin.example.com:443", body["content"])
+        self.assertEqual("", body["content"])
+        self.assertEqual([{"description": "https://jellyfin.example.com:443", "color": 0xA78BFA}], body["embeds"])
         self.assertEqual({"parse": []}, body["allowed_mentions"])
+
+    def test_the_first_heading_is_the_title_of_the_embed(self):
+        self.message.write_text("# Liens\n\n## Jellyfin\nhttps://jellyfin.${DOMAIN}\n", encoding="utf-8")
+        self.publish()
+        embed = self.discord.calls[0][2]["embeds"][0]
+        self.assertEqual("Liens", embed["title"])
+        self.assertEqual("## Jellyfin\nhttps://jellyfin.example.com", embed["description"])
 
     def test_edits_the_same_message_the_next_time(self):
         self.publish()
@@ -119,7 +127,7 @@ class PublishTest(unittest.TestCase):
 
     def test_refuses_a_message_too_long_for_discord(self):
         self.message.write_text("x" * (MAX_LENGTH + 1), encoding="utf-8")
-        with self.assertRaisesRegex(SystemExit, "2000"):
+        with self.assertRaisesRegex(SystemExit, "4096"):
             self.publish()
 
 
@@ -128,7 +136,9 @@ class MessagesTest(unittest.TestCase):
         env = {**read_env(ROOT / ".env.example"), "DOMAIN": "example.com", "CADDY_HTTPS_PORT": "50000"}
         for path in sorted((ROOT / "discord-posts").glob("*.md")):
             with self.subTest(path.name):
-                self.assertLessEqual(len(render(path, env)), MAX_LENGTH)
+                embed = render(path, env)
+                self.assertTrue(embed.get("title"))
+                self.assertLessEqual(len(embed["description"]), MAX_LENGTH)
 
     def test_reads_values_and_strips_quotes(self):
         with tempfile.TemporaryDirectory() as folder:
