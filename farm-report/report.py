@@ -38,33 +38,10 @@ def next_hour(now):
     return (now + datetime.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
 
 
-def number(value, digits):
-    if value is None:
-        return "-"
-    return f"{value:,.{digits}f}".replace(",", " ").replace(".", ",")
-
-
 def embeds(summary):
     account = summary.get("account") or {}
     paused = bool(account.get("paused"))
-    color = ROSE if paused else VIOLET
-    first = {
-        "title": "Farm",
-        "color": color,
-        "fields": [
-            {"name": "Ratio", "value": number(account.get("ratio"), 2), "inline": True},
-            {"name": "Avant plancher", "value": f"{number(account.get('left_gb'), 1)} Go", "inline": True},
-            {"name": "Zen", "value": number(account.get("zen"), 0), "inline": True},
-            {"name": "Up, 7 jours", "value": f"{number(account.get('week_uploaded_gb'), 1)} Go", "inline": True},
-        ],
-        "image": {"url": "attachment://part1.png"},
-        "footer": {"text": "Mis à jour"},
-    }
-    if summary.get("updated_at"):
-        first["timestamp"] = summary["updated_at"]
-    if paused:
-        first["description"] = f"Téléchargements sur C411 en pause sous le Ratio floor de {number(account.get('floor'), 1)}"
-    return [first]
+    return [{"color": ROSE if paused else VIOLET, "image": {"url": "attachment://part1.png"}}]
 
 
 def multipart(payload, files):

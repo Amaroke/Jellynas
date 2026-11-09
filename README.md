@@ -1186,7 +1186,7 @@ To start the Deficit over, for example once the ratio on the tracker has a buffe
 
 ### Farm report
 
-farm-report, `farm-report/report.py`, posts the board of ratio to a channel of the Discord server dedicated to the NAS, the one of the [Discord alerts](#discord-alerts), every hour. Its message holds the Account tile of Homepage in French, the Account ratio, the download left before the Ratio floor, the Zen and the upload of the last 7 days, with a line when the downloads of C411 are paused under the floor, then a picture of the first part of the board, the trends, without the challenges.
+farm-report, `farm-report/report.py`, posts the board of ratio to a channel of the Discord server dedicated to the NAS, the one of the [Discord alerts](#discord-alerts), every hour. Its message holds only a picture of the first part of the board, the trends, without the challenges, in violet, or in rose when the downloads of C411 are paused under the Ratio floor.
 
 Each day at 6:00, it posts a new message, then edits that one every hour until the next day at 6:00. The message of the day before keeps its last state, so the channel holds one message per day. The id of the message of the day sits in `${APPDATA_ROOT}/farm-report/state.json`. A message deleted in Discord is posted again at the next hour. When ratio does not answer, farm-report changes nothing and tries again at the next hour.
 

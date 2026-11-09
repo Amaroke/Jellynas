@@ -863,7 +863,7 @@ TEXT = {
     "en": {
         "gb": "GB", "decimal": ".", "empty": "No history yet, ratio records its first day after its first run.",
         "ratio": "Account ratio", "floor": "floor {v}", "left": "Before the floor", "uploaded": "Uploaded",
-        "actual": "{v} real", "downloaded": "Downloaded", "zen": "Zen", "paid_last": "+{v} last night",
+        "actual": "{v} real", "one": "{v} before a ratio of 1", "downloaded": "Downloaded", "zen": "Zen", "paid_last": "+{v} last night",
         "zen_chart": "Zen", "paid": "paid each night", "balance": "balance", "transfer": "Upload and download",
         "challenges": {
             "seed_volume": "Seed volume", "contribution": "Minimum contribution", "duration": "Seed duration",
@@ -889,7 +889,7 @@ TEXT = {
     "fr": {
         "gb": "Go", "decimal": ",", "empty": "Pas encore d'historique, ratio note son premier jour après son premier passage.",
         "ratio": "Ratio du compte", "floor": "plancher {v}", "left": "Avant le plancher", "uploaded": "Envoyé",
-        "actual": "{v} réels", "downloaded": "Reçu", "zen": "Zen", "paid_last": "+{v} cette nuit",
+        "actual": "{v} réels", "one": "{v} avant un ratio de 1", "downloaded": "Reçu", "zen": "Zen", "paid_last": "+{v} cette nuit",
         "zen_chart": "Zen", "paid": "payé chaque nuit", "balance": "solde", "transfer": "Envoi et réception",
         "challenges": {
             "seed_volume": "Volume de seed", "contribution": "Contribution minimum", "duration": "Durée de seed",
@@ -1085,10 +1085,13 @@ def trends(history, words):
     paid = today.get("zen_paid")
     floor = today["floor"]
     actual = today.get("actual_gb")
+    up, down = today.get("uploaded_gb"), today.get("downloaded_gb")
+    one = None if up is None or down is None else up - down
     strip = "".join([
         kpi("ratio", words["ratio"], figure_text(today.get("ratio"), 2, words),
             words["floor"].format(v=figure_text(floor, 1, words))),
-        kpi("left", words["left"], size_text(today.get("left_gb"), words)),
+        kpi("left", words["left"], size_text(today.get("left_gb"), words),
+            "" if one is None else words["one"].format(v=size_text(one, words))),
         kpi("up", words["uploaded"], size_text(today.get("uploaded_gb"), words),
             "" if actual is None else words["actual"].format(v=size_text(actual, words))),
         kpi("down", words["downloaded"], size_text(today.get("downloaded_gb"), words)),
