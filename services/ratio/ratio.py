@@ -873,7 +873,7 @@ TEXT = {
         "gb": "GB", "decimal": ".", "empty": "No history yet, ratio records its first day after its first run.",
         "ratio": "Account ratio", "floor": "floor {v}", "left": "Before the floor", "uploaded": "Uploaded",
         "actual": "{v} real", "one": "{v} before a ratio of 1", "downloaded": "Downloaded", "day": "{v} in 24 h", "zen": "Zen", "paid_last": "+{v} last night",
-        "theory": "Theoretical GB", "theory_sub": "{v} over a ratio of 1 + {z} Zen",
+        "theory": "Theoretical GB",
         "zen_chart": "Zen", "paid": "paid each night", "balance": "balance", "transfer": "Upload and download",
         "challenges": {
             "seed_volume": "Seed volume", "contribution": "Minimum contribution", "duration": "Seed duration",
@@ -900,7 +900,7 @@ TEXT = {
         "gb": "Go", "decimal": ",", "empty": "Pas encore d'historique, ratio note son premier jour après son premier passage.",
         "ratio": "Ratio du compte", "floor": "plancher {v}", "left": "Avant le plancher", "uploaded": "Envoyé",
         "actual": "{v} réels", "one": "{v} avant un ratio de 1", "downloaded": "Reçu", "day": "{v} en 24 h", "zen": "Zen", "paid_last": "+{v} cette nuit",
-        "theory": "Go théoriques", "theory_sub": "{v} au-dessus du ratio 1 + {z} Zen",
+        "theory": "Go théoriques",
         "zen_chart": "Zen", "paid": "payé chaque nuit", "balance": "solde", "transfer": "Envoi et réception",
         "challenges": {
             "seed_volume": "Volume de seed", "contribution": "Contribution minimum", "duration": "Durée de seed",
@@ -1113,8 +1113,7 @@ def trends(history, words):
             "" if day is None else words["day"].format(v=size_text(day, words))),
         kpi("zen", words["zen"], figure_text(zen, 0, words),
             words["paid_last"].format(v=figure_text(paid, 0, words)) if paid else ""),
-        kpi("theory", words["theory"], size_text(theory, words),
-            "" if theory is None else words["theory_sub"].format(v=size_text(one, words), z=figure_text(zen, 0, words))),
+        kpi("theory", words["theory"], size_text(theory, words)),
     ])
     ratios = [e.get("ratio") for e in entries]
     top = top_of(ratios + [floor]) * 1.05
