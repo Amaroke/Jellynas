@@ -106,8 +106,8 @@ class PublishTest(unittest.TestCase):
         self.assertEqual(["POST", "POST"], [call[0] for call in self.discord.calls])
 
     def test_refuses_a_channel_without_webhook(self):
-        with self.assertRaisesRegex(SystemExit, "DISCORD_ANNOUNCEMENTS_WEBHOOK_ID"):
-            publish("announcements", self.message, self.env, self.discord.url)
+        with self.assertRaisesRegex(SystemExit, "DISCORD_NEWS_WEBHOOK_ID"):
+            publish("news", self.message, self.env, self.discord.url)
         self.assertEqual([], self.discord.calls)
 
     def test_refuses_a_variable_missing_from_the_env(self):
