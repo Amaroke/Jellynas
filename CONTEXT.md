@@ -149,3 +149,11 @@ _Avoid_: local URL, internal address
 **Network zone**:
 A Docker network that groups the services one exposed service may reach: Jellyfin alone with Caddy, Seerr with Caddy, Radarr and Sonarr, every other service in the internal zone. A zone only opens towards Jellyfin and Seerr, through their Public names.
 _Avoid_: VLAN, segment, subnet
+
+**Declared settings**:
+The settings of the services that the Admin chose and wrote in the repo, each in the file of the tool that applies it. A setting that is not declared is left as the service has it.
+_Avoid_: config as code, desired state
+
+**Drift**:
+A Declared setting that the NAS no longer has, found by `check` and removed by `apply`.
+_Avoid_: diff, mismatch, deviation
