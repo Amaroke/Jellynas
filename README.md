@@ -1077,15 +1077,15 @@ Each track posts a message with its cover and Pause, Skip and Stop buttons, and 
 
 ## Discord messages
 
-The links and news channels of the Discord server of the Friends hold messages written in `discord-posts/`, one Markdown file per message, so they live in git like the rest of the NAS. `${DOMAIN}` and `${CADDY_HTTPS_PORT}` in a file are filled in from `.env`. `scripts/discord_post.py` publishes a file through the webhook of its channel: the first time it posts the message, the next times it edits the same message in place, and it posts again if the message was deleted. It keeps the id of each message in `${APPDATA_ROOT}/discord-posts/state.json`. Discord takes 2000 characters per message, which `python3 -m unittest` checks, along with `discord-posts/admin.md` listing every lan name of Caddy.
+The links, news and admin channels of the Discord server of the Friends hold messages written in `discord-posts/`, one Markdown file per message, so they live in git like the rest of the NAS. `${DOMAIN}` and `${CADDY_HTTPS_PORT}` in a file are filled in from `.env`. `scripts/discord_post.py` publishes a file through the webhook of its channel: the first time it posts the message, the next times it edits the same message in place, and it posts again if the message was deleted. It keeps the id of each message in `${APPDATA_ROOT}/discord-posts/state.json`. Discord takes 2000 characters per message, which `python3 -m unittest` checks, along with `discord-posts/admin.md` listing every lan name of Caddy.
 
-1. In Discord, in the settings of the links channel, Integrations > Webhooks, click "New Webhook", name it `Jellynas`, and copy its URL, `https://discord.com/api/webhooks/<id>/<token>`. Do the same for the news channel.
-2. In `.env`, set `DISCORD_LINKS_WEBHOOK_ID` and `DISCORD_LINKS_WEBHOOK_TOKEN`, then `DISCORD_NEWS_WEBHOOK_ID` and `DISCORD_NEWS_WEBHOOK_TOKEN`, to both parts of each URL.
-3. Pull the Clone and publish the messages of links and the welcome message of news:
+1. In Discord, in the settings of the links channel, Integrations > Webhooks, click "New Webhook", name it `Jellynas`, and copy its URL, `https://discord.com/api/webhooks/<id>/<token>`. Do the same for the news and admin channels.
+2. In `.env`, set `DISCORD_LINKS_WEBHOOK_ID` and `DISCORD_LINKS_WEBHOOK_TOKEN`, then the same pairs for `NEWS` and `ADMIN`, to both parts of each URL.
+3. Pull the Clone and publish the messages of links, news and admin:
 
    ```sh
    python3 scripts/discord_post.py links discord-posts/links.md
-   python3 scripts/discord_post.py links discord-posts/admin.md
+   python3 scripts/discord_post.py admin discord-posts/admin.md
    python3 scripts/discord_post.py news discord-posts/welcome.md
    ```
 
