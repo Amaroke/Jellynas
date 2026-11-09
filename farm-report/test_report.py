@@ -1,0 +1,163 @@
+import datetime
+import io
+import json
+import tempfile
+import unittest
+import urllib.error
+from pathlib import Path
+
+from report import Webhook, embeds, multipart, next_hour, publish, report, report_day
+
+PARIS = datetime.timezone(datetime.timedelta(hours=1))
+SUMMARY = {
+    "updated_at": "2026-11-09T13:00:00+00:00",
+    "account": {"ratio": 1.4567, "floor": 1.2, "left_gb": 123.45, "paused": False, "zen": 12345, "week_uploaded_gb": 67.8},
+}
+
+
+def at(day, hour, minute=0):
+    return datetime.datetime(2026, 11, day, hour, minute, tzinfo=PARIS)
+
+
+class FakeWebhook:
+    def __init__(self, missing=False):
+        self.calls = []
+        self.missing = missing
+
+    def post(self, payload, files):
+        self.calls.append(("post", None, payload, files))
+        return f"m{len(self.calls)}"
+
+    def edit(self, message_id, payload, files):
+        self.calls.append(("edit", message_id, payload, files))
+        if self.missing:
+            raise urllib.error.HTTPError("url", 404, "Unknown Message", {}, io.BytesIO(b""))
+
+
+class Response(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+
+class ReportDayTest(unittest.TestCase):
+    def test_a_day_starts_at_6(self):
+        self.assertEqual(report_day(at(9, 5, 59)), "2026-11-08")
+        self.assertEqual(report_day(at(9, 6)), "2026-11-09")
+
+    def test_the_next_run_is_on_the_next_hour(self):
+        self.assertEqual(next_hour(at(9, 14, 7)), at(9, 15))
+        self.assertEqual(next_hour(at(9, 23, 59)), at(10, 0))
+
+
+class EmbedsTest(unittest.TestCase):
+    def test_the_first_embed_shows_the_account_tile_in_french(self):
+        first, _ = embeds(SUMMARY)
+        self.assertEqual(
+            [(f["name"], f["value"]) for f in first["fields"]],
+            [("Ratio", "1,46"), ("Avant plancher", "123,5 Go"), ("Zen", "12 345"), ("Up, 7 jours", "67,8 Go")],
+        )
+        self.assertNotIn("description", first)
+        self.assertEqual(first["image"]["url"], "attachment://part1.png")
+
+    def test_the_second_embed_shows_part_2_and_the_update_time(self):
+        _, second = embeds(SUMMARY)
+        self.assertEqual(second["image"]["url"], "attachment://part2.png")
+        self.assertEqual(second["timestamp"], SUMMARY["updated_at"])
+
+    def test_a_pause_under_the_floor_is_shown(self):
+        first, second = embeds({"account": {**SUMMARY["account"], "paused": True}})
+        self.assertIn("pause sous le Ratio floor de 1,2", first["description"])
+        self.assertEqual(first["color"], second["color"])
+        self.assertNotEqual(first["color"], embeds(SUMMARY)[0]["color"])
+
+    def test_an_unreadable_account_shows_dashes(self):
+        first, _ = embeds({"account": {"ratio": None, "left_gb": None, "zen": None, "week_uploaded_gb": None, "paused": True}})
+        self.assertEqual([f["value"] for f in first["fields"]], ["-", "- Go", "-", "- Go"])
+
+
+class PublishTest(unittest.TestCase):
+    def test_the_first_report_posts_a_message(self):
+        webhook = FakeWebhook()
+        state = publish(webhook, {}, SUMMARY, [b"a", b"b"], at(9, 14))
+        self.assertEqual(state, {"day": "2026-11-09", "message_id": "m1"})
+        kind, _, payload, files = webhook.calls[0]
+        self.assertEqual(kind, "post")
+        self.assertEqual(files, [("part1.png", b"a"), ("part2.png", b"b")])
+        self.assertEqual(payload["attachments"], [{"id": 0, "filename": "part1.png"}, {"id": 1, "filename": "part2.png"}])
+
+    def test_each_hour_of_the_day_edits_the_same_message(self):
+        webhook = FakeWebhook()
+        state = {"day": "2026-11-09", "message_id": "m0"}
+        self.assertEqual(publish(webhook, state, SUMMARY, [b"a", b"b"], at(10, 5)), state)
+        self.assertEqual(webhook.calls[0][:2], ("edit", "m0"))
+
+    def test_6_oclock_posts_a_new_message_and_keeps_the_previous_one(self):
+        webhook = FakeWebhook()
+        state = publish(webhook, {"day": "2026-11-09", "message_id": "m0"}, SUMMARY, [b"a", b"b"], at(10, 6))
+        self.assertEqual(state, {"day": "2026-11-10", "message_id": "m1"})
+        self.assertEqual([call[0] for call in webhook.calls], ["post"])
+
+    def test_a_deleted_message_is_posted_again(self):
+        webhook = FakeWebhook(missing=True)
+        state = publish(webhook, {"day": "2026-11-09", "message_id": "m0"}, SUMMARY, [b"a", b"b"], at(9, 15))
+        self.assertEqual([call[0] for call in webhook.calls], ["edit", "post"])
+        self.assertEqual(state["message_id"], "m2")
+
+
+class WebhookTest(unittest.TestCase):
+    def test_posts_and_edits_through_the_webhook_api(self):
+        requests = []
+
+        def opener(request, timeout):
+            requests.append(request)
+            return Response(b'{"id": "42"}')
+
+        webhook = Webhook("123", "abc", opener)
+        self.assertEqual(webhook.post({"embeds": []}, [("part1.png", b"png")]), "42")
+        webhook.edit("42", {"embeds": []}, [])
+        self.assertEqual(
+            [(r.get_method(), r.full_url) for r in requests],
+            [
+                ("POST", "https://discord.com/api/v10/webhooks/123/abc?wait=true"),
+                ("PATCH", "https://discord.com/api/v10/webhooks/123/abc/messages/42"),
+            ],
+        )
+        self.assertIn(b'name="files[0]"; filename="part1.png"', requests[0].data)
+        self.assertTrue(requests[0].get_header("User-agent").startswith("DiscordBot"))
+
+    def test_the_payload_travels_as_json_beside_the_files(self):
+        body, content_type = multipart({"embeds": [{"title": "Farm"}]}, [("part1.png", b"\x89PNG")])
+        boundary = content_type.split("boundary=")[1].encode()
+        self.assertTrue(body.endswith(b"--" + boundary + b"--\r\n"))
+        self.assertIn(b'name="payload_json"', body)
+        self.assertIn(json.dumps({"embeds": [{"title": "Farm"}]}).encode(), body)
+        self.assertIn(b"\x89PNG", body)
+
+
+class ReportTest(unittest.TestCase):
+    def test_keeps_the_message_of_the_day_in_the_state(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "state.json"
+            webhook = FakeWebhook()
+            for hour in (14, 15):
+                report(webhook, path, at(9, hour), lambda: SUMMARY, lambda part, _: part.encode())
+            self.assertEqual(json.loads(path.read_text()), {"day": "2026-11-09", "message_id": "m1"})
+            self.assertEqual([call[0] for call in webhook.calls], ["post", "edit"])
+
+    def test_a_failure_publishes_nothing_and_waits_for_the_next_hour(self):
+        def broken():
+            raise OSError("ratio is down")
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "state.json"
+            webhook = FakeWebhook()
+            report(webhook, path, at(9, 14), broken, lambda part, _: b"")
+            self.assertEqual(webhook.calls, [])
+            self.assertFalse(path.exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

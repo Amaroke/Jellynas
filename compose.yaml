@@ -22,6 +22,7 @@ include:
   - autobrr/compose.yaml
   - cross-seed/compose.yaml
   - ratio/compose.yaml
+  - farm-report/compose.yaml
   - beszel/compose.yaml
   - uptime-kuma/compose.yaml
   - dozzle/compose.yaml

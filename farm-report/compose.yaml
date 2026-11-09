@@ -1,0 +1,25 @@
+services:
+  farm-report:
+    build: .
+    container_name: farm-report
+    restart: unless-stopped
+    depends_on:
+      - ratio
+    networks:
+      - internal-zone
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    user: ${PUID}:${PGID}
+    mem_limit: 512m
+    environment:
+      TZ: ${TZ}
+      HOME: /tmp
+      DISCORD_FARM_WEBHOOK_ID: ${DISCORD_FARM_WEBHOOK_ID}
+      DISCORD_FARM_WEBHOOK_TOKEN: ${DISCORD_FARM_WEBHOOK_TOKEN}
+    labels:
+      kuma.farm-report.docker.name: Farm report
+      docker-volume-backup.stop-during-backup: "true"
+    volumes:
+      - ${APPDATA_ROOT}/farm-report:/state
