@@ -4,13 +4,17 @@ import json
 import tempfile
 import unittest
 import urllib.error
+import zlib
 from pathlib import Path
 
 from report import (
     ROSE,
     VIOLET,
     Webhook,
+    chunks,
+    cropped,
     embeds,
+    hidden_height,
     multipart,
     next_hour,
     publish,
@@ -60,6 +64,26 @@ class ReportDayTest(unittest.TestCase):
     def test_the_next_run_is_on_the_next_hour(self):
         self.assertEqual(next_hour(at(9, 14, 7)), at(9, 15))
         self.assertEqual(next_hour(at(9, 23, 59)), at(10, 0))
+
+
+def png(width, rows):
+    def chunk(kind, data):
+        return len(data).to_bytes(4) + kind + data + zlib.crc32(kind + data).to_bytes(4)
+
+    header = width.to_bytes(4) + len(rows).to_bytes(4) + bytes([8, 2, 0, 0, 0])
+    pixels = b"".join(bytes(1) + bytes(row) for row in rows)
+    return bytes([137, 80, 78, 71, 13, 10, 26, 10]) + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b"")
+
+
+class PictureTest(unittest.TestCase):
+    def test_the_height_chromium_hides_is_the_window_minus_the_viewport(self):
+        self.assertEqual(hidden_height("<html><head></head><body>913</body></html>"), 87)
+
+    def test_cropping_keeps_the_top_rows_of_the_picture(self):
+        rows = [[n] * 6 for n in range(5)]
+        found = dict(chunks(cropped(png(2, rows), 3)))
+        self.assertEqual(int.from_bytes(found[b"IHDR"][4:8]), 3)
+        self.assertEqual(zlib.decompress(found[b"IDAT"]), b"".join(bytes(1) + bytes(row) for row in rows[:3]))
 
 
 class EmbedsTest(unittest.TestCase):
