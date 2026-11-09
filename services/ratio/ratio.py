@@ -998,8 +998,7 @@ polygon.area { stroke: none; fill-opacity: 0.14; }
 """
 SCRIPT = (
     'if (parent !== window) { const main = document.querySelector("main"); '
-    'const compact = matchMedia("(max-width: 640px)"); '
-    'new ResizeObserver(() => parent.postMessage({ratioBoardHeight: compact.matches ? main.scrollHeight : null}, "*")).observe(main); }'
+    'new ResizeObserver(() => parent.postMessage({ratioBoardHeight: main.scrollHeight}, "*")).observe(main); }'
 )
 SCRIPT_HASH = base64.b64encode(hashlib.sha256(SCRIPT.encode()).digest()).decode()
 
