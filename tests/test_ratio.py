@@ -30,6 +30,7 @@ from ratio import (
     run_once,
     save_state,
     serve,
+    zen_gb,
 )
 
 NOW = 1_800_000_000
@@ -1211,6 +1212,11 @@ def items(body, css):
     return re.findall(rf'<li class="{css}"><span class="step">([^<]+)</span>', body)
 
 
+class ZenGb(unittest.TestCase):
+    def test_each_full_thousand_zen_is_1024_gb_and_the_rest_one_gb_each(self):
+        self.assertEqual([zen_gb(z) for z in (254, 999, 1000, 1254, 2500)], [254, 999, 1024, 1278, 2548])
+
+
 class Page(unittest.TestCase):
     def page(self, board, query=""):
         server = serve({"board": board}, port=0)
@@ -1227,7 +1233,7 @@ class Page(unittest.TestCase):
         self.assertIn("default-src 'none'", headers["Content-Security-Policy"])
         self.assertNotRegex(body, r"\b(src|href)=")
         values = re.findall(r'<span class="value">([^<]+)</span>', body)
-        self.assertEqual(values, ["2.00", "20.0 GB", "60.0 GB", "30.0 GB", "25", "55.6 GB"])
+        self.assertEqual(values, ["2.00", "20.0 GB", "60.0 GB", "30.0 GB", "25", "55.0 GB"])
         self.assertIn("1.5 GB in 24 h", body)
         self.assertIn("5.0 GB real", body)
         self.assertIn("30.0 GB before a ratio of 1", body)
