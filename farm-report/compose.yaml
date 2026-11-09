@@ -20,5 +20,6 @@ services:
       DISCORD_FARM_WEBHOOK_TOKEN: ${DISCORD_FARM_WEBHOOK_TOKEN}
     labels:
       kuma.farm-report.docker.name: Farm report
+      docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/farm-report:/state
