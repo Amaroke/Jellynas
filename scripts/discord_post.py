@@ -12,6 +12,7 @@ USER_AGENT = "DiscordBot (https://github.com/Amaroke/Jellynas, 1.0)"
 MAX_LENGTH = 4096
 TITLE_LENGTH = 256
 COLOR = 0xA78BFA
+COLORS = {"news": 0x34D399, "links": 0x60A5FA, "admin": 0xFBBF24}
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -61,7 +62,7 @@ def send(url, method, embed):
 
 def publish(channel, path, env, api=API):
     hook = f"{api}/{webhook(env, channel)}"
-    embed = render(path, env)
+    embed = {**render(path, env), "color": COLORS.get(channel, COLOR)}
     appdata = env.get("APPDATA_ROOT", "").strip()
     if not appdata:
         sys.exit("APPDATA_ROOT is empty in .env")

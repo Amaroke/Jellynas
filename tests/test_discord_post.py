@@ -82,7 +82,7 @@ class PublishTest(unittest.TestCase):
         method, path, body = self.discord.calls[0]
         self.assertEqual(("POST", "/1234/abcd?wait=true"), (method, path))
         self.assertEqual("", body["content"])
-        self.assertEqual([{"description": "https://jellyfin.example.com:443", "color": 0xA78BFA}], body["embeds"])
+        self.assertEqual([{"description": "https://jellyfin.example.com:443", "color": 0x60A5FA}], body["embeds"])
         self.assertEqual({"parse": []}, body["allowed_mentions"])
 
     def test_the_first_heading_is_the_title_of_the_embed(self):
@@ -106,6 +106,11 @@ class PublishTest(unittest.TestCase):
         self.assertEqual(["POST", "PATCH", "POST"], [call[0] for call in self.discord.calls])
         state = json.loads((self.folder / "appdata" / "discord-posts" / "state.json").read_text(encoding="utf-8"))
         self.assertEqual({"links/links.md": "1"}, state)
+
+    def test_a_channel_without_its_own_color_gets_violet(self):
+        self.env["DISCORD_FARM_WEBHOOK_ID"], self.env["DISCORD_FARM_WEBHOOK_TOKEN"] = "1", "a"
+        publish("farm", self.message, self.env, self.discord.url)
+        self.assertEqual(0xA78BFA, self.discord.calls[0][2]["embeds"][0]["color"])
 
     def test_another_file_is_another_message(self):
         self.publish()
