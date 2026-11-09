@@ -1227,7 +1227,7 @@ class Page(unittest.TestCase):
         self.assertIn("default-src 'none'", headers["Content-Security-Policy"])
         self.assertNotRegex(body, r"\b(src|href)=")
         values = re.findall(r'<span class="value">([^<]+)</span>', body)
-        self.assertEqual(values, ["2.00", "20.0 GB", "60.0 GB", "30.0 GB", "25", "55.0 GB"])
+        self.assertEqual(values, ["2.00", "20.0 GB", "60.0 GB", "30.0 GB", "25", "55.6 GB"])
         self.assertIn("1.5 GB in 24 h", body)
         self.assertIn("5.0 GB real", body)
         self.assertIn("30.0 GB before a ratio of 1", body)

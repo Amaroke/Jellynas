@@ -19,6 +19,7 @@ import uuid
 import xml.etree.ElementTree as ET
 
 GB = 1024**3
+GB_PER_ZEN = 1.024
 DAY = 86400
 WEEK = 7 * DAY
 FARM = "farm"
@@ -1101,7 +1102,7 @@ def trends(history, words):
     one = None if up is None or down is None else up - down
     zen = today.get("zen")
     day = today.get("downloaded_day_gb")
-    theory = None if one is None or zen is None else one + zen
+    theory = None if one is None or zen is None else one + zen * GB_PER_ZEN
     strip = "".join([
         kpi("ratio", words["ratio"], figure_text(today.get("ratio"), 2, words),
             words["floor"].format(v=figure_text(floor, 1, words))),
