@@ -26,15 +26,16 @@ Follow the sections in order. Each one starts with the sections it requires. Eve
 18. [Bazarr](#bazarr)
 19. [Indexarr](#indexarr)
 20. [Music bot](#music-bot)
-21. [Private tracker ratio](#private-tracker-ratio)
-22. [Observation](#observation)
-23. [Beszel](#beszel)
-24. [Uptime Kuma](#uptime-kuma)
-25. [Dozzle](#dozzle)
-26. [Homepage](#homepage)
-27. [Backup](#backup)
-28. [Verify the NAS](#verify-the-nas)
-29. [Contributing](#contributing)
+21. [Discord messages](#discord-messages)
+22. [Private tracker ratio](#private-tracker-ratio)
+23. [Observation](#observation)
+24. [Beszel](#beszel)
+25. [Uptime Kuma](#uptime-kuma)
+26. [Dozzle](#dozzle)
+27. [Homepage](#homepage)
+28. [Backup](#backup)
+29. [Verify the NAS](#verify-the-nas)
+30. [Contributing](#contributing)
 
 ## Architecture
 
@@ -1073,6 +1074,20 @@ A DJ joins a voice channel, then:
 | `/volume <0-100>` | Sets the volume |
 
 Each track posts a message with its cover and Pause, Skip and Stop buttons, and shows as the status of the music bot, Listening to the track. Each time it leaves a voice channel, it takes back the nickname `MusicBot by Amaroke`. Every command but `/queue` needs the DJ in the voice channel of the music bot, and a `/play` from another voice channel waits until it stops there. It leaves a voice channel after one minute alone or five minutes without playing.
+
+## Discord messages
+
+The links and announcements channels of the Discord server of the Friends hold messages written in `discord-posts/`, one Markdown file per message, so they live in git like the rest of the NAS. `${DOMAIN}` and `${CADDY_HTTPS_PORT}` in a file are filled in from `.env`. `scripts/discord_post.py` publishes a file through the webhook of its channel: the first time it posts the message, the next times it edits the same message in place, and it posts again if the message was deleted. It keeps the id of each message in `${APPDATA_ROOT}/discord-posts/state.json`. Discord takes 2000 characters per message, which `python3 -m unittest` checks.
+
+1. In Discord, in the settings of the links channel, Integrations > Webhooks, click "New Webhook", name it `Jellynas`, and copy its URL, `https://discord.com/api/webhooks/<id>/<token>`. Do the same for the announcements channel.
+2. In `.env`, set `DISCORD_LINKS_WEBHOOK_ID` and `DISCORD_LINKS_WEBHOOK_TOKEN`, then `DISCORD_ANNOUNCEMENTS_WEBHOOK_ID` and `DISCORD_ANNOUNCEMENTS_WEBHOOK_TOKEN`, to both parts of each URL.
+3. Pull the Clone and publish the links message:
+
+   ```sh
+   python3 scripts/discord_post.py links discord-posts/links.md
+   ```
+
+Run the same command after changing `discord-posts/links.md` to update the message. For an announcement, add a new file, such as `discord-posts/2026-11-new-folder.md`, and publish it with `announcements` as the channel. Any channel works the same way once `.env` holds `DISCORD_<CHANNEL>_WEBHOOK_ID` and `DISCORD_<CHANNEL>_WEBHOOK_TOKEN`.
 
 ## Private tracker ratio
 
