@@ -1,5 +1,24 @@
 # Jellynas
 
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request to `main`, on every push to `main`, and by hand. Its jobs run in parallel and every tool version is pinned, so Renovate keeps them up to date:
+
+| Job      | Checks                                                                  |
+| -------- | ----------------------------------------------------------------------- |
+| Secrets  | gitleaks scans the whole git history for a committed secret             |
+| Compose  | `compose.yaml` and the doco-cd compose file parse with `.env.example`   |
+| Images   | hadolint lints every Dockerfile, then every image with a `build` builds |
+| YAML     | yamllint passes in strict mode                                          |
+| JSON     | every tracked `.json` file parses                                       |
+| Python   | the `unittest` tests pass                                               |
+| Lint     | shellcheck passes on the shell scripts and ruff on the Python           |
+| Renovate | `renovate.json` is a valid Renovate config                              |
+| Markdown | markdownlint passes on every `.md` file                                 |
+| Actions  | actionlint checks the workflows, then zizmor audits their security      |
+
+=== A REWORK ===
+
 A personal media server built on Jellyfin, shared with Friends over the internet.
 
 Every tool here is maintained open source software, picked by the Admin, and the picks may change over time. None of them is an obligation: the repo is a base that runs as is and that you can adapt. Some picks, such as OVH, AirVPN, C411, Nyaa and the French quality profiles, only come from the Admin being French. Each section names equivalent tools and says in a few words why a pick was made, so you can tell when another fits you better.
@@ -278,10 +297,10 @@ Caddy also listens on `CADDY_HTTPS_PORT` inside its container and sends HSTS on 
 
 Jellyfin and Seerr face the internet, so a flaw in either must not land next to the rest of the NAS. The services sit in three Docker networks:
 
-| Zone | Services |
-| --- | --- |
-| `jellyfin-zone` | Caddy, Jellyfin |
-| `seerr-zone` | Caddy, Seerr, Radarr, Sonarr |
+| Zone            | Services                                               |
+| --------------- | ------------------------------------------------------ |
+| `jellyfin-zone` | Caddy, Jellyfin                                        |
+| `seerr-zone`    | Caddy, Seerr, Radarr, Sonarr                           |
 | `internal-zone` | every other service, Caddy, Radarr and Sonarr included |
 
 qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal zone, and the Beszel agent the network of the Host. A service of the internal zone that needs Jellyfin or Seerr, such as Homepage, Uptime Kuma or the Music bot, reaches it through Caddy at its public name, so the zones only open towards Jellyfin and Seerr, never from them. `python3 -m unittest` checks the members of each zone. Jellyfin and Seerr face the internet, so a flaw in one of them should not land next to Radarr, qBittorrent or Dozzle.
@@ -298,15 +317,15 @@ In the [OVH Control Panel](https://www.ovh.com/manager/), open Web Cloud > Domai
 2. Enter `Jellynas Caddy` as the name and description, and pick "Unlimited" as the validity.
 3. Add these rights, with `<DOMAIN>` written out, so the keys can only change the records of the zone:
 
-   | Method | Path |
-   | --- | --- |
-   | GET | `/domain/zone/<DOMAIN>/record` |
-   | POST | `/domain/zone/<DOMAIN>/record` |
-   | GET | `/domain/zone/<DOMAIN>/record/*` |
-   | PUT | `/domain/zone/<DOMAIN>/record/*` |
+   | Method | Path                             |
+   | ------ | -------------------------------- |
+   | GET    | `/domain/zone/<DOMAIN>/record`   |
+   | POST   | `/domain/zone/<DOMAIN>/record`   |
+   | GET    | `/domain/zone/<DOMAIN>/record/*` |
+   | PUT    | `/domain/zone/<DOMAIN>/record/*` |
    | DELETE | `/domain/zone/<DOMAIN>/record/*` |
-   | GET | `/domain/zone/<DOMAIN>/soa` |
-   | POST | `/domain/zone/<DOMAIN>/refresh` |
+   | GET    | `/domain/zone/<DOMAIN>/soa`      |
+   | POST   | `/domain/zone/<DOMAIN>/refresh`  |
 
 4. Create the keys, then copy the application key, the application secret and the consumer key into `OVH_APPLICATION_KEY`, `OVH_APPLICATION_SECRET` and `OVH_CONSUMER_KEY` in `.env`.
 5. In `.env`, set `DOMAIN` to the domain and `LAN_SUBNET` to the local network, for example `192.168.1.0/24` when the router is `192.168.1.254`.
@@ -321,28 +340,28 @@ On your router, forward that single TCP port to the local IP of the NAS, and not
 
 Once [Deploy](#deploy) is done, each tool answers at its own address, with `:<CADDY_HTTPS_PORT>` after the name unless it is 443:
 
-| Service | Address | Reached from |
-| --- | --- | --- |
-| Jellyfin | `https://jellyfin.<DOMAIN>` | Anywhere |
-| Seerr | `https://seerr.<DOMAIN>` | Anywhere |
-| TrueNAS | `https://truenas.lan.<DOMAIN>` | Local network |
-| Jellyfin | `https://jellyfin.lan.<DOMAIN>` | Local network |
-| Seerr | `https://seerr.lan.<DOMAIN>` | Local network |
-| qBittorrent | `https://qbittorrent.lan.<DOMAIN>` | Local network |
-| Prowlarr | `https://prowlarr.lan.<DOMAIN>` | Local network |
-| Radarr | `https://radarr.lan.<DOMAIN>` | Local network |
-| Sonarr | `https://sonarr.lan.<DOMAIN>` | Local network |
-| Lidarr | `https://lidarr.lan.<DOMAIN>` | Local network |
-| slskd | `https://slskd.lan.<DOMAIN>` | Local network |
-| Bazarr | `https://bazarr.lan.<DOMAIN>` | Local network |
-| Tdarr | `https://tdarr.lan.<DOMAIN>` | Local network |
-| Indexarr | `https://indexarr.lan.<DOMAIN>` | Local network |
-| autobrr | `https://autobrr.lan.<DOMAIN>` | Local network |
-| ratio | `https://ratio.lan.<DOMAIN>/graphs` | Local network |
-| Beszel | `https://beszel.lan.<DOMAIN>` | Local network |
-| Uptime Kuma | `https://uptime-kuma.lan.<DOMAIN>` | Local network |
-| Dozzle | `https://dozzle.lan.<DOMAIN>` | Local network |
-| Homepage | `https://homepage.lan.<DOMAIN>` | Local network |
+| Service     | Address                             | Reached from  |
+| ----------- | ----------------------------------- | ------------- |
+| Jellyfin    | `https://jellyfin.<DOMAIN>`         | Anywhere      |
+| Seerr       | `https://seerr.<DOMAIN>`            | Anywhere      |
+| TrueNAS     | `https://truenas.lan.<DOMAIN>`      | Local network |
+| Jellyfin    | `https://jellyfin.lan.<DOMAIN>`     | Local network |
+| Seerr       | `https://seerr.lan.<DOMAIN>`        | Local network |
+| qBittorrent | `https://qbittorrent.lan.<DOMAIN>`  | Local network |
+| Prowlarr    | `https://prowlarr.lan.<DOMAIN>`     | Local network |
+| Radarr      | `https://radarr.lan.<DOMAIN>`       | Local network |
+| Sonarr      | `https://sonarr.lan.<DOMAIN>`       | Local network |
+| Lidarr      | `https://lidarr.lan.<DOMAIN>`       | Local network |
+| slskd       | `https://slskd.lan.<DOMAIN>`        | Local network |
+| Bazarr      | `https://bazarr.lan.<DOMAIN>`       | Local network |
+| Tdarr       | `https://tdarr.lan.<DOMAIN>`        | Local network |
+| Indexarr    | `https://indexarr.lan.<DOMAIN>`     | Local network |
+| autobrr     | `https://autobrr.lan.<DOMAIN>`      | Local network |
+| ratio       | `https://ratio.lan.<DOMAIN>/graphs` | Local network |
+| Beszel      | `https://beszel.lan.<DOMAIN>`       | Local network |
+| Uptime Kuma | `https://uptime-kuma.lan.<DOMAIN>`  | Local network |
+| Dozzle      | `https://dozzle.lan.<DOMAIN>`       | Local network |
+| Homepage    | `https://homepage.lan.<DOMAIN>`     | Local network |
 
 cross-seed has an API only, which the other containers reach at `http://cross-seed:2468`. The first certificates take a few minutes, follow them with:
 
@@ -422,14 +441,14 @@ Jellyfin streams the Library to the Admin and the Friends. Emby or Plex can repl
 
 The media tree is mounted read-only under `/data/media`, so Jellyfin can never delete or change a file. In Dashboard > Libraries, add one library per folder:
 
-| Library | Content type | Folder |
-| --- | --- | --- |
-| Movies | Movies | `/data/media/movies` |
-| Shows | Shows | `/data/media/shows` |
-| Anime | Shows | `/data/media/anime` |
-| Music | Music | `/data/media/music` |
-| Books | Books | `/data/media/books` |
-| Manga | Books | `/data/media/manga` |
+| Library | Content type | Folder               |
+| ------- | ------------ | -------------------- |
+| Movies  | Movies       | `/data/media/movies` |
+| Shows   | Shows        | `/data/media/shows`  |
+| Anime   | Shows        | `/data/media/anime`  |
+| Music   | Music        | `/data/media/music`  |
+| Books   | Books        | `/data/media/books`  |
+| Manga   | Books        | `/data/media/manga`  |
 
 For each library, leave "Save artwork into media folders" and every "Metadata savers" option unchecked: Jellyfin cannot write into the Library and keeps its metadata in its appdata folder instead.
 
@@ -543,20 +562,20 @@ In Tools > Options > Downloads, set "Default Save Path" to `/data/torrents`, unc
 
 Each finished torrent keeps seeding from the torrents tree for a while, to give back to other peers. A private torrent stops at its seeding goal, then the tool that sent it removes it, unless ratio moved it into the Farm. ratio removes a public torrent after two weeks. Each import is a copy, so a downloaded file sits twice on the disk until then: keep enough free space for every torrent still seeding. In Tools > Options, set:
 
-| Screen | Setting | Value |
-| --- | --- | --- |
-| Downloads | Default Torrent Management Mode | Automatic, so each category picks its own save path |
-| Downloads | Append .!qB extension to incomplete files | Checked, so no tool imports a file that is still downloading |
-| BitTorrent | Privacy | DHT and PeX checked, Local Peer Discovery unchecked since the container has no local peers |
-| Connection | Connections Limits | 1000 connections in all and 200 per torrent, upload slots unchecked in all and per torrent, so no swarm waits for a free slot |
-| BitTorrent | Torrent Queueing | Unchecked. A queued torrent never announces, so it uploads nothing and C411 pays it no Zen. ratio unchecks it itself. Each tool already limits its own downloads, ratio to 2 at a time for the Farm |
-| BitTorrent | Seeding Limits | All unchecked. ratio unchecks them itself, since it removes the public torrents and keeps the Farm seeding |
-| Advanced | Network interface | `tun0`, so qBittorrent only ever uses the VPN, on top of the Gluetun kill switch |
-| Advanced | Upload slots behavior | Upload rate based, so qBittorrent opens slots while upload bandwidth is left |
-| Advanced | Upload choking algorithm | Fastest upload, so the peers that take the most are served first |
-| Advanced | Outgoing connections per second | `100`, so a fresh torrent reaches its leechers within seconds |
-| Advanced | Send buffer watermark, low watermark, factor | `5120` KiB, `1024` KiB, `150` %, so upload stays steady at high speed |
-| Advanced | Socket backlog size | `100` |
+| Screen     | Setting                                      | Value                                                                                                                                                                                               |
+| ---------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Downloads  | Default Torrent Management Mode              | Automatic, so each category picks its own save path                                                                                                                                                 |
+| Downloads  | Append .!qB extension to incomplete files    | Checked, so no tool imports a file that is still downloading                                                                                                                                        |
+| BitTorrent | Privacy                                      | DHT and PeX checked, Local Peer Discovery unchecked since the container has no local peers                                                                                                          |
+| Connection | Connections Limits                           | 1000 connections in all and 200 per torrent, upload slots unchecked in all and per torrent, so no swarm waits for a free slot                                                                       |
+| BitTorrent | Torrent Queueing                             | Unchecked. A queued torrent never announces, so it uploads nothing and C411 pays it no Zen. ratio unchecks it itself. Each tool already limits its own downloads, ratio to 2 at a time for the Farm |
+| BitTorrent | Seeding Limits                               | All unchecked. ratio unchecks them itself, since it removes the public torrents and keeps the Farm seeding                                                                                          |
+| Advanced   | Network interface                            | `tun0`, so qBittorrent only ever uses the VPN, on top of the Gluetun kill switch                                                                                                                    |
+| Advanced   | Upload slots behavior                        | Upload rate based, so qBittorrent opens slots while upload bandwidth is left                                                                                                                        |
+| Advanced   | Upload choking algorithm                     | Fastest upload, so the peers that take the most are served first                                                                                                                                    |
+| Advanced   | Outgoing connections per second              | `100`, so a fresh torrent reaches its leechers within seconds                                                                                                                                       |
+| Advanced   | Send buffer watermark, low watermark, factor | `5120` KiB, `1024` KiB, `150` %, so upload stays steady at high speed                                                                                                                               |
+| Advanced   | Socket backlog size                          | `100`                                                                                                                                                                                               |
 
 Optionally, in Speed, set a global upload limit to about 60% of your internet upload speed, so seeding never slows Jellyfin streams to Friends.
 
@@ -914,11 +933,11 @@ Tdarr keeps its flows in its own database, so the repo holds the flow as an expo
 
 In Libraries, click "Library +" once per folder:
 
-| Library | Source |
-| --- | --- |
-| Movies | `/data/media/movies` |
-| Shows | `/data/media/shows` |
-| Anime | `/data/media/anime` |
+| Library | Source               |
+| ------- | -------------------- |
+| Movies  | `/data/media/movies` |
+| Shows   | `/data/media/shows`  |
+| Anime   | `/data/media/anime`  |
 
 For each library:
 
@@ -961,11 +980,11 @@ A subtitle track already inside the file counts as found, so a `MULTi` release w
 
 In Settings > Providers, click "+" for each provider, fill in what it asks for, and save:
 
-| Provider | Sign-up | Covers |
-| --- | --- | --- |
+| Provider          | Sign-up                                                                                         | Covers                                        |
+| ----------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | OpenSubtitles.com | Free account on [opensubtitles.com](https://www.opensubtitles.com), with a daily download limit | Movies and shows, the widest French catalogue |
-| Podnapisi | None | Movies and shows |
-| Gestdown | None | Shows, from the Addic7ed catalogue |
+| Podnapisi         | None                                                                                            | Movies and shows                              |
+| Gestdown          | None                                                                                            | Shows, from the Addic7ed catalogue            |
 
 ### Sonarr and Radarr
 
@@ -1063,21 +1082,21 @@ docker restart doco-cd
 
 A DJ joins a voice channel, then:
 
-| Command | Effect |
-| --- | --- |
-| `/play` | Starts the Shuffle, the endless random play of the whole music of the Library, every track once before any repeats |
-| `/play <search>` | Lists up to 25 artists, albums, playlists and tracks that match, for the DJ alone. The pick goes to the Queue, which plays before the Shuffle. An album or a playlist plays in order, an artist in random order |
-| `/pause` | Pauses or resumes |
-| `/skip` | Skips the track playing |
-| `/stop` | Empties the Queue, ends the Shuffle and leaves the voice channel |
-| `/queue` | Shows the track playing and the Queue |
-| `/volume <0-100>` | Sets the volume |
+| Command           | Effect                                                                                                                                                                                                          |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/play`           | Starts the Shuffle, the endless random play of the whole music of the Library, every track once before any repeats                                                                                              |
+| `/play <search>`  | Lists up to 25 artists, albums, playlists and tracks that match, for the DJ alone. The pick goes to the Queue, which plays before the Shuffle. An album or a playlist plays in order, an artist in random order |
+| `/pause`          | Pauses or resumes                                                                                                                                                                                               |
+| `/skip`           | Skips the track playing                                                                                                                                                                                         |
+| `/stop`           | Empties the Queue, ends the Shuffle and leaves the voice channel                                                                                                                                                |
+| `/queue`          | Shows the track playing and the Queue                                                                                                                                                                           |
+| `/volume <0-100>` | Sets the volume                                                                                                                                                                                                 |
 
 Each track posts a message with its cover and Pause, Skip and Stop buttons, and shows as the status of the music bot, Listening to the track. Each time it leaves a voice channel, it takes back the nickname `MusicBot by Amaroke`. Every command but `/queue` needs the DJ in the voice channel of the music bot, and a `/play` from another voice channel waits until it stops there. It leaves a voice channel after one minute alone or five minutes without playing.
 
 ## Discord messages
 
-The links, news and admin channels of the Discord server of the Friends hold messages written in `discord-posts/`, one Markdown file per message, so they live in git like the rest of the NAS. `${DOMAIN}` and `${CADDY_HTTPS_PORT}` in a file are filled in from `.env`. `scripts/discord_post.py` publishes a file through the webhook of its channel: the first time it posts the message, the next times it edits the same message in place, and it posts again if the message was deleted. It keeps the id of each message in `${APPDATA_ROOT}/discord-posts/state.json`. Discord takes 2000 characters per message, which `python3 -m unittest` checks, along with `discord-posts/admin.md` listing every lan name of Caddy.
+The links, news and admin channels of the Discord server of the Friends hold messages written in `discord-posts/`, one Markdown file per message, so they live in git like the rest of the NAS. `${DOMAIN}` and `${CADDY_HTTPS_PORT}` in a file are filled in from `.env`. `scripts/discord_post.py` publishes a file through the webhook of its channel: the first time it posts the message, the next times it edits the same message in place, and it posts again if the message was deleted. It keeps the id of each message in `${APPDATA_ROOT}/discord-posts/state.json`. Each file becomes an embed, its first level one heading the title and the rest the description. Discord takes 4096 characters per description, which `python3 -m unittest` checks, along with `discord-posts/admin.md` listing every lan name of Caddy.
 
 1. In Discord, in the settings of the links channel, Integrations > Webhooks, click "New Webhook", name it `Jellynas`, and copy its URL, `https://discord.com/api/webhooks/<id>/<token>`. Do the same for the news and admin channels.
 2. In `.env`, set `DISCORD_LINKS_WEBHOOK_ID` and `DISCORD_LINKS_WEBHOOK_TOKEN`, then the same pairs for `NEWS` and `ADMIN`, to both parts of each URL.
@@ -1132,12 +1151,12 @@ autobrr joins the IRC announce channel of each tracker and grabs a release the m
 3. In Settings > Indexers, click "Add new", pick the tracker, and fill in its passkey or API key and your IRC nick. autobrr adds its IRC network in Settings > IRC with the channel and the invite command of the tracker. Wait for the network to show as connected, some trackers need an IRC password or a NickServ registration first.
 4. In Filters, click "Add new" once per tracker, name it after the tracker, and pick the indexer. Set:
 
-   | Tab | Setting | Value |
-   | --- | --- | --- |
-   | General | Size | Min `1 GB`, max `30 GB`, so one grab never takes most of the Farm |
-   | General | Max downloads | `5` per day |
-   | Advanced | Freeleech | Checked, so a grab never costs ratio |
-   | Actions | Action | qBittorrent, the client above, with `farm` as the category |
+   | Tab      | Setting       | Value                                                             |
+   | -------- | ------------- | ----------------------------------------------------------------- |
+   | General  | Size          | Min `1 GB`, max `30 GB`, so one grab never takes most of the Farm |
+   | General  | Max downloads | `5` per day                                                       |
+   | Advanced | Freeleech     | Checked, so a grab never costs ratio                              |
+   | Actions  | Action        | qBittorrent, the client above, with `farm` as the category        |
 
 5. Save, and leave the filter enabled. A matching announce then shows up in qBittorrent in the `farm` category within seconds, and in the Releases page of autobrr.
 
@@ -1347,22 +1366,22 @@ openssl rand -hex 32
 
 Most keys are already in `.env` from the sections of their service. Add the others, then restart doco-cd to apply `.env`:
 
-| Service | Variable | Where to find it |
-| --- | --- | --- |
-| Jellyfin | `JELLYFIN_API_KEY` | Dashboard > Advanced > API Keys, click "+" and name it `Homepage` |
-| Seerr | `SEERR_API_KEY` | Settings > General, "API Key" |
-| qBittorrent | `QBITTORRENT_API_KEY` | Tools > Options > WebUI > Authentication, generate the API key |
-| Gluetun | `GLUETUN_API_KEY` | Generated, as below |
-| Prowlarr | `PROWLARR_API_KEY` | Set in [Prowlarr](#prowlarr) |
-| Radarr | `RADARR_API_KEY` | Set in [Radarr](#radarr) |
-| Sonarr | `SONARR_API_KEY` | Set in [Sonarr](#sonarr) |
-| Lidarr | `LIDARR_API_KEY` | Set in [Lidarr](#lidarr) |
-| slskd | `SLSKD_API_KEY` | Set in [slskd](#slskd) |
-| Suwayomi | `SUWAYOMI_USERNAME`, `SUWAYOMI_PASSWORD` | Set in [Suwayomi](#suwayomi) |
-| Bazarr | `BAZARR_API_KEY` | Settings > General > Security, "API Key" |
-| Tdarr | `TDARR_API_KEY` | Set in [Tdarr](#tdarr) |
-| autobrr | `AUTOBRR_API_KEY` | Settings > API Keys, click "Add new" and name it `Homepage` |
-| Beszel | `BESZEL_EMAIL`, `BESZEL_PASSWORD` | Set in [Beszel](#beszel) |
+| Service     | Variable                                 | Where to find it                                                  |
+| ----------- | ---------------------------------------- | ----------------------------------------------------------------- |
+| Jellyfin    | `JELLYFIN_API_KEY`                       | Dashboard > Advanced > API Keys, click "+" and name it `Homepage` |
+| Seerr       | `SEERR_API_KEY`                          | Settings > General, "API Key"                                     |
+| qBittorrent | `QBITTORRENT_API_KEY`                    | Tools > Options > WebUI > Authentication, generate the API key    |
+| Gluetun     | `GLUETUN_API_KEY`                        | Generated, as below                                               |
+| Prowlarr    | `PROWLARR_API_KEY`                       | Set in [Prowlarr](#prowlarr)                                      |
+| Radarr      | `RADARR_API_KEY`                         | Set in [Radarr](#radarr)                                          |
+| Sonarr      | `SONARR_API_KEY`                         | Set in [Sonarr](#sonarr)                                          |
+| Lidarr      | `LIDARR_API_KEY`                         | Set in [Lidarr](#lidarr)                                          |
+| slskd       | `SLSKD_API_KEY`                          | Set in [slskd](#slskd)                                            |
+| Suwayomi    | `SUWAYOMI_USERNAME`, `SUWAYOMI_PASSWORD` | Set in [Suwayomi](#suwayomi)                                      |
+| Bazarr      | `BAZARR_API_KEY`                         | Settings > General > Security, "API Key"                          |
+| Tdarr       | `TDARR_API_KEY`                          | Set in [Tdarr](#tdarr)                                            |
+| autobrr     | `AUTOBRR_API_KEY`                        | Settings > API Keys, click "Add new" and name it `Homepage`       |
+| Beszel      | `BESZEL_EMAIL`, `BESZEL_PASSWORD`        | Set in [Beszel](#beszel)                                          |
 
 ```sh
 docker restart doco-cd

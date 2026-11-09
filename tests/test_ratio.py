@@ -1224,12 +1224,12 @@ class Page(unittest.TestCase):
         self.assertIn(">floor 1.2<", body)
         self.assertNotIn('class="quests"', body)
 
-    def test_the_only_script_tells_homepage_the_height_of_the_board_on_a_phone(self):
+    def test_the_only_script_tells_homepage_the_full_height_of_the_board(self):
         headers, body = self.page(BOARD, "?part=1")
         scripts = re.findall(r"<script>(.*?)</script>", body, re.DOTALL)
         self.assertEqual(len(scripts), 1)
-        self.assertIn("ratioBoardHeight", scripts[0])
-        self.assertIn("(max-width: 640px)", scripts[0])
+        self.assertIn("ratioBoardHeight: main.scrollHeight", scripts[0])
+        self.assertNotIn("matchMedia", scripts[0])
         digest = base64.b64encode(hashlib.sha256(scripts[0].encode()).digest()).decode()
         self.assertIn(f"script-src 'sha256-{digest}'", headers["Content-Security-Policy"])
         self.assertNotRegex(body, r"b(src|href)=")
