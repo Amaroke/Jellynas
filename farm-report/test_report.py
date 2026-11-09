@@ -6,7 +6,17 @@ import unittest
 import urllib.error
 from pathlib import Path
 
-from report import Webhook, embeds, multipart, next_hour, publish, report, report_day
+from report import (
+    ROSE,
+    VIOLET,
+    Webhook,
+    embeds,
+    multipart,
+    next_hour,
+    publish,
+    report,
+    report_day,
+)
 
 PARIS = datetime.timezone(datetime.timedelta(hours=1))
 SUMMARY = {
@@ -53,27 +63,12 @@ class ReportDayTest(unittest.TestCase):
 
 
 class EmbedsTest(unittest.TestCase):
-    def test_the_first_embed_shows_the_account_tile_in_french(self):
-        [first] = embeds(SUMMARY)
-        self.assertEqual(
-            [(f["name"], f["value"]) for f in first["fields"]],
-            [("Ratio", "1,46"), ("Avant plancher", "123,5 Go"), ("Zen", "12 345"), ("Up, 7 jours", "67,8 Go")],
-        )
-        self.assertNotIn("description", first)
-        self.assertEqual(first["image"]["url"], "attachment://part1.png")
+    def test_the_message_holds_only_the_picture_of_the_board(self):
+        self.assertEqual(embeds(SUMMARY), [{"color": VIOLET, "image": {"url": "attachment://part1.png"}}])
 
-    def test_the_only_embed_shows_the_update_time(self):
-        [first] = embeds(SUMMARY)
-        self.assertEqual(first["timestamp"], SUMMARY["updated_at"])
-
-    def test_a_pause_under_the_floor_is_shown(self):
-        [first] = embeds({"account": {**SUMMARY["account"], "paused": True}})
-        self.assertIn("pause sous le Ratio floor de 1,2", first["description"])
-        self.assertNotEqual(first["color"], embeds(SUMMARY)[0]["color"])
-
-    def test_an_unreadable_account_shows_dashes(self):
-        [first] = embeds({"account": {"ratio": None, "left_gb": None, "zen": None, "week_uploaded_gb": None, "paused": True}})
-        self.assertEqual([f["value"] for f in first["fields"]], ["-", "- Go", "-", "- Go"])
+    def test_a_pause_under_the_floor_turns_the_message_rose(self):
+        [embed] = embeds({"account": {**SUMMARY["account"], "paused": True}})
+        self.assertEqual(embed["color"], ROSE)
 
 
 class PublishTest(unittest.TestCase):
