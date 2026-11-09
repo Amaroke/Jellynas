@@ -1,5 +1,6 @@
 import http.server
 import json
+import re
 import tempfile
 import threading
 import unittest
@@ -134,3 +135,10 @@ class MessagesTest(unittest.TestCase):
             path = Path(folder) / ".env"
             path.write_text("# comment\nDOMAIN='example.com'\nPORT=\"443\"\nEMPTY=\n", encoding="utf-8")
             self.assertEqual({"DOMAIN": "example.com", "PORT": "443", "EMPTY": ""}, read_env(path))
+
+    def test_admin_lists_every_lan_name_of_caddy(self):
+        caddyfile = (ROOT / "services" / "caddy" / "Caddyfile").read_text(encoding="utf-8")
+        served = set(re.findall(r"^\timport lan ([a-z-]+) ", caddyfile, re.MULTILINE))
+        served |= set(re.findall(r"^\t\thost ([a-z-]+)\.lan\.", caddyfile, re.MULTILINE))
+        listed = set(re.findall(r"https://([a-z-]+)\.lan\.", (ROOT / "discord-posts" / "admin.md").read_text(encoding="utf-8")))
+        self.assertEqual(served, listed)

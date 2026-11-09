@@ -1,37 +1,37 @@
-# 🎬 Bienvenue sur Jellynas
+# Jellynas
 
-Films, séries, animés, musique, livres et mangas, en streaming ou téléchargés sur ton téléphone.
+Films, séries, animés, musique, livres et mangas.
 
-## 🔑 Ton compte
+## Compte
 
-Je t'envoie ton identifiant et ton mot de passe en privé. Le même compte sert partout.
+Demande-moi tes identifiants en message privé. Le même compte sert pour Jellyfin, Finamp et Seerr.
 
-## 📺 Regarder : Jellyfin
+## Jellyfin
 
-**<https://jellyfin.${DOMAIN}:${CADDY_HTTPS_PORT}>**
-Le `:${CADDY_HTTPS_PORT}` à la fin est obligatoire.
+Regarder, lire et télécharger : **<https://jellyfin.${DOMAIN}:${CADDY_HTTPS_PORT}>**
+Le `:${CADDY_HTTPS_PORT}` fait partie de l'adresse, à saisir comme serveur dans les applis.
 
-- Android et Android TV : **Jellyfin**, sur le Play Store
-- iPhone, iPad et Apple TV : **Swiftfin**, sur l'App Store
-- Ordinateur : directement dans le navigateur
+- Android : [Jellyfin](<https://play.google.com/store/apps/details?id=org.jellyfin.mobile>)
+- Android TV : [Jellyfin for Android TV](<https://play.google.com/store/apps/details?id=org.jellyfin.androidtv>)
+- iPhone, iPad, Apple TV : [Swiftfin](<https://apps.apple.com/app/id1604098728>)
+- Ordinateur : le navigateur
 
-Dans l'appli, entre l'adresse ci-dessus comme serveur, puis ton compte.
+## Finamp
 
-## 🎵 Écouter : Finamp
+La musique, avec écoute hors ligne.
 
-Sur Android et iPhone, avec la même adresse et le même compte. Les albums se téléchargent pour l'écoute hors ligne.
+- Android : [Finamp](<https://play.google.com/store/apps/details?id=com.unicornsonlsd.finamp>)
+- iPhone : [Finamp](<https://apps.apple.com/app/id1574922594>)
 
-## ➕ Demander un film ou une série : Seerr
+## Seerr
 
-**<https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT}>**
-Choisis **Sign in with Jellyfin** et entre ton compte Jellyfin. Cherche un titre, clique sur **Demander**, et il arrive tout seul dans Jellyfin, en français quand il existe.
+Demander un film, une série ou un animé : **<https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT}>**
+Connexion avec **Sign in with Jellyfin**. Une demande arrive seule dans Jellyfin.
 
-## 📚 Livres et mangas
+## Livres et mangas
 
-Dans Jellyfin, bibliothèques **Livres** et **Mangas**. S'il en manque un, demande-le dans ton salon.
+Dans Jellyfin. Pour en ajouter, demande dans ton salon.
 
-## 🎧 Musique dans le vocal
+## Musique dans le vocal
 
-Avec le rôle MusicDJ, `/play` lance la musique de la bibliothèque dans ton salon vocal.
-
--# Un souci ? Écris dans ton salon.
+Avec le rôle MusicDJ, `/play` dans un salon vocal.
