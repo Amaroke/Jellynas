@@ -19,8 +19,6 @@
 
 === A REWORK ===
 
-+ A REVOIR 
-
 A personal media server built on Jellyfin, shared with Friends over the internet.
 
 Every tool here is maintained open source software, picked by the Admin, and the picks may change over time. None of them is an obligation: the repo is a base that runs as is and that you can adapt. Some picks, such as OVH, AirVPN, C411, Nyaa and the French quality profiles, only come from the Admin being French. Each section names equivalent tools and says in a few words why a pick was made, so you can tell when another fits you better.
