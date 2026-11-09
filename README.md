@@ -192,7 +192,7 @@ flowchart LR
 
 Each optional part is a set of services in `compose.yaml`. To leave one out, comment its lines in a pull request, and doco-cd removes them once merged:
 
-- Without a private tracker, comment `autobrr`, `cross-seed` and `ratio`.
+- Without a private tracker, comment `autobrr`, `cross-seed`, `ratio` and `farm-report`.
 - Without a VPN, comment `gluetun`, `slskd` and `suwayomi`, remove `network_mode` and `depends_on` from `qbittorrent/compose.yaml`, and replace `gluetun:8080` with `qbittorrent:8080` in `caddy/Caddyfile`, `cross-seed/config.js`, `ratio/ratio.py` and `homepage/services.yaml`. Soulseek shows the IP of each user to the others, so slskd never runs without the VPN, and Suwayomi never fetches a manga site from the home IP.
 - Without a domain, comment `caddy` and publish the port of each web UI in its own `compose.yaml`, reachable over plain HTTP on the local network only.
 
@@ -261,7 +261,7 @@ Create both roots, the folder of the archives, the recycle bins of Radarr and So
 
 ```bash
 . <(grep -E '^(DATA_ROOT|APPDATA_ROOT|BACKUP_ROOT|PUID|PGID)=' .env)
-mkdir -p "$BACKUP_ROOT" "$DATA_ROOT"/torrents/{farm,cross-seed} "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,recyclarr,autobrr,cross-seed,ratio,slskd,suwayomi}
+mkdir -p "$BACKUP_ROOT" "$DATA_ROOT"/torrents/{farm,cross-seed} "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,recyclarr,autobrr,cross-seed,ratio,farm-report,slskd,suwayomi}
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
@@ -1183,6 +1183,23 @@ ratio also keeps one entry per day in `daily` of its state file, the last 30 day
 ratio draws a board at `https://ratio.lan.<DOMAIN>/graphs`, in inline SVG and HTML that loads no script, in English or with `?lang=fr` in French. `?part=1` shows the big figures of the account and three curves on a fixed axis of 30 days: the Account ratio with the floor, the Zen paid each night with the balance, and the uploaded and downloaded totals. `?part=2` shows every step of the five challenges of the Seed and Specialization paths of the Swarm Keeper class, with its reward, the reached steps faded and the next one with its progress, then the disk of the Farm split by Source, and a table of what each Source earned since the Ledger began, most uploaded first: its torrents, download, upload and ratio, then its download, upload and ratio of the last 7 days and its days in the Farm, with a total. The Volume category steps of 250 and 500 seeds count Films & Vidéos, the specialization category of the Admin. Homepage embeds both parts, in French, in two iframes of 384 pixels, the largest fixed height its styles hold, and `homepage/custom.css` hides the title of both cards and the frame Homepage draws around an iframe. Homepage gives the iframe a light color scheme, so the board declares none and stays transparent, while the page opened alone has its own dark background. Caddy only routes `/graphs` on that lan name, `/summary` stays on the Compose network.
 
 To start the Deficit over, for example once the ratio on the tracker has a buffer, stop ratio, delete its state file and start it again. Every other limit above is fixed in `settings_from_env` of `ratio/ratio.py`.
+
+### Farm report
+
+farm-report, `farm-report/report.py`, posts the board of ratio to a channel of the Discord server dedicated to the NAS, the one of the [Discord alerts](#discord-alerts), every hour. Its message holds the Account tile of Homepage in French, the Account ratio, the download left before the Ratio floor, the Zen and the upload of the last 7 days, with a line when the downloads of C411 are paused under the floor, then a picture of each part of the board.
+
+Each day at 6:00, it posts a new message, then edits that one every hour until the next day at 6:00. The message of the day before keeps its last state, so the channel holds one message per day. The id of the message of the day sits in `${APPDATA_ROOT}/farm-report/state.json`. A message deleted in Discord is posted again at the next hour. When ratio does not answer, farm-report changes nothing and tries again at the next hour.
+
+The pictures come from a headless Chromium that opens `http://ratio:8000/graphs?lang=fr&part=1` and `part=2` at 1200 by 384 pixels, the height of the iframes of Homepage, on the dark background of Homepage, and exits once both are taken. It needs about 200 MB of memory for a few seconds each hour, and its container is capped at 512 MB.
+
+1. In Discord, in the server of the NAS, create a text channel for the Farm.
+2. In Server Settings > Integrations > Webhooks, click "New Webhook", pick that channel and copy its URL, `https://discord.com/api/webhooks/<id>/<token>`.
+3. In `.env`, set `DISCORD_FARM_WEBHOOK_ID` and `DISCORD_FARM_WEBHOOK_TOKEN` to both parts of the URL, then restart doco-cd to apply `.env`.
+4. Its logs name each post and edit:
+
+   ```sh
+   docker compose logs farm-report
+   ```
 
 ## Observation
 

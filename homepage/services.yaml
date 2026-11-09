@@ -107,6 +107,9 @@
         icon: cross-seed.png
         description: Seeds the same data on C411
         siteMonitor: http://cross-seed:2468/api/ping
+    - Farm report:
+        icon: mdi-message-image-#a78bfa
+        description: Board of the Farm on Discord, every hour
 
 - Graphs:
     - Farm board:
