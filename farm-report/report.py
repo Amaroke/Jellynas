@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -8,10 +9,13 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+import zlib
 from pathlib import Path
 
 RATIO = "http://ratio:8000"
-PARTS = {"1": (1200, 424), "disk": (760, 260)}
+PARTS = {"1": (1200, 424), "disk": (640, 228)}
+PROBE_HEIGHT = 1000
+CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
 BACKGROUND = "0f172aff"
 DAY_START = 6
 STATE = Path("/state/state.json")
@@ -95,17 +99,52 @@ def read_summary():
         return json.load(response)
 
 
-def screenshot(part, folder):
-    path = Path(folder) / f"part{part}.png"
-    subprocess.run(
+def chromium(folder, *arguments):
+    return subprocess.run(
         [
             "chromium-browser", "--headless", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
             "--hide-scrollbars", f"--user-data-dir={folder}/profile", f"--default-background-color={BACKGROUND}",
-            "--window-size={},{}".format(*PARTS[part]), f"--screenshot={path}", f"{RATIO}/graphs?lang=fr&pad=1&part={part}",
+            *arguments,
         ],
-        check=True, capture_output=True, timeout=90,
+        check=True, capture_output=True, text=True, timeout=90,
+    ).stdout
+
+
+def hidden_height(dom):
+    return PROBE_HEIGHT - int(re.search(r"<body>(\d+)</body>", dom).group(1))
+
+
+def chunks(png):
+    position = 8
+    while position < len(png):
+        length = int.from_bytes(png[position:position + 4])
+        yield png[position + 4:position + 8], png[position + 8:position + 8 + length]
+        position += length + 12
+
+
+def cropped(png, height):
+    found = list(chunks(png))
+    header = found[0][1]
+    width, depth, color = int.from_bytes(header[:4]), header[8], header[9]
+    row = (width * CHANNELS[color] * depth + 7) // 8 + 1
+    pixels = zlib.decompress(b"".join(data for kind, data in found if kind == b"IDAT"))[: row * height]
+    kept = [(b"IHDR", header[:4] + height.to_bytes(4) + header[8:])]
+    kept += [(kind, data) for kind, data in found[1:] if kind not in (b"IDAT", b"IEND")]
+    kept += [(b"IDAT", zlib.compress(pixels, 9)), (b"IEND", b"")]
+    return png[:8] + b"".join(len(data).to_bytes(4) + kind + data + zlib.crc32(kind + data).to_bytes(4) for kind, data in kept)
+
+
+def screenshot(part, folder):
+    probe = Path(folder) / "probe.html"
+    probe.write_text("<script>document.write(innerHeight)</script>", encoding="utf-8")
+    hidden = hidden_height(chromium(folder, f"--window-size=100,{PROBE_HEIGHT}", "--dump-dom", probe.as_uri()))
+    width, height = PARTS[part]
+    path = Path(folder) / f"part{part}.png"
+    chromium(
+        folder, f"--window-size={width},{height + hidden}", f"--screenshot={path}",
+        f"{RATIO}/graphs?lang=fr&part={part}&pad={height}",
     )
-    return path.read_bytes()
+    return cropped(path.read_bytes(), height)
 
 
 def load(path):

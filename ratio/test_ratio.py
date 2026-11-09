@@ -1241,8 +1241,11 @@ class Page(unittest.TestCase):
         self.assertNotIn('class="kpis"', body)
         self.assertNotIn('class="quests"', body)
 
-    def test_pad_adds_a_margin_around_the_board(self):
-        self.assertIn('<html lang="en" class="padded">', self.page(BOARD, "?part=1&pad=1")[1])
+    def test_pad_adds_a_margin_and_a_fixed_height_in_pixels(self):
+        body = self.page(BOARD, "?part=1&pad=424")[1]
+        self.assertIn('<html lang="en" class="padded">', body)
+        self.assertIn("html.padded main { height: 424px; }", body)
+        self.assertIn('<html lang="en">', self.page(BOARD, "?part=1&pad=x")[1])
         self.assertIn('<html lang="en">', self.page(BOARD, "?part=1")[1])
 
     def test_the_second_part_shows_each_step_the_farm_disk_and_the_earnings_by_source(self):
