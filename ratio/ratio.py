@@ -879,7 +879,7 @@ TEXT = {
         "week": "7 days: {down} down, {up} up, ratio {ratio}, {days} days in the Farm",
         "explain": {
             "paid": "Bought with download on C411",
-            "free": "No download counted on C411: Twin, freeleech or cross-seed of the Library",
+            "free": "No download counted on C411",
             "library": "Movie or show of the Library kept for Zen",
             "volume-hunt": "Small rare torrent for the Quests",
             "public": "Public tracker copy, leaves within two weeks",
@@ -906,7 +906,7 @@ TEXT = {
         "week": "7 jours : {down} reçus, {up} envoyés, ratio {ratio}, {days} jours dans la Farm",
         "explain": {
             "paid": "Payé en download sur C411",
-            "free": "Aucun download compté sur C411 : Twin, freeleech ou cross-seed de la Library",
+            "free": "Aucun download compté sur C411",
             "library": "Film ou série de la Library gardé pour le Zen",
             "volume-hunt": "Petit torrent rare pour les Quêtes",
             "public": "Copie d'un tracker public, part sous deux semaines",

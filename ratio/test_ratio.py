@@ -1281,7 +1281,7 @@ class Page(unittest.TestCase):
         self.assertIn(">Badge Prime<", body)
         self.assertIn(">Gains par Source<", body)
         self.assertIn(">7 jours : 2,0 Go reçus, 3,0 Go envoyés, ratio 1,50, 9,0 jours dans la Farm<", body)
-        self.assertIn(">Aucun download compté sur C411 : Twin, freeleech ou cross-seed de la Library<", body)
+        self.assertIn(">Aucun download compté sur C411<", body)
 
     def test_the_time_axis_always_spans_30_days(self):
         _, body = self.page({**BOARD, "history": [entry(30)]}, "?part=1")
