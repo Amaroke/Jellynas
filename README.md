@@ -1081,11 +1081,12 @@ The links and news channels of the Discord server of the Friends hold messages w
 
 1. In Discord, in the settings of the links channel, Integrations > Webhooks, click "New Webhook", name it `Jellynas`, and copy its URL, `https://discord.com/api/webhooks/<id>/<token>`. Do the same for the news channel.
 2. In `.env`, set `DISCORD_LINKS_WEBHOOK_ID` and `DISCORD_LINKS_WEBHOOK_TOKEN`, then `DISCORD_NEWS_WEBHOOK_ID` and `DISCORD_NEWS_WEBHOOK_TOKEN`, to both parts of each URL.
-3. Pull the Clone and publish the links message:
+3. Pull the Clone and publish the messages of links and the welcome message of news:
 
    ```sh
    python3 scripts/discord_post.py links discord-posts/links.md
    python3 scripts/discord_post.py links discord-posts/admin.md
+   python3 scripts/discord_post.py news discord-posts/welcome.md
    ```
 
 Run the same command after changing `discord-posts/links.md` to update the message. For a piece of news, add a new file, such as `discord-posts/2026-11-new-folder.md`, and publish it with `news` as the channel. Any channel works the same way once `.env` holds `DISCORD_<CHANNEL>_WEBHOOK_ID` and `DISCORD_<CHANNEL>_WEBHOOK_TOKEN`.
