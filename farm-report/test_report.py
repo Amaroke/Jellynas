@@ -89,15 +89,15 @@ class PictureTest(unittest.TestCase):
 class EmbedsTest(unittest.TestCase):
     def test_the_message_holds_the_pictures_of_the_board_and_of_the_farm_disk(self):
         self.assertEqual(
-            embeds(SUMMARY),
+            embeds(SUMMARY, at(9, 14)),
             [
                 {"color": VIOLET, "image": {"url": "attachment://part1.png"}},
-                {"color": VIOLET, "image": {"url": "attachment://partdisk.png"}},
+                {"color": VIOLET, "image": {"url": "attachment://partdisk.png"}, "timestamp": "2026-11-09T14:00:00+01:00"},
             ],
         )
 
     def test_a_pause_under_the_floor_turns_the_message_rose(self):
-        paused = embeds({"account": {**SUMMARY["account"], "paused": True}})
+        paused = embeds({"account": {**SUMMARY["account"], "paused": True}}, at(9, 14))
         self.assertEqual([e["color"] for e in paused], [ROSE, ROSE])
 
 
@@ -116,6 +116,7 @@ class PublishTest(unittest.TestCase):
         state = {"day": "2026-11-09", "message_id": "m0"}
         self.assertEqual(publish(webhook, state, SUMMARY, [b"a", b"b"], at(10, 5)), state)
         self.assertEqual(webhook.calls[0][:2], ("edit", "m0"))
+        self.assertEqual(webhook.calls[0][2]["embeds"][-1]["timestamp"], "2026-11-10T05:00:00+01:00")
 
     def test_6_oclock_posts_a_new_message_and_keeps_the_previous_one(self):
         webhook = FakeWebhook()

@@ -40,11 +40,13 @@ def next_hour(now):
     return (now + datetime.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
 
 
-def embeds(summary):
+def embeds(summary, now):
     account = summary.get("account") or {}
     paused = bool(account.get("paused"))
     color = ROSE if paused else VIOLET
-    return [{"color": color, "image": {"url": f"attachment://part{part}.png"}} for part in PARTS]
+    found = [{"color": color, "image": {"url": f"attachment://part{part}.png"}} for part in PARTS]
+    found[-1]["timestamp"] = now.isoformat()
+    return found
 
 
 def multipart(payload, files):
@@ -80,7 +82,7 @@ class Webhook:
 def publish(webhook, state, summary, images, now):
     files = [(f"part{part}.png", image) for part, image in zip(PARTS, images, strict=True)]
     payload = {
-        "embeds": embeds(summary),
+        "embeds": embeds(summary, now),
         "attachments": [{"id": index, "filename": name} for index, (name, _) in enumerate(files)],
     }
     day = report_day(now)
