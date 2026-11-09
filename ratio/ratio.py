@@ -922,6 +922,7 @@ html, body { margin: 0; height: 100%; background: transparent; color: var(--text
   font: 13px/1.35 Manrope, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
 html.standalone { color-scheme: dark; background: radial-gradient(circle at 20% 0%, #2e1065 0%, #0f172a 60%); }
 html.standalone main { height: auto; min-height: 100vh; }
+html.padded main { padding: 20px; }
 main { display: flex; flex-direction: column; gap: 10px; height: 100vh; padding: 6px; overflow: auto;
   scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, 0.35) transparent; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
@@ -1246,16 +1247,19 @@ def goals(board, words, pick):
     return f'<section class="quests">{columns}</section><section class="bottom">{donut(board["farm"], words)}{earned(board.get("sources", []), words)}</section>'
 
 
-def board_page(board, part=None, language="en"):
+def board_page(board, part=None, language="en", padded=False):
     language = language if language in TEXT else "en"
     words = TEXT[language]
     pick = 0 if language == "en" else 1
     if not board or not board["history"]:
         body = f'<p class="empty">{html.escape(words["empty"])}</p>'
+    elif part == "disk":
+        body = f'<section class="bottom">{donut(board["farm"], words)}</section>'
     else:
         body = (trends(board["history"], words) if part != "2" else "") + (goals(board, words, pick) if part != "1" else "")
+    classes = " ".join(c for c, on in (("standalone", not part), ("padded", padded)) if on)
     return (
-        f'<!doctype html><html lang="{language}"{"" if part else ' class="standalone"'}><head><meta charset="utf-8">'
+        f'<!doctype html><html lang="{language}"{f' class="{classes}"' if classes else ""}><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>Farm</title><style>{STYLE}</style></head><body><main>{body}</main><script>{SCRIPT}</script></body></html>"
     )
@@ -1268,7 +1272,9 @@ def serve(latest, port=8000):
             path = url.path.rstrip("/")
             if path == "/graphs":
                 query = urllib.parse.parse_qs(url.query)
-                page = board_page(latest.get("board"), query.get("part", [None])[0], query.get("lang", ["en"])[0])
+                page = board_page(
+                    latest.get("board"), query.get("part", [None])[0], query.get("lang", ["en"])[0], "pad" in query,
+                )
                 self.answer(page.encode(), "text/html; charset=utf-8", {
                     "Content-Security-Policy": f"default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-{SCRIPT_HASH}'",
                 })

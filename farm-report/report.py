@@ -11,9 +11,7 @@ import uuid
 from pathlib import Path
 
 RATIO = "http://ratio:8000"
-PARTS = ("1",)
-WIDTH = 1200
-HEIGHT = 384
+PARTS = {"1": (1200, 424), "disk": (760, 260)}
 BACKGROUND = "0f172aff"
 DAY_START = 6
 STATE = Path("/state/state.json")
@@ -41,7 +39,8 @@ def next_hour(now):
 def embeds(summary):
     account = summary.get("account") or {}
     paused = bool(account.get("paused"))
-    return [{"color": ROSE if paused else VIOLET, "image": {"url": "attachment://part1.png"}}]
+    color = ROSE if paused else VIOLET
+    return [{"color": color, "image": {"url": f"attachment://part{part}.png"}} for part in PARTS]
 
 
 def multipart(payload, files):
@@ -102,7 +101,7 @@ def screenshot(part, folder):
         [
             "chromium-browser", "--headless", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
             "--hide-scrollbars", f"--user-data-dir={folder}/profile", f"--default-background-color={BACKGROUND}",
-            f"--window-size={WIDTH},{HEIGHT}", f"--screenshot={path}", f"{RATIO}/graphs?lang=fr&part={part}",
+            "--window-size={},{}".format(*PARTS[part]), f"--screenshot={path}", f"{RATIO}/graphs?lang=fr&pad=1&part={part}",
         ],
         check=True, capture_output=True, timeout=90,
     )
