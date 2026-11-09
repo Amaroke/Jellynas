@@ -17,7 +17,6 @@ PARTS = {"1": (1200, 424), "disk": (640, 228)}
 PROBE_HEIGHT = 1000
 CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
 BACKGROUND = "0f172aff"
-DAY_START = 6
 STATE = Path("/state/state.json")
 API = "https://discord.com/api/v10/webhooks"
 USER_AGENT = "DiscordBot (https://github.com/Amaroke/Jellynas, 1.0)"
@@ -33,7 +32,7 @@ def required(env, name):
 
 
 def report_day(now):
-    return (now - datetime.timedelta(hours=DAY_START)).date().isoformat()
+    return now.date().isoformat()
 
 
 def next_hour(now):

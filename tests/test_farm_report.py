@@ -57,9 +57,9 @@ class Response(io.BytesIO):
 
 
 class ReportDayTest(unittest.TestCase):
-    def test_a_day_starts_at_6(self):
-        self.assertEqual(report_day(at(9, 5, 59)), "2026-11-08")
-        self.assertEqual(report_day(at(9, 6)), "2026-11-09")
+    def test_a_day_starts_at_midnight(self):
+        self.assertEqual(report_day(at(8, 23, 59)), "2026-11-08")
+        self.assertEqual(report_day(at(9, 0)), "2026-11-09")
 
     def test_the_next_run_is_on_the_next_hour(self):
         self.assertEqual(next_hour(at(9, 14, 7)), at(9, 15))
@@ -114,13 +114,13 @@ class PublishTest(unittest.TestCase):
     def test_each_hour_of_the_day_edits_the_same_message(self):
         webhook = FakeWebhook()
         state = {"day": "2026-11-09", "message_id": "m0"}
-        self.assertEqual(publish(webhook, state, SUMMARY, [b"a", b"b"], at(10, 5)), state)
+        self.assertEqual(publish(webhook, state, SUMMARY, [b"a", b"b"], at(9, 23)), state)
         self.assertEqual(webhook.calls[0][:2], ("edit", "m0"))
-        self.assertEqual(webhook.calls[0][2]["embeds"][-1]["timestamp"], "2026-11-10T05:00:00+01:00")
+        self.assertEqual(webhook.calls[0][2]["embeds"][-1]["timestamp"], "2026-11-09T23:00:00+01:00")
 
-    def test_6_oclock_posts_a_new_message_and_keeps_the_previous_one(self):
+    def test_midnight_posts_a_new_message_and_keeps_the_previous_one(self):
         webhook = FakeWebhook()
-        state = publish(webhook, {"day": "2026-11-09", "message_id": "m0"}, SUMMARY, [b"a", b"b"], at(10, 6))
+        state = publish(webhook, {"day": "2026-11-09", "message_id": "m0"}, SUMMARY, [b"a", b"b"], at(10, 0))
         self.assertEqual(state, {"day": "2026-11-10", "message_id": "m1"})
         self.assertEqual([call[0] for call in webhook.calls], ["post"])
 
