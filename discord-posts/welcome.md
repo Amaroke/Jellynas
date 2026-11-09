@@ -8,10 +8,9 @@ Demande-moi tes identifiants en message privé. Le même compte sert pour Jellyf
 
 ## Règles
 
-- Ton compte est personnel : ne le prête pas et ne donne jamais ton mot de passe
+- Ton compte est personnel, ne le prête pas et ne donne jamais ton mot de passe, attention à pas le leak ni le perdre.
 - Ne partage pas les adresses du serveur ni les liens de ce Discord
-- Ne mets pas de capture du serveur sur les réseaux sociaux
-- Si quelqu'un veut un accès, parle-m'en d'abord
+- Ne mets pas de capture du serveur ou du contenu en ligne
 
 ## Ce que tu peux faire
 

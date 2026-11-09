@@ -9,7 +9,9 @@ from pathlib import Path
 
 API = "https://discord.com/api/v10/webhooks"
 USER_AGENT = "DiscordBot (https://github.com/Amaroke/Jellynas, 1.0)"
-MAX_LENGTH = 2000
+MAX_LENGTH = 4096
+TITLE_LENGTH = 256
+COLOR = 0xA78BFA
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -37,13 +39,19 @@ def render(path, env):
         text = string.Template(Path(path).read_text(encoding="utf-8")).substitute(env).strip()
     except KeyError as error:
         sys.exit(f"{path} uses ${error.args[0]}, which .env does not set")
-    if len(text) > MAX_LENGTH:
-        sys.exit(f"{path} holds {len(text)} characters once filled in, Discord takes {MAX_LENGTH} at most")
-    return text
+    embed = {"description": text, "color": COLOR}
+    if text.startswith("# "):
+        title, _, description = text.partition("\n")
+        embed = {"title": title.removeprefix("# ").strip(), "description": description.strip(), "color": COLOR}
+    if len(embed.get("title", "")) > TITLE_LENGTH:
+        sys.exit(f"{path} has a title of {len(embed['title'])} characters, Discord takes {TITLE_LENGTH} at most")
+    if len(embed["description"]) > MAX_LENGTH:
+        sys.exit(f"{path} holds {len(embed['description'])} characters once filled in, Discord takes {MAX_LENGTH} at most")
+    return embed
 
 
-def send(url, method, content):
-    body = json.dumps({"content": content, "allowed_mentions": {"parse": []}}).encode()
+def send(url, method, embed):
+    body = json.dumps({"content": "", "embeds": [embed], "allowed_mentions": {"parse": []}}).encode()
     request = urllib.request.Request(
         url, data=body, method=method, headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
     )
@@ -53,7 +61,7 @@ def send(url, method, content):
 
 def publish(channel, path, env, api=API):
     hook = f"{api}/{webhook(env, channel)}"
-    content = render(path, env)
+    embed = render(path, env)
     appdata = env.get("APPDATA_ROOT", "").strip()
     if not appdata:
         sys.exit("APPDATA_ROOT is empty in .env")
@@ -64,13 +72,13 @@ def publish(channel, path, env, api=API):
     message = state.get(key)
     if message:
         try:
-            send(f"{hook}/messages/{message}", "PATCH", content)
+            send(f"{hook}/messages/{message}", "PATCH", embed)
             return f"Edited the message of {path} in {channel}"
         except urllib.error.HTTPError as error:
             error.close()
             if error.code != 404:
                 raise
-    state[key] = send(f"{hook}?wait=true", "POST", content)
+    state[key] = send(f"{hook}?wait=true", "POST", embed)
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     return f"Posted {path} in {channel}"
