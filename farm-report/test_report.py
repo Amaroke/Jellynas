@@ -63,39 +63,45 @@ class ReportDayTest(unittest.TestCase):
 
 
 class EmbedsTest(unittest.TestCase):
-    def test_the_message_holds_only_the_picture_of_the_board(self):
-        self.assertEqual(embeds(SUMMARY), [{"color": VIOLET, "image": {"url": "attachment://part1.png"}}])
+    def test_the_message_holds_the_pictures_of_the_board_and_of_the_farm_disk(self):
+        self.assertEqual(
+            embeds(SUMMARY),
+            [
+                {"color": VIOLET, "image": {"url": "attachment://part1.png"}},
+                {"color": VIOLET, "image": {"url": "attachment://partdisk.png"}},
+            ],
+        )
 
     def test_a_pause_under_the_floor_turns_the_message_rose(self):
-        [embed] = embeds({"account": {**SUMMARY["account"], "paused": True}})
-        self.assertEqual(embed["color"], ROSE)
+        paused = embeds({"account": {**SUMMARY["account"], "paused": True}})
+        self.assertEqual([e["color"] for e in paused], [ROSE, ROSE])
 
 
 class PublishTest(unittest.TestCase):
     def test_the_first_report_posts_a_message(self):
         webhook = FakeWebhook()
-        state = publish(webhook, {}, SUMMARY, [b"a"], at(9, 14))
+        state = publish(webhook, {}, SUMMARY, [b"a", b"b"], at(9, 14))
         self.assertEqual(state, {"day": "2026-11-09", "message_id": "m1"})
         kind, _, payload, files = webhook.calls[0]
         self.assertEqual(kind, "post")
-        self.assertEqual(files, [("part1.png", b"a")])
-        self.assertEqual(payload["attachments"], [{"id": 0, "filename": "part1.png"}])
+        self.assertEqual(files, [("part1.png", b"a"), ("partdisk.png", b"b")])
+        self.assertEqual(payload["attachments"], [{"id": 0, "filename": "part1.png"}, {"id": 1, "filename": "partdisk.png"}])
 
     def test_each_hour_of_the_day_edits_the_same_message(self):
         webhook = FakeWebhook()
         state = {"day": "2026-11-09", "message_id": "m0"}
-        self.assertEqual(publish(webhook, state, SUMMARY, [b"a"], at(10, 5)), state)
+        self.assertEqual(publish(webhook, state, SUMMARY, [b"a", b"b"], at(10, 5)), state)
         self.assertEqual(webhook.calls[0][:2], ("edit", "m0"))
 
     def test_6_oclock_posts_a_new_message_and_keeps_the_previous_one(self):
         webhook = FakeWebhook()
-        state = publish(webhook, {"day": "2026-11-09", "message_id": "m0"}, SUMMARY, [b"a"], at(10, 6))
+        state = publish(webhook, {"day": "2026-11-09", "message_id": "m0"}, SUMMARY, [b"a", b"b"], at(10, 6))
         self.assertEqual(state, {"day": "2026-11-10", "message_id": "m1"})
         self.assertEqual([call[0] for call in webhook.calls], ["post"])
 
     def test_a_deleted_message_is_posted_again(self):
         webhook = FakeWebhook(missing=True)
-        state = publish(webhook, {"day": "2026-11-09", "message_id": "m0"}, SUMMARY, [b"a"], at(9, 15))
+        state = publish(webhook, {"day": "2026-11-09", "message_id": "m0"}, SUMMARY, [b"a", b"b"], at(9, 15))
         self.assertEqual([call[0] for call in webhook.calls], ["edit", "post"])
         self.assertEqual(state["message_id"], "m2")
 

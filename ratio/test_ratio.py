@@ -1235,6 +1235,16 @@ class Page(unittest.TestCase):
         self.assertNotRegex(body, r"b(src|href)=")
         self.assertIn("@media (max-width: 640px)", body)
 
+    def test_the_disk_part_shows_only_the_farm_disk(self):
+        _, body = self.page(BOARD, "?part=disk")
+        self.assertEqual(re.findall(r"<figcaption>([^<]+)", body), ["Farm disk"])
+        self.assertNotIn('class="kpis"', body)
+        self.assertNotIn('class="quests"', body)
+
+    def test_pad_adds_a_margin_around_the_board(self):
+        self.assertIn('<html lang="en" class="padded">', self.page(BOARD, "?part=1&pad=1")[1])
+        self.assertIn('<html lang="en">', self.page(BOARD, "?part=1")[1])
+
     def test_the_second_part_shows_each_step_the_farm_disk_and_the_earnings_by_source(self):
         _, body = self.page(BOARD, "?part=2")
         self.assertEqual(
@@ -1271,7 +1281,7 @@ class Page(unittest.TestCase):
         self.assertIn(">Badge Prime<", body)
         self.assertIn(">Gains par Source<", body)
         self.assertIn(">7 jours : 2,0 Go reçus, 3,0 Go envoyés, ratio 1,50, 9,0 jours dans la Farm<", body)
-        self.assertIn(">Aucun download compté sur C411 : Twin, freeleech ou cross-seed de la Library<", body)
+        self.assertIn(">Aucun download compté sur C411<", body)
 
     def test_the_time_axis_always_spans_30_days(self):
         _, body = self.page({**BOARD, "history": [entry(30)]}, "?part=1")
