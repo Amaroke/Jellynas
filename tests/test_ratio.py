@@ -277,7 +277,7 @@ def settings(**changes):
 def empty_state(**changes):
     return {
         "transfers": {}, "hunted": {}, "twins": {}, "free": {}, "checked": {}, "paused": False,
-        "sources": {}, "history": {}, "zen": {}, "report": {}, "account": [], "held": None, "backoff_until": 0,
+        "sources": {}, "history": {}, "zen": {}, "report": {}, "account": [], "received": [], "held": None, "backoff_until": 0,
         "stuck": {}, "restore": {}, "kinds": {}, "hunt_at": {}, "daily": [], "given_up": {}, **changes,
     }
 
@@ -1041,6 +1041,17 @@ class History(unittest.TestCase):
              "zen": 22, "seeds": 1},
         )
 
+    def test_the_download_of_the_last_24_hours_counts_from_the_sample_a_day_old(self):
+        state = empty_state()
+        run(FakeQBittorrent(), state=state, c411=FakeC411(downloaded_gb=30))
+        run(FakeQBittorrent(), state=state, now=NOW + DAY // 2, c411=FakeC411(downloaded_gb=31))
+        self.assertEqual(state["daily"][-1]["downloaded_day_gb"], 1)
+        run(FakeQBittorrent(), state=state, now=NOW + DAY + 600, c411=FakeC411(downloaded_gb=34))
+        self.assertEqual(state["daily"][-1]["downloaded_day_gb"], 4)
+        run(FakeQBittorrent(), state=state, now=NOW + DAY * 3 // 2 + 600, c411=FakeC411(downloaded_gb=35))
+        self.assertEqual(state["daily"][-1]["downloaded_day_gb"], 4)
+        self.assertEqual([s[1] for s in state["received"]], [31 * GB, 34 * GB, 35 * GB])
+
     def test_the_zen_paid_each_night_is_what_the_zen_earned_grew_by(self):
         state = empty_state()
         run(FakeQBittorrent(), state=state, c411=FakeC411(zen=20, earned=30))
@@ -1169,7 +1180,7 @@ class Kinds(unittest.TestCase):
 def entry(n, **changes):
     return {
         "day": f"2027-01-{n:02d}", "floor": 1.2, "ratio": 2.0, "left_gb": 20.0, "uploaded_gb": 60.0, "actual_gb": 5.0,
-        "downloaded_gb": 30.0, "zen": 25, "earned": 25, "zen_paid": 3, "seeds": 112, **changes,
+        "downloaded_gb": 30.0, "downloaded_day_gb": 1.5, "zen": 25, "earned": 25, "zen_paid": 3, "seeds": 112, **changes,
     }
 
 
@@ -1216,7 +1227,9 @@ class Page(unittest.TestCase):
         self.assertIn("default-src 'none'", headers["Content-Security-Policy"])
         self.assertNotRegex(body, r"\b(src|href)=")
         values = re.findall(r'<span class="value">([^<]+)</span>', body)
-        self.assertEqual(values, ["2.00", "20.0 GB", "60.0 GB", "30.0 GB", "25"])
+        self.assertEqual(values, ["2.00", "20.0 GB", "60.0 GB", "30.0 GB", "25", "55.0 GB"])
+        self.assertIn("1.5 GB in 24 h", body)
+        self.assertIn("30.0 GB over a ratio of 1 + 25 Zen", body)
         self.assertIn("5.0 GB real", body)
         self.assertIn("30.0 GB before a ratio of 1", body)
         self.assertIn("+3 last night", body)

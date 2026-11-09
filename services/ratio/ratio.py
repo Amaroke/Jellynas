@@ -430,6 +430,7 @@ def load_state(path):
         "zen": state.get("zen", {}),
         "report": state.get("report", {}),
         "account": state.get("account", []),
+        "received": state.get("received", []),
         "held": state.get("held"),
         "backoff_until": state.get("backoff_until", 0),
         "stuck": state.get("stuck", {}),
@@ -717,7 +718,7 @@ def waiting_board(state, settings):
 def entry_of(day, settings):
     return {
         "day": day, "floor": settings["floor"], "ratio": None, "left_gb": None, "uploaded_gb": None,
-        "actual_gb": None, "downloaded_gb": None, "zen": None, "earned": None, "zen_paid": None, "seeds": None,
+        "actual_gb": None, "downloaded_gb": None, "downloaded_day_gb": None, "zen": None, "earned": None, "zen_paid": None, "seeds": None,
     }
 
 
@@ -753,6 +754,7 @@ def record_day(state, settings, torrents, account, now):
     if account is not None:
         entry.update(
             account_fields(account["uploaded"], account["downloaded"], settings),
+            downloaded_day_gb=gigabytes(account["downloaded"] - received_base(state, account, now)),
             actual_gb=None if account.get("actual") is None else gigabytes(account["actual"]),
             zen=account["zen"],
             earned=account["earned"],
@@ -761,6 +763,13 @@ def record_day(state, settings, torrents, account, now):
     daily.append(entry)
     oldest = (today - datetime.timedelta(days=HISTORY_DAYS - 1)).isoformat()
     daily[:] = [e for e in daily if e["day"] >= oldest]
+
+
+def received_base(state, account, now):
+    samples = state["received"]
+    samples.append([now, account["downloaded"]])
+    samples[:] = [s for s in samples if s[0] <= now - DAY][-1:] + [s for s in samples if s[0] > now - DAY]
+    return samples[0][1]
 
 
 def read_account(c411, state, now):
@@ -863,7 +872,8 @@ TEXT = {
     "en": {
         "gb": "GB", "decimal": ".", "empty": "No history yet, ratio records its first day after its first run.",
         "ratio": "Account ratio", "floor": "floor {v}", "left": "Before the floor", "uploaded": "Uploaded",
-        "actual": "{v} real", "one": "{v} before a ratio of 1", "downloaded": "Downloaded", "zen": "Zen", "paid_last": "+{v} last night",
+        "actual": "{v} real", "one": "{v} before a ratio of 1", "downloaded": "Downloaded", "day": "{v} in 24 h", "zen": "Zen", "paid_last": "+{v} last night",
+        "theory": "Theoretical GB", "theory_sub": "{v} over a ratio of 1 + {z} Zen",
         "zen_chart": "Zen", "paid": "paid each night", "balance": "balance", "transfer": "Upload and download",
         "challenges": {
             "seed_volume": "Seed volume", "contribution": "Minimum contribution", "duration": "Seed duration",
@@ -889,7 +899,8 @@ TEXT = {
     "fr": {
         "gb": "Go", "decimal": ",", "empty": "Pas encore d'historique, ratio note son premier jour après son premier passage.",
         "ratio": "Ratio du compte", "floor": "plancher {v}", "left": "Avant le plancher", "uploaded": "Envoyé",
-        "actual": "{v} réels", "one": "{v} avant un ratio de 1", "downloaded": "Reçu", "zen": "Zen", "paid_last": "+{v} cette nuit",
+        "actual": "{v} réels", "one": "{v} avant un ratio de 1", "downloaded": "Reçu", "day": "{v} en 24 h", "zen": "Zen", "paid_last": "+{v} cette nuit",
+        "theory": "Go théoriques", "theory_sub": "{v} au-dessus du ratio 1 + {z} Zen",
         "zen_chart": "Zen", "paid": "payé chaque nuit", "balance": "solde", "transfer": "Envoi et réception",
         "challenges": {
             "seed_volume": "Volume de seed", "contribution": "Contribution minimum", "duration": "Durée de seed",
@@ -916,7 +927,7 @@ TEXT = {
 }
 STYLE = """
 :root { --text: #e2e8f0; --muted: #94a3b8; --line: rgba(148, 163, 184, 0.22);
-  --violet: #a78bfa; --green: #34d399; --amber: #fbbf24; --blue: #60a5fa; --rose: #fb7185; }
+  --violet: #a78bfa; --green: #34d399; --amber: #fbbf24; --blue: #60a5fa; --rose: #fb7185; --cyan: #22d3ee; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: transparent; color: var(--text);
   font: 13px/1.35 Manrope, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -933,11 +944,11 @@ main { display: flex; flex-direction: column; gap: 10px; height: 100vh; padding:
 .kpi { position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .kpi::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent, var(--muted)); }
 .ratio { --accent: var(--violet); } .left { --accent: var(--green); } .up { --accent: var(--blue); }
-.down { --accent: var(--rose); } .zen { --accent: var(--amber); }
+.down { --accent: var(--rose); } .zen { --accent: var(--amber); } .theory { --accent: var(--cyan); }
 .label, figcaption, h3 { color: var(--muted); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; margin: 0; }
 .value { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
 .sub { color: var(--muted); font-size: 12px; min-height: 16px; }
-.ratio .value { color: var(--violet); } .left .value { color: var(--green); } .zen .value { color: var(--amber); }
+.ratio .value { color: var(--violet); } .left .value { color: var(--green); } .zen .value { color: var(--amber); } .theory .value { color: var(--cyan); }
 .charts, .bottom { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; flex: 1; min-height: 140px; }
 figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
 figcaption { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
@@ -1088,6 +1099,9 @@ def trends(history, words):
     actual = today.get("actual_gb")
     up, down = today.get("uploaded_gb"), today.get("downloaded_gb")
     one = None if up is None or down is None else up - down
+    zen = today.get("zen")
+    day = today.get("downloaded_day_gb")
+    theory = None if one is None or zen is None else one + zen
     strip = "".join([
         kpi("ratio", words["ratio"], figure_text(today.get("ratio"), 2, words),
             words["floor"].format(v=figure_text(floor, 1, words))),
@@ -1095,9 +1109,12 @@ def trends(history, words):
             "" if one is None else words["one"].format(v=size_text(one, words))),
         kpi("up", words["uploaded"], size_text(today.get("uploaded_gb"), words),
             "" if actual is None else words["actual"].format(v=size_text(actual, words))),
-        kpi("down", words["downloaded"], size_text(today.get("downloaded_gb"), words)),
-        kpi("zen", words["zen"], figure_text(today.get("zen"), 0, words),
+        kpi("down", words["downloaded"], size_text(today.get("downloaded_gb"), words),
+            "" if day is None else words["day"].format(v=size_text(day, words))),
+        kpi("zen", words["zen"], figure_text(zen, 0, words),
             words["paid_last"].format(v=figure_text(paid, 0, words)) if paid else ""),
+        kpi("theory", words["theory"], size_text(theory, words),
+            "" if theory is None else words["theory_sub"].format(v=size_text(one, words), z=figure_text(zen, 0, words))),
     ])
     ratios = [e.get("ratio") for e in entries]
     top = top_of(ratios + [floor]) * 1.05
