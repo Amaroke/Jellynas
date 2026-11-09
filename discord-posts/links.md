@@ -2,7 +2,7 @@
 
 ## Jellyfin
 
-Regarder les films, séries et animés, lire les livres et mangas, et les télécharger pour les avoir hors ligne.
+Regarder les films, séries et animés, lire les livres et mangas.
 
 **<https://jellyfin.${DOMAIN}:${CADDY_HTTPS_PORT}>**
 Le `:${CADDY_HTTPS_PORT}` fait partie de l'adresse, à saisir comme serveur dans les applis.
@@ -22,7 +22,7 @@ Même adresse et même compte que Jellyfin.
 
 ## Seerr
 
-Demander un film, une série ou un animé. Il arrive seul dans Jellyfin.
+Demander un film, une série ou un animé. Il arrive seul dans Jellyfin. À ouvrir dans le navigateur, pas d'application.
 
 **<https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT}>**
 Connexion avec **Sign in with Jellyfin**.
