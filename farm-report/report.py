@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 
 RATIO = "http://ratio:8000"
-PARTS = ("1", "2")
+PARTS = ("1",)
 WIDTH = 1200
 HEIGHT = 384
 BACKGROUND = "0f172aff"
@@ -58,13 +58,13 @@ def embeds(summary):
             {"name": "Up, 7 jours", "value": f"{number(account.get('week_uploaded_gb'), 1)} Go", "inline": True},
         ],
         "image": {"url": "attachment://part1.png"},
+        "footer": {"text": "Mis à jour"},
     }
+    if summary.get("updated_at"):
+        first["timestamp"] = summary["updated_at"]
     if paused:
         first["description"] = f"Téléchargements sur C411 en pause sous le Ratio floor de {number(account.get('floor'), 1)}"
-    second = {"color": color, "image": {"url": "attachment://part2.png"}, "footer": {"text": "Mis à jour"}}
-    if summary.get("updated_at"):
-        second["timestamp"] = summary["updated_at"]
-    return [first, second]
+    return [first]
 
 
 def multipart(payload, files):

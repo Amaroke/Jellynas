@@ -1186,11 +1186,11 @@ To start the Deficit over, for example once the ratio on the tracker has a buffe
 
 ### Farm report
 
-farm-report, `farm-report/report.py`, posts the board of ratio to a channel of the Discord server dedicated to the NAS, the one of the [Discord alerts](#discord-alerts), every hour. Its message holds the Account tile of Homepage in French, the Account ratio, the download left before the Ratio floor, the Zen and the upload of the last 7 days, with a line when the downloads of C411 are paused under the floor, then a picture of each part of the board.
+farm-report, `farm-report/report.py`, posts the board of ratio to a channel of the Discord server dedicated to the NAS, the one of the [Discord alerts](#discord-alerts), every hour. Its message holds the Account tile of Homepage in French, the Account ratio, the download left before the Ratio floor, the Zen and the upload of the last 7 days, with a line when the downloads of C411 are paused under the floor, then a picture of the first part of the board, the trends, without the challenges.
 
 Each day at 6:00, it posts a new message, then edits that one every hour until the next day at 6:00. The message of the day before keeps its last state, so the channel holds one message per day. The id of the message of the day sits in `${APPDATA_ROOT}/farm-report/state.json`. A message deleted in Discord is posted again at the next hour. When ratio does not answer, farm-report changes nothing and tries again at the next hour.
 
-The pictures come from a headless Chromium that opens `http://ratio:8000/graphs?lang=fr&part=1` and `part=2` at 1200 by 384 pixels, the height of the iframes of Homepage, on the dark background of Homepage, and exits once both are taken. It needs about 200 MB of memory for a few seconds each hour, and its container is capped at 512 MB.
+The pictures come from a headless Chromium that opens `http://ratio:8000/graphs?lang=fr&part=1` at 1200 by 384 pixels, the height of the iframes of Homepage, on the dark background of Homepage, and exits once it is taken. It needs about 200 MB of memory for a few seconds each hour, and its container is capped at 512 MB.
 
 1. In Discord, in the server of the NAS, create a text channel for the Farm.
 2. In Server Settings > Integrations > Webhooks, click "New Webhook", pick that channel and copy its URL, `https://discord.com/api/webhooks/<id>/<token>`.

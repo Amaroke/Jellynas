@@ -54,7 +54,7 @@ class ReportDayTest(unittest.TestCase):
 
 class EmbedsTest(unittest.TestCase):
     def test_the_first_embed_shows_the_account_tile_in_french(self):
-        first, _ = embeds(SUMMARY)
+        [first] = embeds(SUMMARY)
         self.assertEqual(
             [(f["name"], f["value"]) for f in first["fields"]],
             [("Ratio", "1,46"), ("Avant plancher", "123,5 Go"), ("Zen", "12 345"), ("Up, 7 jours", "67,8 Go")],
@@ -62,47 +62,45 @@ class EmbedsTest(unittest.TestCase):
         self.assertNotIn("description", first)
         self.assertEqual(first["image"]["url"], "attachment://part1.png")
 
-    def test_the_second_embed_shows_part_2_and_the_update_time(self):
-        _, second = embeds(SUMMARY)
-        self.assertEqual(second["image"]["url"], "attachment://part2.png")
-        self.assertEqual(second["timestamp"], SUMMARY["updated_at"])
+    def test_the_only_embed_shows_the_update_time(self):
+        [first] = embeds(SUMMARY)
+        self.assertEqual(first["timestamp"], SUMMARY["updated_at"])
 
     def test_a_pause_under_the_floor_is_shown(self):
-        first, second = embeds({"account": {**SUMMARY["account"], "paused": True}})
+        [first] = embeds({"account": {**SUMMARY["account"], "paused": True}})
         self.assertIn("pause sous le Ratio floor de 1,2", first["description"])
-        self.assertEqual(first["color"], second["color"])
         self.assertNotEqual(first["color"], embeds(SUMMARY)[0]["color"])
 
     def test_an_unreadable_account_shows_dashes(self):
-        first, _ = embeds({"account": {"ratio": None, "left_gb": None, "zen": None, "week_uploaded_gb": None, "paused": True}})
+        [first] = embeds({"account": {"ratio": None, "left_gb": None, "zen": None, "week_uploaded_gb": None, "paused": True}})
         self.assertEqual([f["value"] for f in first["fields"]], ["-", "- Go", "-", "- Go"])
 
 
 class PublishTest(unittest.TestCase):
     def test_the_first_report_posts_a_message(self):
         webhook = FakeWebhook()
-        state = publish(webhook, {}, SUMMARY, [b"a", b"b"], at(9, 14))
+        state = publish(webhook, {}, SUMMARY, [b"a"], at(9, 14))
         self.assertEqual(state, {"day": "2026-11-09", "message_id": "m1"})
         kind, _, payload, files = webhook.calls[0]
         self.assertEqual(kind, "post")
-        self.assertEqual(files, [("part1.png", b"a"), ("part2.png", b"b")])
-        self.assertEqual(payload["attachments"], [{"id": 0, "filename": "part1.png"}, {"id": 1, "filename": "part2.png"}])
+        self.assertEqual(files, [("part1.png", b"a")])
+        self.assertEqual(payload["attachments"], [{"id": 0, "filename": "part1.png"}])
 
     def test_each_hour_of_the_day_edits_the_same_message(self):
         webhook = FakeWebhook()
         state = {"day": "2026-11-09", "message_id": "m0"}
-        self.assertEqual(publish(webhook, state, SUMMARY, [b"a", b"b"], at(10, 5)), state)
+        self.assertEqual(publish(webhook, state, SUMMARY, [b"a"], at(10, 5)), state)
         self.assertEqual(webhook.calls[0][:2], ("edit", "m0"))
 
     def test_6_oclock_posts_a_new_message_and_keeps_the_previous_one(self):
         webhook = FakeWebhook()
-        state = publish(webhook, {"day": "2026-11-09", "message_id": "m0"}, SUMMARY, [b"a", b"b"], at(10, 6))
+        state = publish(webhook, {"day": "2026-11-09", "message_id": "m0"}, SUMMARY, [b"a"], at(10, 6))
         self.assertEqual(state, {"day": "2026-11-10", "message_id": "m1"})
         self.assertEqual([call[0] for call in webhook.calls], ["post"])
 
     def test_a_deleted_message_is_posted_again(self):
         webhook = FakeWebhook(missing=True)
-        state = publish(webhook, {"day": "2026-11-09", "message_id": "m0"}, SUMMARY, [b"a", b"b"], at(9, 15))
+        state = publish(webhook, {"day": "2026-11-09", "message_id": "m0"}, SUMMARY, [b"a"], at(9, 15))
         self.assertEqual([call[0] for call in webhook.calls], ["edit", "post"])
         self.assertEqual(state["message_id"], "m2")
 
