@@ -4,9 +4,8 @@ import threading
 import unittest
 import urllib.parse
 
-from player import Track
-
 from jellyfin import MENU_SIZE, Hit, Jellyfin
+from player import Track
 
 KEY = "secret-key"
 

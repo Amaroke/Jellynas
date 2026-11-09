@@ -1,34 +1,34 @@
 name: jellynas
 
 include:
-  - jellyfin/compose.yaml
-  - seerr/compose.yaml
-  - music-bot/compose.yaml
-  - caddy/compose.yaml
-  - gluetun/compose.yaml
-  - qbittorrent/compose.yaml
-  - flaresolverr/compose.yaml
-  - prowlarr/compose.yaml
-  - radarr/compose.yaml
-  - sonarr/compose.yaml
-  - lidarr/compose.yaml
-  - slskd/compose.yaml
-  - lazylibrarian/compose.yaml
-  - suwayomi/compose.yaml
-  - recyclarr/compose.yaml
-  - bazarr/compose.yaml
-  - tdarr/compose.yaml
-  - indexarr/compose.yaml
-  - autobrr/compose.yaml
-  - cross-seed/compose.yaml
-  - ratio/compose.yaml
-  - farm-report/compose.yaml
-  - beszel/compose.yaml
-  - uptime-kuma/compose.yaml
-  - dozzle/compose.yaml
-  - socket-proxy/compose.yaml
-  - homepage/compose.yaml
-  - backup/compose.yaml
+  - services/jellyfin/compose.yaml
+  - services/seerr/compose.yaml
+  - services/music-bot/compose.yaml
+  - services/caddy/compose.yaml
+  - services/gluetun/compose.yaml
+  - services/qbittorrent/compose.yaml
+  - services/flaresolverr/compose.yaml
+  - services/prowlarr/compose.yaml
+  - services/radarr/compose.yaml
+  - services/sonarr/compose.yaml
+  - services/lidarr/compose.yaml
+  - services/slskd/compose.yaml
+  - services/lazylibrarian/compose.yaml
+  - services/suwayomi/compose.yaml
+  - services/recyclarr/compose.yaml
+  - services/bazarr/compose.yaml
+  - services/tdarr/compose.yaml
+  - services/indexarr/compose.yaml
+  - services/autobrr/compose.yaml
+  - services/cross-seed/compose.yaml
+  - services/ratio/compose.yaml
+  - services/farm-report/compose.yaml
+  - services/beszel/compose.yaml
+  - services/uptime-kuma/compose.yaml
+  - services/dozzle/compose.yaml
+  - services/socket-proxy/compose.yaml
+  - services/homepage/compose.yaml
+  - services/backup/compose.yaml
 
 networks:
   jellyfin-zone:

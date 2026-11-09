@@ -2,7 +2,7 @@
 
 ## Language
 
-Everything in this repo is written in English: code, comments, docs, ADRs, CONTEXT.md, commit messages, branch names, issues, pull requests, labels and workflow names. This applies even when the conversation with the agent happens in another language.
+Everything in this repo is written in English: code, comments, docs, CONTEXT.md, commit messages, branch names, issues, pull requests, labels and workflow names. This applies even when the conversation with the agent happens in another language.
 
 ## Agent skills
 
@@ -16,4 +16,4 @@ The five default labels (needs-triage, needs-info, ready-for-agent, ready-for-hu
 
 ### Domain docs
 
-Single-context: CONTEXT.md and docs/adr/ at the repo root. See `docs/agents/domain.md`.
+Single-context: CONTEXT.md at the repo root. See `docs/agents/domain.md`.

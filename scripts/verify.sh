@@ -311,7 +311,7 @@ check_homepage_values() {
     case "$(env_value "$name")" in
       *"'"*) unsafe="$unsafe $name" ;;
     esac
-  done < <(sed -n 's/^      HOMEPAGE_VAR_[A-Z_]*: [$][{]\([A-Z_]*\).*/\1/p' homepage/compose.yaml)
+  done < <(sed -n 's/^      HOMEPAGE_VAR_[A-Z_]*: [$][{]\([A-Z_]*\).*/\1/p' services/homepage/compose.yaml)
   if [ -n "$unsafe" ]; then
     fail homepage "a single quote in$unsafe breaks its config, the page stays empty"
   else

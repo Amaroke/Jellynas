@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-HOMEPAGE = ROOT / "homepage"
+HOMEPAGE = ROOT / "services" / "homepage"
 CONFIG_FILES = [HOMEPAGE / name for name in ("settings.yaml", "services.yaml", "widgets.yaml", "bookmarks.yaml")]
 WITHOUT_TILE = {"homepage", "beszelagent", "autokuma", "ratio", "socketproxy"}
 SECRET_FIELDS = {"key", "password", "username", "apikey", "token"}
@@ -71,7 +71,7 @@ class HomepageConfigTest(unittest.TestCase):
         self.assertEqual(set(), used - homepage_environment())
 
     def test_every_link_has_a_lan_name(self):
-        caddyfile = (ROOT / "caddy" / "Caddyfile").read_text(encoding="utf-8")
+        caddyfile = (ROOT / "services" / "caddy" / "Caddyfile").read_text(encoding="utf-8")
         routed = set(re.findall(r"^\s*import lan ([a-z0-9-]+) ", caddyfile, re.MULTILINE))
         routed |= set(re.findall(r"^\s*host ([a-z0-9-]+)\.lan\.", caddyfile, re.MULTILINE))
         linked = set(re.findall(r"(?:href|src): https://([a-z0-9-]+)\.lan\.", (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")))

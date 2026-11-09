@@ -14,7 +14,7 @@ services:
           interval: 3m
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ../.env:/jellynas/.env:ro
+      - ../../.env:/jellynas/.env:ro
       - data:/data
 
 volumes:
