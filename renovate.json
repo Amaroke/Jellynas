@@ -34,6 +34,12 @@
       "managerFilePatterns": ["/^services/caddy/Dockerfile$/"],
       "matchStrings": ["--with (?<depName>\\S+)@(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
       "datasourceTemplate": "go"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^services/caddy/Dockerfile$/"],
+      "matchStrings": ["--with (?<depName>\\S+)@(?<currentDigest>[0-9a-f]{7,40})\\s"],
+      "datasourceTemplate": "go"
     }
   ],
   "packageRules": [
@@ -77,6 +83,11 @@
       "matchPackageNames": ["lscr.io/linuxserver/lazylibrarian"],
       "versioning": "regex:^[0-9a-f]+-ls(?<major>\\d+)$",
       "automerge": true
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["lscr.io/linuxserver/socket-proxy"],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-r(?<build>\\d+)-ls(?<revision>\\d+)$"
     },
     {
       "matchDatasources": ["docker"],
