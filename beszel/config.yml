@@ -1,3 +1,0 @@
-systems:
-  - name: NAS
-    host: /beszel_socket/beszel.sock

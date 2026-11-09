@@ -2,7 +2,7 @@
 
 A personal media server built on Jellyfin, shared with Friends over the internet.
 
-Every tool here is maintained open source software, picked by the Admin, and the picks may change over time. None of them is an obligation: the repo is a base that runs as is and that you can adapt. Some picks, such as OVH, AirVPN, C411, Nyaa and the French quality profiles, only come from the Admin being French. Each section names equivalent tools, and the [ADRs](docs/adr/) record why a pick was made.
+Every tool here is maintained open source software, picked by the Admin, and the picks may change over time. None of them is an obligation: the repo is a base that runs as is and that you can adapt. Some picks, such as OVH, AirVPN, C411, Nyaa and the French quality profiles, only come from the Admin being French. Each section names equivalent tools and says in a few words why a pick was made, so you can tell when another fits you better.
 
 Follow the sections in order. Each one starts with the sections it requires. Every command runs on TrueNAS, as root, from the Clone, as [TrueNAS](#truenas) sets out.
 
@@ -185,7 +185,7 @@ flowchart LR
 
 ## Prerequisites
 
-- **Required**: [TrueNAS SCALE](https://www.truenas.com/download-truenas-community-edition/) installed, on a machine or a virtual machine, with a pool. [ADR 0007](docs/adr/0007-the-nas-runs-on-the-docker-of-truenas-scale.md) records why. Any Linux host with Docker Compose works too, with its own paths and ids in `.env`.
+- **Required**: [TrueNAS SCALE](https://www.truenas.com/download-truenas-community-edition/) installed, on a machine or a virtual machine, with a pool. Its Docker runs the NAS directly, the data sits on ZFS with snapshots and replication to move the pool to another machine, and the services stay in git rather than in the Custom Apps of TrueNAS. Any Linux host with Docker Compose works too, with its own paths and ids in `.env`.
 - **Recommended**: a VPN with port forwarding, here AirVPN. ProtonVPN, Mullvad or any provider Gluetun supports work too. Without a VPN, a seedbox such as Ultra.cc, Seedhost or Whatbox can download in place of the NAS, or the NAS downloads with the home IP, at your own risk.
 - **Optional**: a domain, here at OVH. Cloudflare, Gandi, Porkbun or any registrar with an API that [caddy-dns](https://github.com/caddy-dns) supports work too. Without a domain, a free dynamic DNS subdomain from DuckDNS, deSEC or dynv6 does the same job, or the NAS stays on the local network only.
 - **Optional**: an account on a private tracker, here C411. Any private tracker works, minus the Zen, which only C411 pays.
@@ -269,7 +269,7 @@ chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 
 Requires [Settings](#settings).
 
-Caddy is the only service the NAS publishes, on `CADDY_HTTPS_PORT`. Friends reach `jellyfin.<DOMAIN>` and `seerr.<DOMAIN>` from the internet. The Admin reaches every tool at `<tool>.lan.<DOMAIN>`, from the local network only: Caddy refuses a lan name to any address outside `LAN_SUBNET`, and refuses any name it does not know. Through the API of the DNS provider, Caddy obtains a wildcard certificate for `*.<DOMAIN>` and one for `*.lan.<DOMAIN>`, so no port opens for the certificates and the certificate logs never list the tools, and it keeps `jellyfin` and `seerr` on the public IP of the home. [ADR 0008](docs/adr/0008-the-nas-answers-on-its-own-domain.md) records why.
+Caddy is the only service the NAS publishes, on `CADDY_HTTPS_PORT`. Friends reach `jellyfin.<DOMAIN>` and `seerr.<DOMAIN>` from the internet. The Admin reaches every tool at `<tool>.lan.<DOMAIN>`, from the local network only: Caddy refuses a lan name to any address outside `LAN_SUBNET`, and refuses any name it does not know. Through the API of the DNS provider, Caddy obtains a wildcard certificate for `*.<DOMAIN>` and one for `*.lan.<DOMAIN>`, so no port opens for the certificates and the certificate logs never list the tools, and it keeps `jellyfin` and `seerr` on the public IP of the home. Wildcards keep the tools out of the certificate logs, a single port keeps what the NAS publishes small, and public certificates avoid installing a local root certificate on every device.
 
 Caddy also listens on `CADDY_HTTPS_PORT` inside its container and sends HSTS on every name, so a browser never tries plain HTTP. Inside the NAS, Caddy answers `jellyfin.<DOMAIN>` and `seerr.<DOMAIN>` itself, so a service reaches Jellyfin or Seerr at the same address a Friend uses, without going through the router. [Network zones](#network-zones) says why.
 
@@ -283,7 +283,7 @@ Jellyfin and Seerr face the internet, so a flaw in either must not land next to 
 | `seerr-zone` | Caddy, Seerr, Radarr, Sonarr |
 | `internal-zone` | every other service, Caddy, Radarr and Sonarr included |
 
-qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal zone, and the Beszel agent the network of the Host. A service of the internal zone that needs Jellyfin or Seerr, such as Homepage, Uptime Kuma or the Music bot, reaches it through Caddy at its public name, so the zones only open towards Jellyfin and Seerr, never from them. `python3 -m unittest discover -s tests` checks the members of each zone. [ADR 0012](docs/adr/0012-the-nas-is-split-into-network-zones.md) records why.
+qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal zone, and the Beszel agent the network of the Host. A service of the internal zone that needs Jellyfin or Seerr, such as Homepage, Uptime Kuma or the Music bot, reaches it through Caddy at its public name, so the zones only open towards Jellyfin and Seerr, never from them. `python3 -m unittest` checks the members of each zone. Jellyfin and Seerr face the internet, so a flaw in one of them should not land next to Radarr, qBittorrent or Dozzle.
 
 Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS provider, swap the `caddy-dns/ovh` module in `caddy/Dockerfile` for its own, and its settings in the `acme_dns` and `dynamic_dns` blocks of `caddy/Caddyfile` and in `.env`.
 
@@ -367,7 +367,7 @@ The settings made in the web UIs of the services live in the appdata root, not i
 
 ### doco-cd
 
-[doco-cd](https://doco.cd) is a container, outside the NAS project, that polls `main` every 3 minutes and deploys `compose.yaml` with `.env`, as set in `.doco-cd.yml`. Komodo or Portainer can do the same with a web UI. [ADR 0010](docs/adr/0010-doco-cd-deploys-main.md) records why. Start doco-cd once from the Clone, its first poll starts the whole NAS:
+[doco-cd](https://doco.cd) is a container, outside the NAS project, that polls `main` every 3 minutes and deploys `compose.yaml` with `.env`, as set in `.doco-cd.yml`. Komodo or Portainer can do the same with a web UI and a database the NAS does not need. doco-cd pulls, so nothing opens on the router, and no workflow of a public pull request can run on the NAS. Start doco-cd once from the Clone, its first poll starts the whole NAS:
 
 ```sh
 docker compose -f doco-cd/compose.yaml up -d
@@ -844,7 +844,7 @@ Each tool gets two profiles, built from the French profiles of the [TRaSH Guides
 - **MULTi 1080p**, for movies and shows: French and original audio required, H265 preferred, 1080p first.
 - **Anime 1080p**, for anime: a `MULTi` with French subtitles first, then a VOSTFR, then any other `MULTi`.
 
-[ADR 0002](docs/adr/0002-recyclarr-prefers-french-h265-1080p.md) lists every rule and why. Change a rule in the config, never in Radarr or Sonarr, since each sync overwrites the profiles.
+The profiles favour releases already in the Library format, so Tdarr rarely re-encodes, and refuse what Tdarr cannot fix: a missing French audio track. Quality always ranks before score, and H265 outweighs the release group, since it saves a lossy Tdarr pass. Change a rule in the config, never in Radarr or Sonarr, since each sync overwrites the profiles.
 
 ### API keys
 
@@ -886,9 +886,9 @@ The answer holds `customFormats` and `customFormatScore`. A score below -5000 me
 
 Requires [Radarr](#radarr) and [Sonarr](#sonarr).
 
-Tdarr normalises every video of the Library to MKV H265 within 1920x1080, as [ADR 0004](docs/adr/0004-the-library-is-mkv-h265-with-embedded-subtitles.md) sets out. Unmanic or FileFlows can replace it. It sees only the movies, shows and anime folders, under the same paths as Radarr and Sonarr, and never the torrents tree, so a torrent still seeding is never touched. Its work files go to `<APPDATA_ROOT>/tdarr/cache`.
+Tdarr normalises every video of the Library to MKV H265 within 1920x1080, one compact format that most devices play directly, offline on a phone included. MP4 holds subtitles and several audio tracks poorly, and H264 makes much larger files. Unmanic or FileFlows can replace it. It sees only the movies, shows and anime folders, under the same paths as Radarr and Sonarr, and never the torrents tree, so a torrent still seeding is never touched. Its work files go to `<APPDATA_ROOT>/tdarr/cache`.
 
-The flow, `tdarr/flow.json`, picks the tracks of each file, embeds the subtitle files of Bazarr, replaces the original as MKV and asks Radarr or Sonarr to rescan its folder, following the rules of ADR 0004.
+The flow, `tdarr/flow.json`, picks the tracks of each file, embeds the subtitle files of Bazarr, replaces the original as MKV and asks Radarr or Sonarr to rescan its folder, following the rules of [Languages](#languages).
 
 ### Login
 
@@ -943,7 +943,7 @@ Bazarr finds the subtitles for watching in the original audio. It learns about e
 
 ### Languages
 
-Every work in a foreign language, anime included, gets French and English subtitles, and a French original work gets none. [ADR 0004](docs/adr/0004-the-library-is-mkv-h265-with-embedded-subtitles.md) records why.
+Every work in a foreign language, anime included, gets French and English subtitles, and a French original work gets none. Subtitles only serve to watch in the original audio. They are embedded in the video rather than left beside it, and only Tdarr writes the file, so Bazarr and Tdarr never rewrite the same video.
 
 Sonarr and Radarr tag each French original work so that Bazarr leaves it out. In Settings > Tags of Sonarr, click "+" under Auto Tagging, name the rule `French original`, check "Remove Tags Automatically", enter `french-original` as the tag, add the condition "Original Language is French", and save. Do the same in Radarr. Each work gets its tag at its next refresh, or right away with "Update All" in Series and in Movies.
 
@@ -1078,7 +1078,7 @@ Each track posts a message with its cover and Pause, Skip and Stop buttons, and 
 
 Requires [qBittorrent](#qbittorrent), [Prowlarr](#prowlarr), [Radarr](#radarr) and [Sonarr](#sonarr).
 
-The Admin keeps a good ratio on C411, a French private tracker, with torrents grabbed only to seed, without touching the Library. The same tools work with any private tracker, except the Zen, which only C411 pays. [ADR 0009](docs/adr/0009-ratio-farms-from-twins-and-keeps-a-zen-reserve.md) records why:
+The Admin keeps a good ratio on C411, a French private tracker, with torrents grabbed only to seed, without touching the Library. The same tools work with any private tracker, except the Zen, which only C411 pays. Paid grabs of fresh releases lost the race against seedboxes, so the Farm works first for Zen, paid every night per torrent seeded, and takes upload as a bonus:
 
 - ratio, `ratio/ratio.py`, runs the Farm. It grabs freeleech releases, Twins and, over the Ratio floor of the account, small Rare releases of the Volume hunt for the Farm, downloads each from its Twin on a public tracker when one exists, and cleans both.
 - cross-seed finds the torrents of qBittorrent on C411 and seeds them there too, from hardlinks in `/data/torrents/cross-seed`, without downloading them again. qBittorrent tells it about every finished torrent.
@@ -1101,7 +1101,7 @@ In `.env`, set `QBITTORRENT_USER` and `QBITTORRENT_PASSWORD` to the qBittorrent 
 A download on a public tracker costs nothing on C411, so Radarr and Sonarr prefer it, and ratio looks there for Twins. Nyaa, a public anime tracker, is the one used here, since French anime groups post there and on C411 alike.
 
 1. In Prowlarr, Indexers, click "Add Indexer", pick Nyaa.si, set "Indexer Priority" to `10`, click "Test", then "Save".
-2. Edit the C411 indexer, click "Show Advanced", and set "Indexer Priority" to `25`. At equal quality and score, Radarr and Sonarr then take Nyaa. A better release on C411 still wins, as [ADR 0002](docs/adr/0002-recyclarr-prefers-french-h265-1080p.md) ranks them.
+2. Edit the C411 indexer, click "Show Advanced", and set "Indexer Priority" to `25`. At equal quality and score, Radarr and Sonarr then take Nyaa. A better release on C411 still wins, as the profiles of [Recyclarr](#recyclarr) rank them.
 3. Note the id of Nyaa, the number in its Torznab URL `http://prowlarr:9696/<id>/api`, for `RATIO_TWIN_INDEXER_IDS`.
 
 Prowlarr syncs Nyaa to Radarr and Sonarr like any indexer. It returns almost only anime, so it costs nothing to search it for the other works.
@@ -1157,7 +1157,7 @@ ratio, `ratio/ratio.py`, runs every 10 minutes. It reads qBittorrent, Prowlarr a
 5. **Adopts Library torrents.** A C411 torrent of `movies`, `shows`, `music` or `books` that finished at least 6 hours ago, so it is imported, moves into the Farm when it fits in its budget. Radarr, Sonarr and Lidarr only watch their own category, so they no longer remove it, and it keeps paying Zen without any new download. Its file then takes its space twice, once in the Library and once in the torrents tree.
 6. **Cleans the public torrents and the Farm.** A public torrent of one of the five categories leaves after 14 days of seeding, whatever its ratio, or once a C411 torrent seeds the same files, at least 6 hours after it finished. Nothing leaves the Farm while it holds less than `RATIO_MAX_SIZE_GB`, 100 by default. Over it, the C411 torrents that pay the least Zen for their size leave first, never before `RATIO_MIN_SEEDING_DAYS`. ratio estimates the Zen of a torrent per night as C411 does, a note of 1 plus 0.10 from 7 days of seeding, 0.25 from 30, 0.35 from 90 and 0.50 from 180, plus 0.25 when it is Rare, times a weight of 0.25 GB plus its size over 4.25 GB, which rises slower beyond 4 GB.
 7. **Grabs Twins.** It reads the newest movies and shows of each indexer in `RATIO_GRAB_INDEXER_IDS`, while fewer than 2 torrents of the Farm are downloading. For each episode at most 24 hours old with at least one leecher, it searches `RATIO_TWIN_INDEXER_IDS` for its episode and language, for example `S03E06 VOSTFR`, and keeps a result of the same release group whose size is within 5 %, since Nyaa rounds its sizes. It then downloads both torrent files and compares the length of every file. When they match, the release is a Twin: ratio downloads it from Nyaa into the Farm, for free, outside any quota or pause, and cross-seed seeds its C411 copy. Up to 10 episodes are checked per run, and each one again 2 hours later at most.
-8. **Grabs freeleech.** For the Farm, a freeleech release of C411 among the newest, whose `downloadvolumefactor` is 0, up to 5 GB with at least one seeder, the most leechers first. It is free, never counts in the Deficit, and stays allowed under the floor. ratio no longer pays C411 for fresh releases to farm upload, see [ADR 0011](docs/adr/0011-the-farm-earns-zen-first-under-a-ratio-floor.md).
+8. **Grabs freeleech.** For the Farm, a freeleech release of C411 among the newest, whose `downloadvolumefactor` is 0, up to 5 GB with at least one seeder, the most leechers first. It is free, never counts in the Deficit, and stays allowed under the floor. ratio no longer pays C411 for fresh releases to farm upload: a home connection behind a VPN loses that race against seedboxes.
 9. **Runs the Volume hunt.** Each run, it reads one category of C411 through Prowlarr and grabs into the Farm its Rare releases of at most 1 GB with at least one seeder, the cheapest first: freeleech before paid, then the smallest. It turns through the five categories the Quests of C411 count, Films & Vidéos, Ebook, Audio, Emulation and Imprimante 3D, until each holds 25 C411 torrents, and fills one up to 25 at most while another is short. Once all five hold 25, it reads only the anime of Films & Vidéos. A Library torrent counts in the category of what it holds, a Twin in Films & Vidéos, and any other C411 torrent in the category of its largest files, read once from qBittorrent: video, ebook, audio, game ROM or 3D model. Paid download stays under `RATIO_VOLUME_DAILY_GB` over the last 24 hours, 2 by default, and within the download left before the floor, so under the floor only freeleech is hunted. An anime Twin from Nyaa has no size cap, a paid anime grab stays Rare and at most 1 GB.
 
 Prowlarr answers 429 when an indexer is queried too often. ratio leaves at least 2 seconds between two requests to Prowlarr, fetches each torrent file once per run, and leaves Prowlarr alone for as long as a 429 asks, an hour when it does not say. Prowlarr also answers 429 while it keeps an indexer disabled after failures, which ratio names in its logs. Once the cause is gone, a test of the indexer in Prowlarr, Indexers, clears the failures and enables it again. Holding or releasing C411 at the floor still goes through meanwhile.
@@ -1207,11 +1207,11 @@ Requires [Deploy](#deploy).
 
 Three tools tell the Admin that something goes wrong before a Friend does. [Beszel](#beszel) watches the resources of the Host and of each container, and alerts on the disk and the temperature. [Uptime Kuma](#uptime-kuma) checks that each service answers, and alerts when one is down, with checks AutoKuma writes from the labels of each service. [Dozzle](#dozzle) shows the logs of every container. All three are reached from the local network only, behind their own login.
 
-None of them can start, stop or change a container: git stays the only way to change the NAS, as [ADR 0010](docs/adr/0010-doco-cd-deploys-main.md) records. Dozzle, Uptime Kuma, AutoKuma and the Beszel agent reach Docker through the socket proxy, a [read-only proxy](https://docs.linuxserver.io/images/docker-socket-proxy/) that lets through the list of the containers, their logs, stats and events, and the version and info of Docker, and refuses every write. A read-only mount of the socket would not do: the Docker API stays writable through it. The proxy listens in the internal zone, and on the loopback of the Host for the Beszel agent. Only the proxy, backup and doco-cd mount the socket, which `python3 -m unittest discover -s tests` checks, and `./scripts/verify.sh` checks that the proxy refuses a write.
+None of them can start, stop or change a container: git stays the only way to change the NAS. Dozzle, Uptime Kuma, AutoKuma and the Beszel agent reach Docker through the socket proxy, a [read-only proxy](https://docs.linuxserver.io/images/docker-socket-proxy/) that lets through the list of the containers, their logs, stats and events, and the version and info of Docker, and refuses every write. A read-only mount of the socket would not do: the Docker API stays writable through it. The proxy listens in the internal zone, and on the loopback of the Host for the Beszel agent. Only the proxy, backup and doco-cd mount the socket, which `python3 -m unittest` checks, and `./scripts/verify.sh` checks that the proxy refuses a write.
 
 ### Discord alerts
 
-Backup, Beszel and Uptime Kuma send their alerts to a channel of a Discord server dedicated to the NAS, which pushes them to the phone of the Admin. Nobody else is on the server, so nobody else reads the alerts, and only the webhook can post them.
+Backup, Beszel and Uptime Kuma send their alerts to a channel of a Discord server dedicated to the NAS, which pushes them to the phone of the Admin. Nobody else is on the server, so nobody else reads the alerts, and only the webhook can post them. [ntfy](https://ntfy.sh), self-hosted or not, Gotify or Telegram can replace Discord, since backup, Beszel and Uptime Kuma all speak to them through Shoutrrr URLs or their own notifiers.
 
 1. In Discord, create a server for the NAS, with yourself alone on it.
 2. In Server Settings > Integrations > Webhooks, click "New Webhook", pick the channel of the alerts and copy its URL, `https://discord.com/api/webhooks/<id>/<token>`.
@@ -1240,7 +1240,7 @@ Beszel shows the processor, the memory, the disks, the network and the temperatu
    ```
 
 3. In `.env`, set `BESZEL_AGENT_KEY` to the line it prints, between double quotes since it holds a space, then restart doco-cd to apply `.env`.
-4. Open `https://beszel.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. The system `NAS`, set in `beszel/config.yml`, turns up within a minute, with a `Data` disk for the data root.
+4. Open `https://beszel.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. The system `NAS`, set in `beszel/compose.yaml`, turns up within a minute, with a `Data` disk for the data root.
 
 ### Alerts
 
@@ -1250,7 +1250,7 @@ In `.env`, set `BESZEL_DISK_ALERT_PERCENT` and `BESZEL_TEMPERATURE_ALERT_CELSIUS
 set -a
 . <(grep -E '^(BESZEL_EMAIL|BESZEL_PASSWORD|BESZEL_DISK_ALERT_PERCENT|BESZEL_TEMPERATURE_ALERT_CELSIUS|DISCORD_ALERTS_WEBHOOK_ID|DISCORD_ALERTS_WEBHOOK_TOKEN)=' .env)
 set +a
-python3 beszel/alerts.py "http://$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' beszel):8090"
+python3 scripts/beszel_alerts.py "http://$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' beszel):8090"
 ```
 
 An alert fires once a value stays over its threshold for 10 minutes. Run the same command after changing one of these values. The disk alert watches the data disk and the disk of Docker, and fires for the fuller of both. A virtual machine shows no temperature sensor to the agent, so the temperature alert only works with TrueNAS on its own machine.
@@ -1283,7 +1283,7 @@ labels:
   kuma.radarr.http.url: http://radarr:7878/ping
 ```
 
-The defaults of every monitor, its interval of 60 seconds, the Discord notification and the Docker host `NAS`, sit in `AUTOKUMA__DEFAULT_SETTINGS` in `uptime-kuma/compose.yaml`. `python3 -m unittest discover -s uptime-kuma` checks that every service has a monitor.
+The defaults of every monitor, its interval of 60 seconds, the Discord notification and the Docker host `NAS`, sit in `AUTOKUMA__DEFAULT_SETTINGS` in `uptime-kuma/compose.yaml`. `python3 -m unittest` checks that every service has a monitor.
 
 The monitors of Jellyfin and Seerr also alert before the certificate expires. Inside the NAS their public names lead straight to Caddy, so they check Caddy, its certificate and the service, but neither the port forward of the router nor the DNS record: only a check from outside the home, such as a free monitor of UptimeRobot, covers those.
 
@@ -1373,9 +1373,9 @@ Open `https://homepage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `HOMEPA
 
 Requires [Observation](#observation).
 
-The settings made in the web UIs of the services live in the appdata root, outside git, as [ADR 0010](docs/adr/0010-doco-cd-deploys-main.md) records. The backup service, [docker-volume-backup](https://offen.github.io/docker-volume-backup/), archives the whole appdata root every night at 4:00 into `BACKUP_ROOT`, a dataset of its own, and deletes the archives older than 30 days. A failed backup sends an alert to the [Discord alerts](#discord-alerts) channel. The caches of Jellyfin and Tdarr, the logs of Tdarr and the images Jellyfin keeps in `data/metadata` stay out of the archive: Jellyfin fetches the images again at its next library scan, and keeping them would take gigabytes per archive. No copy leaves the NAS for now, so a lost pool takes the archives with it. restic or Borg can add a copy elsewhere, and the snapshots and replication of TrueNAS can replace the service.
+The settings made in the web UIs of the services live in the appdata root, outside git. The backup service, [docker-volume-backup](https://offen.github.io/docker-volume-backup/), archives the whole appdata root every night at 4:00 into `BACKUP_ROOT`, a dataset of its own, and deletes the archives older than 30 days. A failed backup sends an alert to the [Discord alerts](#discord-alerts) channel. The caches of Jellyfin and Tdarr, the logs of Tdarr and the images Jellyfin keeps in `data/metadata` stay out of the archive: Jellyfin fetches the images again at its next library scan, and keeping them would take gigabytes per archive. No copy leaves the NAS for now, so a lost pool takes the archives with it. restic or Borg can add a copy elsewhere, and the snapshots and replication of TrueNAS can replace the service.
 
-A service whose database could be copied mid-write is stopped during the backup, and started again once the archive is written. It carries the label `docker-volume-backup.stop-during-backup: "true"` in its `compose.yaml`. Uptime Kuma carries it too, so the services stopped for the night send no alert. A service slower to start than Uptime Kuma, such as Jellyfin, can still send one as it comes back. `python3 -m unittest discover -s backup` checks that every service with an appdata folder either carries the label or is listed in `backup/test_backup.py` as one that keeps running.
+A service whose database could be copied mid-write is stopped during the backup, and started again once the archive is written. It carries the label `docker-volume-backup.stop-during-backup: "true"` in its `compose.yaml`. Uptime Kuma carries it too, so the services stopped for the night send no alert. A service slower to start than Uptime Kuma, such as Jellyfin, can still send one as it comes back. `python3 -m unittest` checks that every service with an appdata folder either carries the label or is listed in `tests/test_backup.py` as one that keeps running.
 
 The backup service mounts the appdata root read-only, and the Docker socket, without the proxy, to stop and start the services. `./scripts/verify.sh` checks that it cannot write to the appdata and that `BACKUP_ROOT` is on another dataset than the data and appdata roots.
 

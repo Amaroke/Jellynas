@@ -17,8 +17,10 @@ services:
       docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/beszel:/beszel_data
-      - ./config.yml:/beszel_data/config.yml:ro
       - beszel_socket:/beszel_socket
+    configs:
+      - source: beszel-systems
+        target: /beszel_data/config.yml
     healthcheck:
       test: ["CMD", "/beszel", "health", "--url", "http://localhost:8090"]
       interval: 60s
@@ -52,3 +54,10 @@ services:
 
 volumes:
   beszel_socket:
+
+configs:
+  beszel-systems:
+    content: |
+      systems:
+        - name: NAS
+          host: /beszel_socket/beszel.sock

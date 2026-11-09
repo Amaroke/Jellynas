@@ -5,7 +5,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-REPLACED_PREFIXES = ("ntfy://", "discord://")
+REPLACED_PREFIXES = ("discord://",)
 ALERT_MINUTES = 10
 
 
@@ -74,5 +74,5 @@ def apply_alerts(hub_url, env):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        sys.exit("Usage: alerts.py <hub url>")
+        sys.exit("Usage: beszel_alerts.py <hub url>")
     apply_alerts(sys.argv[1], os.environ)

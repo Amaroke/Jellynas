@@ -3,7 +3,7 @@ import json
 import threading
 import unittest
 
-from alerts import apply_alerts
+from beszel_alerts import apply_alerts
 
 ENV = {
     "BESZEL_EMAIL": "admin@example.com",
@@ -109,11 +109,11 @@ class ApplyAlertsTest(unittest.TestCase):
         self.assertEqual(hub.settings["user"], "user-1")
         self.assertEqual(hub.settings["settings"]["webhooks"], ["discord://abcd@1234"])
 
-    def test_replaces_ntfy_and_older_discord_webhooks_and_keeps_other_settings(self):
+    def test_replaces_older_discord_webhooks_and_keeps_other_settings(self):
         hub = self.hub({"id": "settings-1", "user": "user-1", "settings": {
             "chartTime": "1h",
             "emails": ["admin@example.com"],
-            "webhooks": ["ntfy://ntfy.sh/old-topic", "discord://old@9", "telegram://token@telegram?chats=1"],
+            "webhooks": ["discord://old@9", "telegram://token@telegram?chats=1"],
         }})
         apply_alerts(hub.url, ENV)
         self.assertEqual(hub.settings["settings"], {
