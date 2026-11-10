@@ -22,25 +22,41 @@ ROOT = Path(__file__).resolve().parent.parent
 POSTS = {"links": "links.md", "news": "welcome.md"}
 FAILURES = (OSError, ValueError, KeyError, http.client.HTTPException, SystemExit)
 FARM_REPORT = "http://farm-report:8000/refresh"
-ACTION_RESULTS = {
-    "discord": "Messages Discord en cours de publication",
-    "farm-report": "Farm report en cours de publication",
-    "error": "Le Farm report ne répond pas, réessaie plus tard",
-}
+ACTIONS = (
+    ("discord", "Messages Discord", "Liens et bienvenue"),
+    ("farm-report", "Farm report", "Message du jour"),
+)
+ACTION_RUNNING = "Publication en cours"
+ACTION_FAILED = "Pas de réponse, réessaie plus tard"
 ACTIONS_PAGE = """<!doctype html>
 <html lang="fr">
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Actions rapides</title>
 <style>
-html, body {{ margin: 0; background: transparent; color: #e2e8f0; font: 14px system-ui, sans-serif; }}
-form {{ display: inline-block; margin: 4px 8px 4px 0; }}
-button {{ padding: 8px 14px; border: 1px solid #a78bfa; border-radius: 6px; background: #1e293b; color: inherit; font: inherit; cursor: pointer; }}
-button:hover {{ background: #334155; }}
-p {{ margin: 6px 0 0; color: #94a3b8; }}
+* {{ box-sizing: border-box; }}
+html, body {{ margin: 0; height: 100%; background: transparent; color: #e2e8f0;
+  font: 13px/1.35 Manrope, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }}
+main {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; height: 100vh; padding: 6px; }}
+form {{ margin: 0; min-width: 0; }}
+button {{ position: relative; display: flex; flex-direction: column; justify-content: center; width: 100%; height: 100%;
+  overflow: hidden; padding: 9px 12px 9px 15px; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025));
+  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 10px; transition: border-color 0.15s, background 0.15s;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 6px 18px rgba(0, 0, 0, 0.12); }}
+button::before {{ content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0;
+  background: var(--accent); }}
+button:hover {{ border-color: var(--accent); background: linear-gradient(160deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.05)); }}
+button:focus-visible {{ outline: 2px solid var(--accent); outline-offset: 1px; }}
+.discord {{ --accent: #60a5fa; }}
+.farm-report {{ --accent: #a78bfa; }}
+.label {{ color: #94a3b8; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }}
+.value {{ font-size: 18px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; }}
+.sub {{ color: #94a3b8; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+.running .sub {{ color: #34d399; }}
+.failed .sub {{ color: #fb7185; }}
 </style>
-<form method="post" action="/actions/discord"><button>Actualiser les messages Discord</button></form>
-<form method="post" action="/actions/farm-report"><button>Actualiser le Farm report</button></form>
-<p>{result}</p>
+<main>{cards}</main>
 """
 BLOCK = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|-#|#|>|\||```)")
 
@@ -104,9 +120,14 @@ def send(url, method, embed):
         return json.load(response)["id"]
 
 
-def publish(channel, path, env, api=API):
+def publish(channel, path, env, api=API, now=None):
     hook = f"{api}/{webhook(env, channel)}"
-    embed = {**render(path, env), "color": COLORS.get(channel, COLOR)}
+    now = now or datetime.datetime.now().astimezone()
+    embed = {
+        **render(path, env),
+        "color": COLORS.get(channel, COLOR),
+        "footer": {"text": f"Dernière mise à jour : {now:%d/%m/%Y} à {now:%H:%M}"},
+    }
     appdata = env.get("APPDATA_ROOT", "").strip()
     if not appdata:
         sys.exit("APPDATA_ROOT is empty in .env")
@@ -137,8 +158,20 @@ def publish_all(env, folder=ROOT / "discord-posts", api=API):
             print(f"Cannot publish {name} in {channel}: {error}")
 
 
+def action_card(key, label, hint, done):
+    state, text = "", hint
+    if done == key:
+        state, text = " running", ACTION_RUNNING
+    elif done == "error" and key == "farm-report":
+        state, text = " failed", ACTION_FAILED
+    return (
+        f'<form method="post" action="/actions/{key}"><button class="{key}{state}"><span class="label">{label}</span>'
+        f'<span class="value">Actualiser</span><span class="sub">{text}</span></button></form>'
+    )
+
+
 def actions_page(done):
-    return ACTIONS_PAGE.format(result=ACTION_RESULTS.get(done, ""))
+    return ACTIONS_PAGE.format(cards="".join(action_card(key, label, hint, done) for key, label, hint in ACTIONS))
 
 
 def ask_farm_report(url):

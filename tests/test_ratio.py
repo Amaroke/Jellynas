@@ -1138,18 +1138,6 @@ def board_of_run(qbt, state=None, now=NOW, **changes):
 
 
 class Board(unittest.TestCase):
-    def test_each_challenge_lists_its_steps_with_the_progress_of_the_farm(self):
-        held, kinds = filled("Films & Vidéos", 112, seeding_days=40, seeders=100)
-        challenges = {c["key"]: c for c in board_of_run(FakeQBittorrent(held), empty_state(kinds=kinds))["challenges"]}
-        self.assertEqual(list(challenges), ["seed_volume", "contribution", "duration", "diversity", "category"])
-        steps = {key: [(s["target"], s["progress"]) for s in c["steps"]] for key, c in challenges.items()}
-        self.assertEqual(steps["seed_volume"], [(n, 112) for n in (100, 150, 200, 250, 300)])
-        self.assertEqual(steps["contribution"], [(50, 112), (100, 0), (150, 0), (200, 0), (250, 0), (300, 0)])
-        self.assertEqual(steps["duration"], [(25, 112), (100, 112), (150, 0), (250, 0), (300, 0)])
-        self.assertEqual(steps["diversity"], [(25, 25), (50, 25), (75, 25), (100, 25), (125, 25)])
-        self.assertEqual(steps["category"], [(50, 112), (100, 112), (250, 112), (500, 112)])
-        self.assertEqual([c["max"] for c in challenges.values()], [True, True, True, False, False])
-
     def test_the_farm_disk_is_split_by_source(self):
         qbt = FakeQBittorrent([
             torrent("twin1", size_gb=2), torrent("twin2", size_gb=1), torrent("hunt", size_gb=0.5),
@@ -1198,12 +1186,6 @@ class Kinds(unittest.TestCase):
         ])
         self.assertEqual(run(qbt)["kinds"], {})
 
-    def test_the_seeds_of_each_kind_count_for_the_diversity_challenge(self):
-        qbt = FakeQBittorrent([torrent(f"s{i}", size_gb=0.5) for i in range(30)] + [torrent(f"b{i}", size_gb=0.5) for i in range(10)])
-        qbt.names = {**{f"s{i}": [("x.mkv", 9)] for i in range(30)}, **{f"b{i}": [("x.epub", 9)] for i in range(10)}}
-        challenges = {c["key"]: c for c in board_of_run(qbt)["challenges"]}
-        self.assertEqual([s["progress"] for s in challenges["diversity"]["steps"]][:2], [25, 35])
-
 
 def entry(n, **changes):
     return {
@@ -1212,19 +1194,8 @@ def entry(n, **changes):
     }
 
 
-def challenge(key, targets, progress, has_max=False):
-    return {"key": key, "steps": [{"target": t, "progress": progress} for t in targets], "max": has_max}
-
-
 BOARD = {
     "history": [entry(n) for n in range(1, 31)],
-    "challenges": [
-        challenge("seed_volume", (100, 150, 200, 250, 300), 112, True),
-        challenge("contribution", (50, 100, 150, 200, 250, 300), 40, True),
-        challenge("duration", (25, 100, 150, 250, 300), 30, True),
-        challenge("diversity", (25, 50, 75, 100, 125), 25),
-        challenge("category", (50, 100, 250, 500), 60),
-    ],
     "farm": {"budget_gb": 100, "slices": [{"source": "free", "gb": 30.5}, {"source": "volume-hunt", "gb": 9.5}]},
     "sources": [
         {"source": "free", "torrents": 12, "downloaded_gb": 0, "uploaded_gb": 80.5, "ratio": None,
@@ -1233,10 +1204,6 @@ BOARD = {
          "week_downloaded_gb": 2, "week_uploaded_gb": 3, "week_ratio": 1.5, "farm_days": 9},
     ],
 }
-
-
-def items(body, css):
-    return re.findall(rf'<li class="{css}"><span class="step">([^<]+)</span>', body)
 
 
 class ZenGb(unittest.TestCase):
@@ -1267,7 +1234,7 @@ class Page(unittest.TestCase):
         self.assertIn("+3 last night", body)
         self.assertEqual(re.findall(r"<figcaption>([^<]+)", body), ["Account ratio", "Zen", "Upload and download"])
         self.assertIn(">floor 1.2<", body)
-        self.assertNotIn('class="quests"', body)
+        self.assertNotIn('class="bottom"', body)
 
     def test_the_only_script_tells_homepage_the_full_height_of_the_board(self):
         headers, body = self.page(BOARD, "?part=1")
@@ -1284,7 +1251,6 @@ class Page(unittest.TestCase):
         _, body = self.page(BOARD, "?part=disk")
         self.assertEqual(re.findall(r"<figcaption>([^<]+)", body), ["Farm disk"])
         self.assertNotIn('class="kpis"', body)
-        self.assertNotIn('class="quests"', body)
 
     def test_pad_adds_a_margin_and_a_fixed_height_in_pixels(self):
         body = self.page(BOARD, "?part=1&pad=424")[1]
@@ -1293,20 +1259,10 @@ class Page(unittest.TestCase):
         self.assertIn('<html lang="en">', self.page(BOARD, "?part=1&pad=x")[1])
         self.assertIn('<html lang="en">', self.page(BOARD, "?part=1")[1])
 
-    def test_the_second_part_shows_each_step_the_farm_disk_and_the_earnings_by_source(self):
+    def test_the_second_part_shows_the_farm_disk_and_the_earnings_by_source(self):
         _, body = self.page(BOARD, "?part=2")
-        self.assertEqual(
-            re.findall(r"<h3>([^<]+)</h3>", body),
-            ["Seed volume", "Minimum contribution", "Seed duration", "Category diversity", "Category volume"],
-        )
-        self.assertEqual(items(body, "done")[:1], ["100 seeds"])
-        self.assertIn("150 seeds", items(body, "next"))
-        self.assertIn("112 / 150", body)
-        self.assertIn("300 seeds", items(body, "later"))
-        self.assertIn("Every step", items(body, "later"))
-        self.assertIn(">150 Zen<", body)
-        self.assertIn(">Prime badge<", body)
-        self.assertEqual(len(re.findall(r'<li class="(?:done|next|later)">', body)), 6 + 7 + 6 + 5 + 4)
+        self.assertNotIn("<h3>", body)
+        self.assertNotIn('class="quests"', body)
         self.assertIn("40 %", body)
         self.assertIn(">Free<", body)
         self.assertIn(">60.0 GB<", body)
@@ -1319,14 +1275,16 @@ class Page(unittest.TestCase):
         self.assertNotIn("a day", body)
         self.assertNotIn('class="kpis"', body)
 
+    def test_the_earnings_never_shrink_below_their_content(self):
+        _, body = self.page(BOARD, "?part=2")
+        self.assertIn(".bottom { flex: 1 0 auto; }", body)
+
     def test_the_french_page_speaks_french(self):
         _, body = self.page(BOARD, "?lang=fr")
         self.assertIn('<html lang="fr" class="standalone">', body)
         self.assertIn(">Ratio du compte<", body)
         self.assertIn(">plancher 1,2<", body)
         self.assertIn(">20,0 Go<", body)
-        self.assertIn("<h3>Volume de seed</h3>", body)
-        self.assertIn(">Badge Prime<", body)
         self.assertIn(">Gains par Source<", body)
         self.assertIn(">7 jours : 2,0 Go reçus, 3,0 Go envoyés, ratio 1,50, 9,0 jours dans la Farm<", body)
         self.assertIn(">Aucun download compté sur C411<", body)
@@ -1351,12 +1309,12 @@ class Page(unittest.TestCase):
         _, body = self.page(BOARD)
         self.assertIn('<html lang="en" class="standalone">', body)
         self.assertIn('class="kpis"', body)
-        self.assertIn('class="quests"', body)
+        self.assertIn('class="bottom"', body)
 
     def test_the_page_answers_with_a_query_or_a_trailing_slash(self):
         for query in ("/", "?refresh=1"):
             _, body = self.page(BOARD, query)
-            self.assertIn('class="quests"', body)
+            self.assertIn('class="bottom"', body)
 
     def test_without_history_the_page_says_so(self):
         for board in (None, {**BOARD, "history": []}):

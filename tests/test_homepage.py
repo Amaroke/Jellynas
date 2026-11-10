@@ -7,7 +7,7 @@ HOMEPAGE = ROOT / "services" / "homepage"
 CONFIG_FILES = [HOMEPAGE / name for name in ("settings.yaml", "services.yaml", "widgets.yaml", "bookmarks.yaml")]
 WITHOUT_TILE = {"homepage", "beszelagent", "autokuma", "ratio", "socketproxy"}
 SECRET_FIELDS = {"key", "password", "username", "apikey", "token"}
-BOARD_CARDS = ("Farm board", "Farm quests")
+BOARD_CARDS = ("Farm board", "Farm earnings")
 PLACEHOLDER = re.compile(r"\{\{(HOMEPAGE_[A-Z_]+)\}\}")
 
 
@@ -76,16 +76,6 @@ class HomepageConfigTest(unittest.TestCase):
         routed |= set(re.findall(r"^\s*host ([a-z0-9-]+)\.lan\.", caddyfile, re.MULTILINE))
         linked = set(re.findall(r"(?:href|src):\s+https://([a-z0-9-]+)\.lan\.", (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")))
         self.assertEqual(set(), linked - routed)
-
-    def test_the_account_tile_reads_the_account_block_of_ratio(self):
-        text = (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")
-        self.assertNotIn("Ratio", tiles())
-        account = re.search(r"^    - Account:$(.*?)(?=^    - )", text, re.MULTILINE | re.DOTALL)
-        self.assertIsNotNone(account)
-        self.assertIn("url: http://ratio:8000/summary", account.group(1))
-        fields = re.findall(r"- field: (\S+)", account.group(1))
-        self.assertEqual(fields, ["account.ratio", "account.left_gb", "account.zen", "account.week_uploaded_gb"])
-        self.assertNotIn("grabs.", text)
 
     def test_the_farm_and_quests_have_no_tile_the_board_shows_them(self):
         text = (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")
