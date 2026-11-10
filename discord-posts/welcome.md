@@ -9,7 +9,8 @@ Demande-moi tes identifiants en message privé.
 
 ## ⚠️ Règles
 
-- Ton compte est personnel : ne le prête pas, ne donne jamais ton mot de passe, ne le perds pas
+- Ton compte est personnel : ne le prête pas, ne donne jamais ton mot de passe,
+  ne le perds pas
 - Ne partage pas les adresses du serveur ni les liens de ce Discord
 - Ne mets pas de capture du serveur ou du contenu en ligne
 

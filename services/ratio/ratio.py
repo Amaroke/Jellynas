@@ -3,9 +3,11 @@ import datetime
 import email.utils
 import hashlib
 import html
+import http.client
 import http.cookiejar
 import http.server
 import json
+import logging
 import math
 import os
 import re
@@ -71,6 +73,10 @@ FILE_KINDS = {
 KINDS = {"movies": FILMS, "shows": FILMS, "music": "Audio", "books": "Ebook"}
 TWIN_ATTEMPTS = 3
 TORZNAB = "{http://torznab.com/schemas/2015/feed}attr"
+
+FAILURES = (OSError, ValueError, KeyError, TypeError, RuntimeError, http.client.HTTPException, ET.ParseError)
+
+LOG = logging.getLogger("ratio")
 
 
 class QBittorrent:
@@ -612,7 +618,7 @@ def classify(qbt, state, settings, torrents):
             continue
         try:
             state["kinds"][t["hash"]] = kind_of_files(qbt.files(t["hash"]))
-        except Exception as error:
+        except FAILURES as error:
             print(f"Cannot read the files of {t['name']}: {error}")
 
 
@@ -787,7 +793,7 @@ def received_base(state, account, now):
 def read_account(c411, state, now):
     try:
         account = c411.account()
-    except Exception as error:
+    except FAILURES as error:
         print(f"Cannot read the profile of C411, ratio spends no download on C411: {error}")
         return None
     samples = state["account"]
@@ -1378,7 +1384,7 @@ def seed_twins(qbt, prowlarr, settings, state, torrents, now):
             qbt.match_files(original, qbt.files(twin))
         except Throttled:
             raise
-        except Exception as error:
+        except FAILURES as error:
             if refused or attempts + 1 >= TWIN_ATTEMPTS:
                 if added:
                     qbt.delete([original], delete_files=False)
@@ -1555,7 +1561,7 @@ def fetch(settings, read, what="indexer"):
             releases += read(indexer)
         except Throttled:
             raise
-        except Exception as error:
+        except FAILURES as error:
             print(f"Cannot read {what} {indexer} from Prowlarr: {error}")
     return releases
 
@@ -1580,7 +1586,7 @@ def hold_c411(prowlarr, settings, state):
                 state["restore"][indexer] = before
     except Throttled:
         raise
-    except Exception as error:
+    except FAILURES as error:
         print(f"Cannot {'hold' if paused else 'release'} C411 in Prowlarr: {error}")
         return
     state["held"] = paused
@@ -1637,7 +1643,7 @@ def grab_twins(qbt, prowlarr, settings, state, releases, known, budget, now):
                 state["kinds"][release["infohash"]] = FILMS
         except Throttled:
             raise
-        except Exception as error:
+        except FAILURES as error:
             print(f"Cannot look for a twin of {release['title']}: {error}")
 
 
@@ -1646,7 +1652,7 @@ def take_from_tracker(qbt, prowlarr, state, budget, known, release, source, via)
         take(qbt, state, budget, known, release, prowlarr.torrent(release), source, via)
     except Throttled:
         raise
-    except Exception as error:
+    except FAILURES as error:
         print(f"Cannot grab {release['title']}: {error}")
         return False
     return True
@@ -1823,8 +1829,8 @@ def main():
             board_and_summary = run_once(qbt, prowlarr, c411, settings, state, time.time())
             latest["board"] = board_and_summary.pop("board")
             latest["summary"] = board_and_summary
-        except Exception as error:
-            print(f"Cannot run the Farm: {error}")
+        except Exception:
+            LOG.exception("Cannot run the Farm")
             latest["board"] = {**latest["board"], "history": [dict(e) for e in state["daily"]]}
         try:
             save_state(state_path, state)

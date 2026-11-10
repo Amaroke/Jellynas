@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 import os
 import re
 import subprocess
@@ -22,6 +23,8 @@ API = "https://discord.com/api/v10/webhooks"
 USER_AGENT = "DiscordBot (https://github.com/Amaroke/Jellynas, 1.0)"
 VIOLET = 0xA78BFA
 ROSE = 0xFB7185
+
+LOG = logging.getLogger("farm-report")
 
 
 def required(env, name):
@@ -172,8 +175,8 @@ def report(webhook, state_path=STATE, now=None, summary_reader=read_summary, sho
         print(f"Farm report {action}, message {after['message_id']} of {after['day']}")
     except urllib.error.HTTPError as error:
         print(f"Cannot publish the Farm report, the next try is in one hour: {error} {error.read()[:300]!r}")
-    except Exception as error:
-        print(f"Cannot publish the Farm report, the next try is in one hour: {error}")
+    except Exception:
+        LOG.exception("Cannot publish the Farm report, the next try is in one hour")
 
 
 def main():

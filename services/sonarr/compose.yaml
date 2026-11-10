@@ -1,3 +1,4 @@
+---
 services:
   sonarr:
     image: lscr.io/linuxserver/sonarr:4.0.20.3014-ls329
@@ -22,6 +23,13 @@ services:
       - ${DATA_ROOT}/media/anime:/data/media/anime
       - ${DATA_ROOT}/torrents:/data/torrents
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8989/ping"]
+      test:
+        - "CMD"
+        - "curl"
+        - "--fail"
+        - "--silent"
+        - "--output"
+        - "/dev/null"
+        - "http://localhost:8989/ping"
       timeout: 10s
       start_period: 30s

@@ -1,3 +1,4 @@
+---
 services:
   autobrr:
     image: ghcr.io/autobrr/autobrr:v1.90.0
@@ -19,6 +20,13 @@ services:
     volumes:
       - ${APPDATA_ROOT}/autobrr:/config
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:7474/api/healthz/liveness"]
+      test:
+        - "CMD"
+        - "curl"
+        - "--fail"
+        - "--silent"
+        - "--output"
+        - "/dev/null"
+        - "http://localhost:7474/api/healthz/liveness"
       timeout: 10s
       start_period: 30s

@@ -6,7 +6,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from discord_post import MAX_LENGTH, publish, read_env, render
+from discord_post import MAX_LENGTH, publish, read_env, render, unwrap
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -144,6 +144,11 @@ class MessagesTest(unittest.TestCase):
                 embed = render(path, env)
                 self.assertTrue(embed.get("title"))
                 self.assertLessEqual(len(embed["description"]), MAX_LENGTH)
+
+    def test_joins_the_lines_wrapped_in_the_file(self):
+        text = "# Title\n\nA long\nparagraph.\n-# A long\nsubtext.\n\n- An item\n  wrapped\n- Another\n\n```\nkept\nas is\n```"
+        joined = "# Title\n\nA long paragraph.\n-# A long subtext.\n\n- An item wrapped\n- Another\n\n```\nkept\nas is\n```"
+        self.assertEqual(joined, unwrap(text))
 
     def test_reads_values_and_strips_quotes(self):
         with tempfile.TemporaryDirectory() as folder:

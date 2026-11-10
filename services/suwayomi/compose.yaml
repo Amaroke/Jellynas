@@ -1,3 +1,4 @@
+---
 services:
   suwayomi:
     image: ghcr.io/suwayomi/suwayomi-server:v2.4.2366-stable
@@ -26,6 +27,12 @@ services:
       - ${DATA_ROOT}/media/manga:/home/suwayomi/.local/share/Tachidesk/downloads
       - ${APPDATA_ROOT}/suwayomi:/home/suwayomi/.local/share/Tachidesk
     healthcheck:
-      test: ["CMD", "curl", "--silent", "--output", "/dev/null", "http://localhost:4567/"]
+      test:
+        - "CMD"
+        - "curl"
+        - "--silent"
+        - "--output"
+        - "/dev/null"
+        - "http://localhost:4567/"
       timeout: 10s
       start_period: 60s

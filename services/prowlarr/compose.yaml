@@ -1,3 +1,4 @@
+---
 services:
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:2.7.0.5723-ls167
@@ -18,6 +19,13 @@ services:
     volumes:
       - ${APPDATA_ROOT}/prowlarr:/config
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:9696/ping"]
+      test:
+        - "CMD"
+        - "curl"
+        - "--fail"
+        - "--silent"
+        - "--output"
+        - "/dev/null"
+        - "http://localhost:9696/ping"
       timeout: 10s
       start_period: 30s

@@ -1,3 +1,4 @@
+---
 theme: auto
 
 server:
@@ -29,7 +30,7 @@ access_control:
 session:
   cookies:
     - domain: '{{ env "DOMAIN" }}'
-      authelia_url: 'https://auth.{{ env "DOMAIN" }}:{{ env "CADDY_HTTPS_PORT" }}'
+      authelia_url: '{{ env "AUTH_URL" }}'
 
 regulation:
   max_retries: 5
@@ -50,8 +51,8 @@ identity_providers:
       - key_id: jellynas
         algorithm: RS256
         use: sig
-        # yamllint disable-line rule:braces
-        key: {{ secret "/var/lib/authelia/private.pem" | mindent 10 "|" | msquote }}
+        key: |
+          {{- secret "/var/lib/authelia/private.pem" | nindent 10 }}
     claims_policies:
       id_token_claims:
         id_token:
@@ -68,7 +69,7 @@ identity_providers:
         consent_mode: implicit
         claims_policy: id_token_claims
         redirect_uris:
-          - 'https://aurral.{{ env "DOMAIN" }}:{{ env "CADDY_HTTPS_PORT" }}/sso/callback'
+          - '{{ env "AURRAL_URL" }}/sso/callback'
         scopes:
           - openid
           - profile

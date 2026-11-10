@@ -14,6 +14,7 @@ TITLE_LENGTH = 256
 COLOR = 0xA78BFA
 COLORS = {"news": 0x34D399, "links": 0x60A5FA, "admin": 0xFBBF24}
 ROOT = Path(__file__).resolve().parent.parent
+BLOCK = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|-#|#|>|\||```)")
 
 
 def read_env(path):
@@ -35,9 +36,24 @@ def webhook(env, channel):
     return "/".join(parts)
 
 
+def unwrap(text):
+    lines = []
+    fence = False
+    for line in text.split("\n"):
+        if line.lstrip().startswith("```"):
+            fence = not fence
+        elif fence or not lines or not lines[-1].strip() or lines[-1].lstrip().startswith("#"):
+            pass
+        elif line.strip() and not BLOCK.match(line):
+            lines[-1] += " " + line.strip()
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def render(path, env):
     try:
-        text = string.Template(Path(path).read_text(encoding="utf-8")).substitute(env).strip()
+        text = unwrap(string.Template(Path(path).read_text(encoding="utf-8")).substitute(env).strip())
     except KeyError as error:
         sys.exit(f"{path} uses ${error.args[0]}, which .env does not set")
     embed = {"description": text, "color": COLOR}

@@ -1,3 +1,4 @@
+---
 services:
   lazylibrarian:
     image: lscr.io/linuxserver/lazylibrarian:8b6ba443-ls392
@@ -19,6 +20,12 @@ services:
       - ${DATA_ROOT}/media/books:/data/media/books
       - ${DATA_ROOT}/torrents:/data/torrents
     healthcheck:
-      test: ["CMD", "curl", "--silent", "--output", "/dev/null", "http://localhost:5299/"]
+      test:
+        - "CMD"
+        - "curl"
+        - "--silent"
+        - "--output"
+        - "/dev/null"
+        - "http://localhost:5299/"
       timeout: 10s
       start_period: 30s
