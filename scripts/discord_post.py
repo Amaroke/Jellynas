@@ -1,9 +1,14 @@
+import datetime
+import http.client
+import http.server
 import json
 import os
 import re
 import string
 import sys
+import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -12,8 +17,31 @@ USER_AGENT = "DiscordBot (https://github.com/Amaroke/Jellynas, 1.0)"
 MAX_LENGTH = 4096
 TITLE_LENGTH = 256
 COLOR = 0xA78BFA
-COLORS = {"news": 0x34D399, "links": 0x60A5FA, "admin": 0xFBBF24}
+COLORS = {"news": 0x34D399, "links": 0x60A5FA}
 ROOT = Path(__file__).resolve().parent.parent
+POSTS = {"links": "links.md", "news": "welcome.md"}
+FAILURES = (OSError, ValueError, KeyError, http.client.HTTPException, SystemExit)
+FARM_REPORT = "http://farm-report:8000/refresh"
+ACTION_RESULTS = {
+    "discord": "Messages Discord en cours de publication",
+    "farm-report": "Farm report en cours de publication",
+    "error": "Le Farm report ne répond pas, réessaie plus tard",
+}
+ACTIONS_PAGE = """<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Actions rapides</title>
+<style>
+html, body {{ margin: 0; background: transparent; color: #e2e8f0; font: 14px system-ui, sans-serif; }}
+form {{ display: inline-block; margin: 4px 8px 4px 0; }}
+button {{ padding: 8px 14px; border: 1px solid #a78bfa; border-radius: 6px; background: #1e293b; color: inherit; font: inherit; cursor: pointer; }}
+button:hover {{ background: #334155; }}
+p {{ margin: 6px 0 0; color: #94a3b8; }}
+</style>
+<form method="post" action="/actions/discord"><button>Actualiser les messages Discord</button></form>
+<form method="post" action="/actions/farm-report"><button>Actualiser le Farm report</button></form>
+<p>{result}</p>
+"""
 BLOCK = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|-#|#|>|\||```)")
 
 
@@ -101,7 +129,86 @@ def publish(channel, path, env, api=API):
     return f"Posted {path} in {channel}"
 
 
+def publish_all(env, folder=ROOT / "discord-posts", api=API):
+    for channel, name in POSTS.items():
+        try:
+            print(publish(channel, Path(folder) / name, env, api))
+        except FAILURES as error:
+            print(f"Cannot publish {name} in {channel}: {error}")
+
+
+def actions_page(done):
+    return ACTIONS_PAGE.format(result=ACTION_RESULTS.get(done, ""))
+
+
+def ask_farm_report(url):
+    request = urllib.request.Request(url, data=b"", method="POST")
+    with urllib.request.urlopen(request, timeout=10):
+        pass
+
+
+def serve(wake, farm_report=FARM_REPORT, port=8000):
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            url = urllib.parse.urlsplit(self.path)
+            if url.path != "/actions":
+                self.send_error(404)
+                return
+            done = urllib.parse.parse_qs(url.query).get("done", [""])[0]
+            body = actions_page(done).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self):
+            if self.path == "/actions/discord":
+                wake.set()
+                done = "discord"
+            elif self.path == "/actions/farm-report":
+                try:
+                    ask_farm_report(farm_report)
+                    done = "farm-report"
+                except FAILURES as error:
+                    print(f"Cannot ask for the Farm report: {error}")
+                    done = "error"
+            else:
+                self.send_error(404)
+                return
+            self.send_response(303)
+            self.send_header("Location", f"/actions?done={done}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("", port), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def next_run(now):
+    run = now.replace(hour=0, minute=30, second=0, microsecond=0)
+    return run if run > now else run + datetime.timedelta(days=1)
+
+
+def daily(env):
+    wake = threading.Event()
+    serve(wake)
+    while True:
+        now = datetime.datetime.now().astimezone()
+        wake.wait((next_run(now) - now).total_seconds())
+        wake.clear()
+        publish_all(env)
+
+
 if __name__ == "__main__":
+    environment = {**read_env(ROOT / ".env"), **os.environ}
+    if sys.argv[1:] == ["--daily"]:
+        daily(environment)
     if len(sys.argv) != 3:
-        sys.exit("Usage: discord_post.py <channel> <message file>")
-    print(publish(sys.argv[1], sys.argv[2], {**read_env(ROOT / ".env"), **os.environ}))
+        sys.exit("Usage: discord_post.py --daily, or discord_post.py <channel> <message file>")
+    print(publish(sys.argv[1], sys.argv[2], environment))

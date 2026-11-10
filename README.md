@@ -1,5 +1,88 @@
 # Jellynas
 
+=== TO BE REWORK IGNORE THIS ATM ===
+
+## Root files
+
+- `README.md` is this guide, from the first install to the daily care of the
+  NAS.
+- `compose.yaml` is the stack of the NAS. It names the project, includes the
+  `compose.yaml` of each service and declares the networks.
+- `.doco-cd.yml` tells doco-cd what to deploy: `compose.yaml` with the `.env` of
+  the NAS, removing the containers of a service that left the stack.
+- `.env.example` lists and explains every setting. Copy it to `.env` to fill it.
+- `.env` holds the settings and the secrets of the NAS. It lives only in the
+  Clone and never in git.
+- `renovate.json` is the config of Renovate, as
+  [Dependency updates](#dependency-updates) sets out.
+- `.pre-commit-config.yaml` runs gitleaks before each commit, so a secret never
+  gets into git.
+- `.gitignore` keeps `.env` and the caches of Python and ruff out of git.
+- `.gitattributes` stores every text file with LF line endings, so a script
+  edited on Windows still runs on the NAS.
+- `CONTEXT.md` defines the words of the project, such as Friend, Library or
+  Farm.
+- `CLAUDE.md` holds the instructions for coding agents working in the repo.
+- `LICENSE` is the MIT license of the project.
+
+## Dependency updates
+
+[Renovate](https://docs.renovatebot.com) opens a pull request for every new
+version of what the repo pins. `renovate.json` holds its config.
+
+### What Renovate updates
+
+- The image of every service in the compose files and the `FROM` of the
+  Dockerfiles
+- The Caddy plugins, after `--with` in `services/caddy/Dockerfile`
+- The apk and apt packages of the Dockerfiles, through their `_VERSION`
+  arguments
+- The Python packages of `services/music-bot/requirements.txt`
+- The GitHub Actions and the pre-commit hook
+- The tools pinned in `.github/workflows/ci.yml`: gitleaks, hadolint,
+  actionlint,
+  yamllint, ruff, zizmor, markdownlint-cli2 and Renovate itself
+
+Renovate does not follow `ubuntu-latest`, the tools that runner ships such as
+shellcheck, the plugins installed by hand inside an app, or TrueNAS.
+
+### What merges by itself
+
+A minor, patch or digest update merges by itself once CI passes and the release
+is 3 days old. doco-cd then deploys it. A major update waits for a merge by
+hand. Two exceptions:
+
+- Gluetun, qBittorrent and doco-cd never merge by themselves
+- LazyLibrarian always merges by itself, since its tags have no real version
+
+An update whose source gives no release date stays pending on its
+`renovate/stability-days` check, so it needs a merge by hand even when it is
+minor. That is the case of the apk and apt packages and of some Docker images.
+Merge a package update quickly: Alpine and Debian drop old versions, so a pin
+left behind fails the next build of the image.
+
+### When to change the Renovate config
+
+- **The Alpine release of a `FROM` changes.** Renovate keeps the `alpine3.22`
+  suffix of the tag. Change the tag, `alpine_3_22` in each `# renovate:` comment
+  and the versions of the packages together.
+- **The Debian release of a `FROM` changes.** Same for the `slim-trixie` suffix
+  and `suite=trixie` in each `# renovate:` comment. Renovate reads only that
+  suite, so a fix that is only in `trixie-security` waits for the next point
+  release of Debian.
+- **A Dockerfile installs a new apk or apt package.** Pin it with an `ARG` whose
+  name ends in `_VERSION`, right under a `# renovate:` comment like the others,
+  or hadolint fails and Renovate does not see it.
+- **`ci.yml` pins a new tool.** Add it to the matching regex of
+  `customManagers`,
+  otherwise it stays at its version forever.
+- **A new image has tags that are not plain versions**, as the LinuxServer ones.
+  Add a `versioning` rule to `packageRules`.
+- **A service must only update by hand.** Add its image to the list with
+  `"automerge": false`.
+- **discord.py supports davey 0.2.0.** Remove the `allowedVersions` rule of
+  davey, which keeps the voice of the music bot working until then.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on every pull request to `main`, on every push
@@ -10,7 +93,7 @@ pinned, so Renovate keeps them up to date:
 | --- | --- |
 | Secrets | gitleaks scans the whole git history for a committed secret |
 | Compose | both compose files parse with `.env.example` |
-| Images | hadolint lints the Dockerfiles, then every `build` image builds |
+| Images | hadolint, every `build` image builds, Caddy validates its config |
 | YAML | yamllint passes in strict mode |
 | JSON | every tracked `.json` file parses |
 | Python | the `unittest` tests pass |
@@ -18,8 +101,6 @@ pinned, so Renovate keeps them up to date:
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
 | Actions | actionlint checks the workflows, then zizmor audits their security |
-
-=== A REWORK ===
 
 A personal media server built on Jellyfin, shared with Friends over the
 internet.
@@ -363,7 +444,7 @@ mkdir -p "$BACKUP_ROOT" \
   "$DATA_ROOT"/media/{movies,shows,anime,music,aurral,books,manga} \
   "$DATA_ROOT"/media/{movies,shows}/.recycle \
   "$APPDATA_ROOT"/{seerr,lldap,authelia,aurral,recyclarr,autobrr,cross-seed} \
-  "$APPDATA_ROOT"/{ratio,farm-report,slskd,suwayomi}
+  "$APPDATA_ROOT"/{ratio,farm-report,discord-posts,slskd,suwayomi}
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
@@ -395,12 +476,12 @@ Jellyfin, Seerr, Aurral and Authelia face the internet, so a flaw in one of them
 must not land next to the rest of the NAS. The services sit in five Docker
 networks:
 
-| Zone | Services |
-| --- | --- |
-| `jellyfin-zone` | Caddy, Jellyfin, lldap |
-| `seerr-zone` | Caddy, Seerr, Radarr, Sonarr |
-| `aurral-zone` | Caddy, Aurral, Lidarr |
-| `identity-zone` | Caddy, Authelia, lldap |
+| Zone            | Services                                                   |
+| --------------- | ---------------------------------------------------------- |
+| `jellyfin-zone` | Caddy, Jellyfin, lldap                                     |
+| `seerr-zone`    | Caddy, Seerr, Radarr, Sonarr                               |
+| `aurral-zone`   | Caddy, Aurral, Lidarr                                      |
+| `identity-zone` | Caddy, Authelia, lldap                                     |
 | `internal-zone` | every other service, plus Caddy, Radarr, Sonarr and Lidarr |
 
 qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal
@@ -467,32 +548,33 @@ nothing else. Set both the external and the internal port of the rule to
 Once [Deploy](#deploy) is done, each tool answers at its own address, with
 `:<CADDY_HTTPS_PORT>` after the name unless it is 443:
 
-| Service     | Address                             | Reached from  |
-| ----------- | ----------------------------------- | ------------- |
-| Jellyfin    | `https://jellyfin.<DOMAIN>`         | Anywhere      |
-| Seerr       | `https://seerr.<DOMAIN>`            | Anywhere      |
-| Aurral      | `https://aurral.<DOMAIN>`           | Anywhere      |
-| Authelia    | `https://auth.<DOMAIN>`             | Anywhere      |
-| TrueNAS     | `https://truenas.lan.<DOMAIN>`      | Local network |
-| Jellyfin    | `https://jellyfin.lan.<DOMAIN>`     | Local network |
-| Seerr       | `https://seerr.lan.<DOMAIN>`        | Local network |
-| Aurral      | `https://aurral.lan.<DOMAIN>`       | Local network |
-| lldap       | `https://lldap.lan.<DOMAIN>`        | Local network |
-| qBittorrent | `https://qbittorrent.lan.<DOMAIN>`  | Local network |
-| Prowlarr    | `https://prowlarr.lan.<DOMAIN>`     | Local network |
-| Radarr      | `https://radarr.lan.<DOMAIN>`       | Local network |
-| Sonarr      | `https://sonarr.lan.<DOMAIN>`       | Local network |
-| Lidarr      | `https://lidarr.lan.<DOMAIN>`       | Local network |
-| slskd       | `https://slskd.lan.<DOMAIN>`        | Local network |
-| Bazarr      | `https://bazarr.lan.<DOMAIN>`       | Local network |
-| Tdarr       | `https://tdarr.lan.<DOMAIN>`        | Local network |
-| Indexarr    | `https://indexarr.lan.<DOMAIN>`     | Local network |
-| autobrr     | `https://autobrr.lan.<DOMAIN>`      | Local network |
-| ratio       | `https://ratio.lan.<DOMAIN>/graphs` | Local network |
-| Beszel      | `https://beszel.lan.<DOMAIN>`       | Local network |
-| Uptime Kuma | `https://uptime-kuma.lan.<DOMAIN>`  | Local network |
-| Dozzle      | `https://dozzle.lan.<DOMAIN>`       | Local network |
-| Homepage    | `https://homepage.lan.<DOMAIN>`     | Local network |
+| Service     | Address                                | Reached from  |
+| ----------- | -------------------------------------- | ------------- |
+| Jellyfin    | `https://jellyfin.<DOMAIN>`            | Anywhere      |
+| Seerr       | `https://seerr.<DOMAIN>`               | Anywhere      |
+| Aurral      | `https://aurral.<DOMAIN>`              | Anywhere      |
+| Authelia    | `https://auth.<DOMAIN>`                | Anywhere      |
+| TrueNAS     | `https://truenas.lan.<DOMAIN>`         | Local network |
+| Jellyfin    | `https://jellyfin.lan.<DOMAIN>`        | Local network |
+| Seerr       | `https://seerr.lan.<DOMAIN>`           | Local network |
+| Aurral      | `https://aurral.lan.<DOMAIN>`          | Local network |
+| lldap       | `https://lldap.lan.<DOMAIN>`           | Local network |
+| qBittorrent | `https://qbittorrent.lan.<DOMAIN>`     | Local network |
+| Prowlarr    | `https://prowlarr.lan.<DOMAIN>`        | Local network |
+| Radarr      | `https://radarr.lan.<DOMAIN>`          | Local network |
+| Sonarr      | `https://sonarr.lan.<DOMAIN>`          | Local network |
+| Lidarr      | `https://lidarr.lan.<DOMAIN>`          | Local network |
+| slskd       | `https://slskd.lan.<DOMAIN>`           | Local network |
+| Bazarr      | `https://bazarr.lan.<DOMAIN>`          | Local network |
+| Tdarr       | `https://tdarr.lan.<DOMAIN>`           | Local network |
+| Indexarr    | `https://indexarr.lan.<DOMAIN>`        | Local network |
+| autobrr     | `https://autobrr.lan.<DOMAIN>`         | Local network |
+| ratio       | `https://ratio.lan.<DOMAIN>/graphs`    | Local network |
+| Actions     | `https://actions.lan.<DOMAIN>/actions` | Local network |
+| Beszel      | `https://beszel.lan.<DOMAIN>`          | Local network |
+| Uptime Kuma | `https://uptime-kuma.lan.<DOMAIN>`     | Local network |
+| Dozzle      | `https://dozzle.lan.<DOMAIN>`          | Local network |
+| Homepage    | `https://homepage.lan.<DOMAIN>`        | Local network |
 
 cross-seed has an API only, which the other containers reach at
 `http://cross-seed:2468`. The first certificates take a few minutes, follow them
@@ -1770,7 +1852,7 @@ channel after one minute alone or five minutes without playing.
 
 ## Discord messages
 
-The links, news and admin channels of the Discord server of the Friends hold
+The links and news channels of the Discord server of the Friends hold
 messages written in `discord-posts/`, one Markdown file per message, so they
 live in git like the rest of the NAS. `${DOMAIN}` and `${CADDY_HTTPS_PORT}` in a
 file are filled in from `.env`. `scripts/discord_post.py` publishes a file
@@ -1779,25 +1861,44 @@ next times it edits the same message in place, and it posts again if the message
 was deleted. It keeps the id of each message in
 `${APPDATA_ROOT}/discord-posts/state.json`. Each file becomes an embed, its
 first level one heading the title and the rest the description. Discord takes
-4096 characters per description, which `python3 -m unittest` checks, along with
-`discord-posts/admin.md` listing every lan name of Caddy.
+4096 characters per description, which `python3 -m unittest` checks.
+
+The messages are in French, for the Friends:
+
+- `discord-posts/welcome.md`, in the news channel, welcomes a new Friend: how to
+  get an Account, what happens with a lost password, the rules, and what each
+  service is for. Change it when a service for the Friends or a rule changes.
+- `discord-posts/links.md`, in the links channel, gives the public addresses,
+  the apps to install, how to ask for a book or a manga, and the commands of the
+  music bot. Change it when a public address, an app or a command changes.
+
+A file wraps at 80 columns like any Markdown file of the repo, and
+`scripts/discord_post.py` joins the wrapped lines back, since Discord keeps
+every line break. A new list item, heading or `-#` line stays on its own line in
+Discord. `-#` is the small grey text of Discord.
 
 1. In Discord, in the settings of the links channel, Integrations > Webhooks,
    click "New Webhook", name it `Jellynas`, and copy its URL,
-   `https://discord.com/api/webhooks/<id>/<token>`. Do the same for the news and
-   admin channels.
+   `https://discord.com/api/webhooks/<id>/<token>`. Do the same for the news
+   channel.
 2. In `.env`, set `DISCORD_LINKS_WEBHOOK_ID` and `DISCORD_LINKS_WEBHOOK_TOKEN`,
-   then the same pairs for `NEWS` and `ADMIN`, to both parts of each URL.
-3. Pull the Clone and publish the messages of links, news and admin:
+   then the same pair for `NEWS`, to both parts of each URL.
+3. Pull the Clone and publish the messages of links and news:
 
    ```sh
    python3 scripts/discord_post.py links discord-posts/links.md
-   python3 scripts/discord_post.py admin discord-posts/admin.md
    python3 scripts/discord_post.py news discord-posts/welcome.md
    ```
 
-Run the same command after changing `discord-posts/links.md` to update the
-message. For a piece of news, add a new file, such as
+The `discord-posts` service republishes these two files every day at 00:30, in
+the time zone of `TZ`, from the `main` branch that doco-cd deployed. A message
+then follows the repo by itself. A failure on one channel leaves the others
+alone and waits for the next night, as `docker compose logs discord-posts`
+shows.
+
+To update a message without waiting, click "Actualiser les messages Discord" in
+Actions rapides on Homepage, or run the same command by hand. For a piece of
+news, add a new file, such as
 `discord-posts/2026-11-new-folder.md`, and publish it with `news` as the
 channel. Any channel works the same way once `.env` holds
 `DISCORD_<CHANNEL>_WEBHOOK_ID` and `DISCORD_<CHANNEL>_WEBHOOK_TOKEN`.
@@ -2122,7 +2223,8 @@ until the next midnight. The message of the day before keeps its last state, so
 the channel holds one message per day. The id of the message of the day sits in
 `${APPDATA_ROOT}/farm-report/state.json`. A message deleted in Discord is posted
 again at the next hour. When ratio does not answer, farm-report changes nothing
-and tries again at the next hour.
+and tries again at the next hour. "Actualiser le Farm report" in Actions rapides
+on Homepage publishes it at once, with the numbers of the last run of ratio.
 
 The pictures come from a headless Chromium that opens
 `http://ratio:8000/graphs?lang=fr&part=1&pad=424` at 1200 by 424 pixels, the

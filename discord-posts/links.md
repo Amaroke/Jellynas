@@ -27,7 +27,8 @@ La musique de Jellyfin, même hors ligne.
 
 ## 🍿 Seerr
 
-Demander un film, une série ou un animé. Il arrive seul dans Jellyfin.
+Demander un film, une série ou un animé. Une fois la demande validée, il arrive
+seul dans Jellyfin.
 
 **<https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT}>**
 -# Dans le navigateur, connexion avec Sign in with Jellyfin.
@@ -39,3 +40,26 @@ playlists faites pour toi. Elles arrivent dans Jellyfin et Finamp.
 
 **<https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT}>**
 -# Dans le navigateur, connexion avec le bouton SSO, même compte que Jellyfin.
+-# Relie Last.fm ou ListenBrainz dans Settings > Listening pour des
+recommandations selon ce que tu écoutes.
+-# Également possible de relier son Spotify, pour recevoir des playlists basées
+sur ce que tu écoutes.
+
+## 📚 Livres et mangas
+
+Ils se lisent dans Jellyfin, sur l'appli ou dans le navigateur. Le lecteur
+Jellybook est également disponible sur Github, si tu veux creuser.
+-# Pour en demander un, écris-moi dans ton salon.
+
+## 🎶 Bot musique
+
+Toute la musique de Jellyfin dans un salon vocal Discord.
+-# Réservé au rôle MusicDJ, sans compte Jellyfin. Rejoins un salon vocal, puis :
+
+- `/play` · lecture aléatoire de toute la musique
+- `/play <recherche>` · choisir un artiste, un album, une playlist ou un titre
+- `/pause` · pause ou reprise
+- `/skip` · passer au titre suivant
+- `/stop` · vider la file et quitter le salon
+- `/queue` · voir le titre en cours et la file
+- `/volume <0-100>` · régler le volume

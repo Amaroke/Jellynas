@@ -1,4 +1,14 @@
 ---
+- Actions rapides:
+    - Actions:
+        widget:
+          type: iframe
+          name: quick-actions
+          src:
+            https://actions.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/actions
+          classes: h-24
+          referrerPolicy: same-origin
+
 - Watch:
     - Jellyfin:
         icon: jellyfin.svg
@@ -124,6 +134,9 @@
     - Farm report:
         icon: mdi-message-image-#a78bfa
         description: Board of the Farm on Discord, every hour
+    - Discord posts:
+        icon: mdi-message-text-#a78bfa
+        description: Republishes the Discord messages, every day at 00:30
 
 - Graphs:
     - Farm board:

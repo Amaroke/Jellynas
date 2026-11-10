@@ -1,12 +1,26 @@
+import contextlib
+import datetime
 import http.server
+import io
 import json
-import re
 import tempfile
 import threading
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
+from unittest import mock
 
-from discord_post import MAX_LENGTH, publish, read_env, render, unwrap
+from discord_post import (
+    MAX_LENGTH,
+    next_run,
+    publish,
+    publish_all,
+    read_env,
+    render,
+    serve,
+    unwrap,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -136,6 +150,84 @@ class PublishTest(unittest.TestCase):
             self.publish()
 
 
+class DailyTest(unittest.TestCase):
+    def test_runs_today_before_half_past_midnight(self):
+        self.assertEqual(datetime.datetime(2026, 11, 10, 0, 30), next_run(datetime.datetime(2026, 11, 10, 0, 29)))
+
+    def test_runs_tomorrow_from_half_past_midnight(self):
+        self.assertEqual(datetime.datetime(2026, 11, 11, 0, 30), next_run(datetime.datetime(2026, 11, 10, 0, 30)))
+        self.assertEqual(datetime.datetime(2026, 11, 11, 0, 30), next_run(datetime.datetime(2026, 11, 10, 18, 0)))
+
+    def test_a_channel_that_fails_does_not_stop_the_others(self):
+        discord = Discord()
+        self.addCleanup(discord.server_close)
+        self.addCleanup(discord.shutdown)
+        with tempfile.TemporaryDirectory() as name:
+            folder = Path(name)
+            for post in ("links.md", "welcome.md"):
+                (folder / post).write_text(post, encoding="utf-8")
+            env = {
+                "APPDATA_ROOT": str(folder / "appdata"),
+                "DISCORD_LINKS_WEBHOOK_ID": "1234",
+                "DISCORD_LINKS_WEBHOOK_TOKEN": "abcd",
+            }
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                publish_all(env, folder, discord.url)
+        self.assertEqual(["links.md"], [call[2]["embeds"][0]["description"] for call in discord.calls])
+        self.assertIn("Cannot publish welcome.md", out.getvalue())
+
+
+class ActionsTest(unittest.TestCase):
+    def start(self, farm_report="http://127.0.0.1:9/refresh"):
+        self.wake = threading.Event()
+        server = serve(self.wake, farm_report, port=0)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.url = f"http://127.0.0.1:{server.server_address[1]}"
+
+    def post(self, path):
+        request = urllib.request.Request(self.url + path, data=b"", method="POST")
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.url, response.read().decode()
+
+    def test_the_page_offers_both_buttons_in_post(self):
+        self.start()
+        with urllib.request.urlopen(f"{self.url}/actions", timeout=10) as response:
+            page = response.read().decode()
+        self.assertIn('<form method="post" action="/actions/discord">', page)
+        self.assertIn('<form method="post" action="/actions/farm-report">', page)
+        self.assertFalse(self.wake.is_set())
+
+    def test_the_discord_button_wakes_the_publication(self):
+        self.start()
+        url, page = self.post("/actions/discord")
+        self.assertTrue(self.wake.is_set())
+        self.assertTrue(url.endswith("/actions?done=discord"))
+        self.assertIn("Messages Discord en cours de publication", page)
+
+    def test_the_farm_report_button_asks_the_farm_report(self):
+        self.start("http://farm-report:8000/refresh")
+        with mock.patch("discord_post.ask_farm_report") as ask:
+            _, page = self.post("/actions/farm-report")
+        ask.assert_called_once_with("http://farm-report:8000/refresh")
+        self.assertFalse(self.wake.is_set())
+        self.assertIn("Farm report en cours de publication", page)
+
+    def test_a_farm_report_that_does_not_answer_says_so(self):
+        self.start()
+        with contextlib.redirect_stdout(io.StringIO()):
+            _, page = self.post("/actions/farm-report")
+        self.assertIn("ne répond pas", page)
+
+    def test_an_unknown_action_is_refused(self):
+        self.start()
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self.post("/actions/other")
+        caught.exception.close()
+        self.assertEqual(404, caught.exception.code)
+
+
 class MessagesTest(unittest.TestCase):
     def test_every_message_fits_in_discord(self):
         env = {**read_env(ROOT / ".env.example"), "DOMAIN": "example.com", "CADDY_HTTPS_PORT": "50000"}
@@ -155,10 +247,3 @@ class MessagesTest(unittest.TestCase):
             path = Path(folder) / ".env"
             path.write_text("# comment\nDOMAIN='example.com'\nPORT=\"443\"\nEMPTY=\n", encoding="utf-8")
             self.assertEqual({"DOMAIN": "example.com", "PORT": "443", "EMPTY": ""}, read_env(path))
-
-    def test_admin_lists_every_lan_name_of_caddy(self):
-        caddyfile = (ROOT / "services" / "caddy" / "Caddyfile").read_text(encoding="utf-8")
-        served = set(re.findall(r"^\timport lan ([a-z-]+) ", caddyfile, re.MULTILINE))
-        served |= set(re.findall(r"^\t\thost ([a-z-]+)\.lan\.", caddyfile, re.MULTILINE))
-        listed = set(re.findall(r"https://([a-z-]+)\.lan\.", (ROOT / "discord-posts" / "admin.md").read_text(encoding="utf-8")))
-        self.assertEqual(served, listed)

@@ -17,6 +17,10 @@ quicklaunch:
   hideInternetSearch: true
   hideVisitURL: true
 layout:
+  Actions rapides:
+    icon: mdi-lightning-bolt
+    style: row
+    columns: 1
   Watch:
     icon: mdi-television-play
     style: row

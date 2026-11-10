@@ -2,8 +2,10 @@ import datetime
 import io
 import json
 import tempfile
+import threading
 import unittest
 import urllib.error
+import urllib.request
 import zlib
 from pathlib import Path
 
@@ -20,6 +22,7 @@ from report import (
     publish,
     report,
     report_day,
+    serve,
 )
 
 PARIS = datetime.timezone(datetime.timedelta(hours=1))
@@ -181,6 +184,30 @@ class ReportTest(unittest.TestCase):
             report(webhook, path, at(9, 14), broken, lambda part, _: b"")
             self.assertEqual(webhook.calls, [])
             self.assertFalse(path.exists())
+
+
+class RefreshTest(unittest.TestCase):
+    def start(self):
+        self.wake = threading.Event()
+        server = serve(self.wake, port=0)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_address[1]}"
+
+    def test_a_refresh_wakes_the_report(self):
+        url = self.start()
+        request = urllib.request.Request(f"{url}/refresh", data=b"", method="POST")
+        with urllib.request.urlopen(request, timeout=10) as response:
+            self.assertEqual(202, response.status)
+        self.assertTrue(self.wake.is_set())
+
+    def test_another_path_wakes_nothing(self):
+        url = self.start()
+        request = urllib.request.Request(f"{url}/other", data=b"", method="POST")
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(request, timeout=10)
+        caught.exception.close()
+        self.assertFalse(self.wake.is_set())
 
 
 if __name__ == "__main__":
