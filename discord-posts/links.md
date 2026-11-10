@@ -26,3 +26,10 @@ Demander un film, une série ou un animé. Il arrive seul dans Jellyfin.
 
 **https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT}**
 -# Dans le navigateur, connexion avec Sign in with Jellyfin.
+
+## 🎧 Aurral
+
+Découvrir de la musique, demander un artiste ou un album, et recevoir des playlists faites pour toi. Elles arrivent dans Jellyfin et Finamp.
+
+**https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT}**
+-# Dans le navigateur, connexion avec le bouton SSO, même compte que Jellyfin.

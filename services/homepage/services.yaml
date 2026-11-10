@@ -23,6 +23,11 @@
           url: https://seerr.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
           key: '{{HOMEPAGE_VAR_SEERR_API_KEY}}'
           fields: ["pending", "processing", "available", "issues"]
+    - Aurral:
+        icon: aurral.png
+        description: Music discovery and playlists of the Friends
+        href: https://aurral.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        siteMonitor: https://aurral.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/api/health/live
     - Music bot:
         icon: mdi-music-circle-#ab47bc
         description: Music of the Library on Discord
@@ -255,3 +260,11 @@
     - Caddy:
         icon: caddy.svg
         description: HTTPS proxy, the only published port
+    - Authelia:
+        icon: authelia.svg
+        description: Sign-in of Aurral with the Account
+        siteMonitor: https://auth.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/api/health
+    - lldap:
+        icon: lldap.svg
+        description: Accounts of the Friends and the Admin
+        href: https://lldap.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}

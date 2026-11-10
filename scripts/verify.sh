@@ -528,6 +528,8 @@ lan_subnet="$(env_value LAN_SUBNET)"
 lan="lan.$domain"
 jellyfin_hostname="${domain:+jellyfin.$domain}"
 seerr_hostname="${domain:+seerr.$domain}"
+auth_hostname="${domain:+auth.$domain}"
+aurral_hostname="${domain:+aurral.$domain}"
 vpn_provider="$(env_value VPN_SERVICE_PROVIDER)"
 host_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
 https_port="$(env_value CADDY_HTTPS_PORT)"
@@ -553,6 +555,10 @@ check_slskd_port
 check_mounts_only lazylibrarian media/books torrents
 check_mounts_only suwayomi media/manga
 check_no_media_mount seerr
+check_no_media_mount lldap
+check_no_media_mount authelia
+check_mounts_only aurral media/music media/aurral
+check_read_only aurral /data/media/music
 check_no_media_mount prowlarr
 check_no_media_mount flaresolverr
 check_no_media_mount recyclarr
@@ -605,6 +611,8 @@ check_exit_ip suwayomi
 check_kill_switch qbittorrent slskd suwayomi
 check_public_hostname "$jellyfin_hostname"
 check_public_hostname "$seerr_hostname"
+check_public_hostname "$auth_hostname"
+check_public_hostname "$aurral_hostname"
 check_public_hostname "${domain:+truenas.$lan}" "$host_ip"
 check_public_hostname "${domain:+jellyfin.$lan}" "$host_ip"
 check_public_hostname "${domain:+seerr.$lan}" "$host_ip"
@@ -613,12 +621,13 @@ check_public_hostname "${domain:+homepage.$lan}" "$host_ip"
 check_lan_refused_outside "radarr.$lan"
 check_lan_refused_outside "truenas.$lan"
 check_lan_refused_outside "homepage.$lan"
+check_lan_refused_outside "lldap.$lan"
 check_unknown_host_refused "$jellyfin_hostname"
 check_hsts "$jellyfin_hostname"
 
-if [ -n "$jellyfin_hostname$seerr_hostname" ]; then
+if [ -n "$jellyfin_hostname$seerr_hostname$aurral_hostname" ]; then
   printf '\nOn a phone on 4G with wifi off, open each address and check that it loads:\n'
-  for host in "$jellyfin_hostname" "$seerr_hostname"; do
+  for host in "$jellyfin_hostname" "$seerr_hostname" "$aurral_hostname"; do
     [ -z "$host" ] || printf '  https://%s%s\n' "$host" "$public_port"
   done
 fi

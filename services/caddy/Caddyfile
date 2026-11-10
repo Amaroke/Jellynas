@@ -15,7 +15,7 @@
 			consumer_key {env.OVH_CONSUMER_KEY}
 		}
 		domains {
-			{$DOMAIN} jellyfin seerr
+			{$DOMAIN} jellyfin seerr auth aurral
 		}
 		versions ipv4
 		check_interval 5m
@@ -47,6 +47,14 @@
 	handle @seerr {
 		reverse_proxy seerr:5055
 	}
+	@auth host auth.{$DOMAIN}
+	handle @auth {
+		reverse_proxy authelia:9091
+	}
+	@aurral host aurral.{$DOMAIN}
+	handle @aurral {
+		reverse_proxy aurral:3001
+	}
 	handle {
 		abort
 	}
@@ -57,6 +65,8 @@
 	import lan truenas host.docker.internal:80
 	import lan jellyfin jellyfin:8096
 	import lan seerr seerr:5055
+	import lan aurral aurral:3001
+	import lan lldap lldap:17170
 	@qbittorrent {
 		host qbittorrent.lan.{$DOMAIN}
 		remote_ip {$LAN_SUBNET}

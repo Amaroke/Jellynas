@@ -6,6 +6,7 @@
 
 - **[Homepage](https://homepage.lan.${DOMAIN}:${CADDY_HTTPS_PORT})** · tableau de bord de tous les outils
 - **[TrueNAS](https://truenas.lan.${DOMAIN}:${CADDY_HTTPS_PORT})** · le système
+- **[lldap](https://lldap.lan.${DOMAIN}:${CADDY_HTTPS_PORT})** · comptes et mots de passe
 
 ## 🎬 Médias
 
@@ -14,6 +15,7 @@
 - **[Radarr](https://radarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT})** · films
 - **[Sonarr](https://sonarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT})** · séries et animés
 - **[Lidarr](https://lidarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT})** · musique
+- **[Aurral](https://aurral.lan.${DOMAIN}:${CADDY_HTTPS_PORT})** · découverte et playlists de musique
 - **[LazyLibrarian](https://lazylibrarian.lan.${DOMAIN}:${CADDY_HTTPS_PORT})** · livres
 - **[Suwayomi](https://suwayomi.lan.${DOMAIN}:${CADDY_HTTPS_PORT})** · mangas
 - **[Bazarr](https://bazarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT})** · sous-titres

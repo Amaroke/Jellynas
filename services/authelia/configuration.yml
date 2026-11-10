@@ -1,0 +1,77 @@
+theme: auto
+
+server:
+  address: tcp://:9091/
+
+log:
+  level: info
+
+totp:
+  disable: true
+
+webauthn:
+  disable: true
+
+authentication_backend:
+  password_reset:
+    disable: true
+  password_change:
+    disable: true
+  ldap:
+    implementation: lldap
+    address: ldap://lldap:3890
+    base_dn: dc=jellynas
+    user: uid=authelia,ou=people,dc=jellynas
+
+access_control:
+  default_policy: one_factor
+
+session:
+  cookies:
+    - domain: '{{ env "DOMAIN" }}'
+      authelia_url: 'https://auth.{{ env "DOMAIN" }}:{{ env "CADDY_HTTPS_PORT" }}'
+
+regulation:
+  max_retries: 5
+  find_time: 10m
+  ban_time: 1h
+
+storage:
+  local:
+    path: /var/lib/authelia/db.sqlite3
+
+notifier:
+  filesystem:
+    filename: /var/lib/authelia/notification.txt
+
+identity_providers:
+  oidc:
+    jwks:
+      - key_id: jellynas
+        algorithm: RS256
+        use: sig
+        # yamllint disable-line rule:braces
+        key: {{ secret "/var/lib/authelia/private.pem" | mindent 10 "|" | msquote }}
+    claims_policies:
+      id_token_claims:
+        id_token:
+          - preferred_username
+          - name
+          - email
+          - groups
+    clients:
+      - client_id: aurral
+        client_name: Aurral
+        client_secret: '{{ secret "/var/lib/authelia/aurral.digest" }}'
+        public: false
+        authorization_policy: one_factor
+        consent_mode: implicit
+        claims_policy: id_token_claims
+        redirect_uris:
+          - 'https://aurral.{{ env "DOMAIN" }}:{{ env "CADDY_HTTPS_PORT" }}/sso/callback'
+        scopes:
+          - openid
+          - profile
+          - email
+          - groups
+        token_endpoint_auth_method: client_secret_basic

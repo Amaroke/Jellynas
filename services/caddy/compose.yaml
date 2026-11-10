@@ -5,14 +5,25 @@ services:
     restart: unless-stopped
     networks:
       jellyfin-zone:
+      identity-zone:
       seerr-zone:
         aliases:
           - jellyfin.${DOMAIN}
           - seerr.${DOMAIN}
+          - auth.${DOMAIN}
+          - aurral.${DOMAIN}
+      aurral-zone:
+        aliases:
+          - jellyfin.${DOMAIN}
+          - seerr.${DOMAIN}
+          - auth.${DOMAIN}
+          - aurral.${DOMAIN}
       internal-zone:
         aliases:
           - jellyfin.${DOMAIN}
           - seerr.${DOMAIN}
+          - auth.${DOMAIN}
+          - aurral.${DOMAIN}
     security_opt:
       - no-new-privileges
     cap_drop:

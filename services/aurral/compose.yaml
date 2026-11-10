@@ -1,0 +1,43 @@
+services:
+  aurral:
+    image: ghcr.io/lklynet/aurral:2.13.0
+    container_name: aurral
+    restart: unless-stopped
+    networks:
+      - aurral-zone
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    user: ${PUID}:${PGID}
+    environment:
+      TZ: ${TZ}
+      AURRAL_DATA_DIR: /config
+      AURRAL_PUBLIC_URL: https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      TRUST_PROXY: "true"
+      DOWNLOAD_FOLDER: /data/media/aurral
+      FILE_BROWSE_ROOTS: /data/media
+      OIDC_ENABLED: "true"
+      OIDC_ISSUER: https://auth.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      OIDC_DOMAIN: https://auth.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      OIDC_CLIENT_ID: aurral
+      OIDC_CLIENT_SECRET: ${AURRAL_OIDC_CLIENT_SECRET}
+      OIDC_REDIRECT_URI: https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/sso/callback
+      OIDC_SCOPES: openid profile email groups
+      OIDC_DEFAULT_ROLE: user
+      OIDC_GROUPS_CLAIM: groups
+      OIDC_ADMIN_GROUPS: jellynas_admins
+      OIDC_LOGOUT_URL: https://auth.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/logout
+    labels:
+      kuma.aurral.http.name: Aurral
+      kuma.aurral.http.url: https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/health/live
+      kuma.aurral.http.expiry_notification: "true"
+      docker-volume-backup.stop-during-backup: "true"
+    volumes:
+      - ${APPDATA_ROOT}/aurral:/config
+      - ${DATA_ROOT}/media/music:/data/media/music:ro
+      - ${DATA_ROOT}/media/aurral:/data/media/aurral
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/api/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      timeout: 10s
+      start_period: 60s

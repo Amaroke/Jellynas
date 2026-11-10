@@ -3,6 +3,9 @@ name: jellynas
 include:
   - services/jellyfin/compose.yaml
   - services/seerr/compose.yaml
+  - services/lldap/compose.yaml
+  - services/authelia/compose.yaml
+  - services/aurral/compose.yaml
   - services/music-bot/compose.yaml
   - services/caddy/compose.yaml
   - services/gluetun/compose.yaml
@@ -33,4 +36,6 @@ include:
 networks:
   jellyfin-zone:
   seerr-zone:
+  identity-zone:
+  aurral-zone:
   internal-zone:

@@ -5,7 +5,7 @@ Films, séries, animés, musique, livres et mangas en streaming.
 ## 🔑 Compte
 
 Demande-moi tes identifiants en message privé.
--# Le même compte sert pour Jellyfin, Finamp et Seerr.
+-# Le même compte sert pour Jellyfin, Finamp, Seerr et Aurral.
 
 ## ⚠️ Règles
 
@@ -18,6 +18,7 @@ Demande-moi tes identifiants en message privé.
 - **Jellyfin** · regarder, lire et télécharger
 - **Finamp** · écouter la musique, même hors ligne
 - **Seerr** · demander un film, une série ou un animé
+- **Aurral** · découvrir de la musique et recevoir tes playlists
 - **Ton salon** · demander un livre ou un manga
 
 -# Les adresses et les applis sont dans links.

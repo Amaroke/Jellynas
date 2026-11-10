@@ -4,6 +4,7 @@ services:
     container_name: lidarr
     restart: unless-stopped
     networks:
+      - aurral-zone
       - internal-zone
     security_opt:
       - no-new-privileges

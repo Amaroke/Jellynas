@@ -15,7 +15,7 @@ A person outside the household who has their own Account and reaches the NAS fro
 _Avoid_: user, guest, relative
 
 **Account**:
-The single identity of a Friend or the Admin, valid both for watching and for making Requests.
+The single identity of a Friend or the Admin, kept in lldap, valid for watching, for making Requests and in Aurral.
 _Avoid_: profile
 
 **Request**:
@@ -147,7 +147,7 @@ A name under `lan.` of the domain of the Admin that only the local network reach
 _Avoid_: local URL, internal address
 
 **Network zone**:
-A Docker network that groups the services one exposed service may reach: Jellyfin alone with Caddy, Seerr with Caddy, Radarr and Sonarr, every other service in the internal zone. A zone only opens towards Jellyfin and Seerr, through their Public names.
+A Docker network that groups the services one exposed service may reach: Jellyfin with Caddy and lldap, Seerr with Caddy, Radarr and Sonarr, Aurral with Caddy and Lidarr, Authelia with Caddy and lldap, every other service in the internal zone. A zone only opens towards the exposed services, through their Public names.
 _Avoid_: VLAN, segment, subnet
 
 **Declared settings**:
