@@ -79,6 +79,12 @@ flowchart LR
         Caddy("Caddy<br/>HTTPS proxy")
     end
 
+    subgraph accounts["Accounts"]
+        direction TB
+        Authelia("Authelia<br/>OpenID Connect")
+        lldap("lldap<br/>Accounts, LDAP")
+    end
+
     subgraph gitops["GitOps"]
         direction TB
         Renovate("Renovate<br/>image updates")
@@ -89,6 +95,7 @@ flowchart LR
         direction TB
         Jellyfin("Jellyfin<br/>streaming")
         Seerr("Seerr<br/>Requests")
+        Aurral("Aurral<br/>music discovery, playlists")
         MusicBot("Music bot<br/>Discord voice")
     end
 
@@ -138,6 +145,11 @@ flowchart LR
 
     Friend -->|HTTPS| exposure
     exposure -->|"own network zones"| watch
+    exposure -->|sign-in| Authelia
+    Jellyfin -->|LDAP| lldap
+    Authelia -->|LDAP| lldap
+    Aurral -->|"OpenID Connect"| Authelia
+    Aurral -->|"follow artists"| Lidarr
     watch -->|"Requests, Seerr zone"| automation
     automation -->|grab| vpn
     ratio -->|"grab, clean, cross-seed"| vpn
@@ -180,11 +192,14 @@ flowchart LR
     classDef exposureNode fill:#ffffff,stroke:#1e88e5,color:#1f2937,stroke-width:1.5px
     class OVH,Caddy exposureNode
     style exposure fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#1f2937
+    classDef accountsNode fill:#ffffff,stroke:#f9a825,color:#1f2937,stroke-width:1.5px
+    class Authelia,lldap accountsNode
+    style accounts fill:#fffde7,stroke:#f9a825,stroke-width:2px,color:#1f2937
     classDef gitopsNode fill:#ffffff,stroke:#7e57c2,color:#1f2937,stroke-width:1.5px
     class Renovate,Deployer gitopsNode
     style gitops fill:#ede7f6,stroke:#7e57c2,stroke-width:2px,color:#1f2937
     classDef watchNode fill:#ffffff,stroke:#ab47bc,color:#1f2937,stroke-width:1.5px
-    class Jellyfin,Seerr,MusicBot watchNode
+    class Jellyfin,Seerr,Aurral,MusicBot watchNode
     style watch fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px,color:#1f2937
     classDef automationNode fill:#ffffff,stroke:#43a047,color:#1f2937,stroke-width:1.5px
     class Prowlarr,Recyclarr,FlareSolverr,Radarr,Sonarr,Lidarr,LazyLibrarian,Bazarr,Tdarr automationNode
@@ -273,6 +288,7 @@ Both roots live outside the repo, at the paths set in `DATA_ROOT` and `APPDATA_R
     ├── shows
     ├── anime
     ├── music
+    ├── aurral
     ├── books
     └── manga
 ```
@@ -281,7 +297,7 @@ Create both roots, the folder of the archives, the recycle bins of Radarr and So
 
 ```bash
 . <(grep -E '^(DATA_ROOT|APPDATA_ROOT|BACKUP_ROOT|PUID|PGID)=' .env)
-mkdir -p "$BACKUP_ROOT" "$DATA_ROOT"/torrents/{farm,cross-seed} "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} "$DATA_ROOT"/media/{movies,shows,anime,music,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,recyclarr,autobrr,cross-seed,ratio,farm-report,slskd,suwayomi}
+mkdir -p "$BACKUP_ROOT" "$DATA_ROOT"/torrents/{farm,cross-seed} "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} "$DATA_ROOT"/media/{movies,shows,anime,music,aurral,books,manga} "$DATA_ROOT"/media/{movies,shows}/.recycle "$APPDATA_ROOT"/{seerr,lldap,authelia,aurral,recyclarr,autobrr,cross-seed,ratio,farm-report,slskd,suwayomi}
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
@@ -289,27 +305,29 @@ chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 
 Requires [Settings](#settings).
 
-Caddy is the only service the NAS publishes, on `CADDY_HTTPS_PORT`. Friends reach `jellyfin.<DOMAIN>` and `seerr.<DOMAIN>` from the internet. The Admin reaches every tool at `<tool>.lan.<DOMAIN>`, from the local network only: Caddy refuses a lan name to any address outside `LAN_SUBNET`, and refuses any name it does not know. Through the API of the DNS provider, Caddy obtains a wildcard certificate for `*.<DOMAIN>` and one for `*.lan.<DOMAIN>`, so no port opens for the certificates and the certificate logs never list the tools, and it keeps `jellyfin` and `seerr` on the public IP of the home. Wildcards keep the tools out of the certificate logs, a single port keeps what the NAS publishes small, and public certificates avoid installing a local root certificate on every device.
+Caddy is the only service the NAS publishes, on `CADDY_HTTPS_PORT`. Friends reach `jellyfin.<DOMAIN>`, `seerr.<DOMAIN>`, `aurral.<DOMAIN>` and `auth.<DOMAIN>` from the internet. The Admin reaches every tool at `<tool>.lan.<DOMAIN>`, from the local network only: Caddy refuses a lan name to any address outside `LAN_SUBNET`, and refuses any name it does not know. Through the API of the DNS provider, Caddy obtains a wildcard certificate for `*.<DOMAIN>` and one for `*.lan.<DOMAIN>`, so no port opens for the certificates and the certificate logs never list the tools, and it keeps `jellyfin`, `seerr`, `auth` and `aurral` on the public IP of the home. Wildcards keep the tools out of the certificate logs, a single port keeps what the NAS publishes small, and public certificates avoid installing a local root certificate on every device.
 
-Caddy also listens on `CADDY_HTTPS_PORT` inside its container and sends HSTS on every name, so a browser never tries plain HTTP. Inside the NAS, Caddy answers `jellyfin.<DOMAIN>` and `seerr.<DOMAIN>` itself, so a service reaches Jellyfin or Seerr at the same address a Friend uses, without going through the router. [Network zones](#network-zones) says why.
+Caddy also listens on `CADDY_HTTPS_PORT` inside its container and sends HSTS on every name, so a browser never tries plain HTTP. Inside the NAS, Caddy answers the public names itself, so a service reaches Jellyfin, Seerr, Aurral or Authelia at the same address a Friend uses, without going through the router. [Network zones](#network-zones) says why.
 
 ### Network zones
 
-Jellyfin and Seerr face the internet, so a flaw in either must not land next to the rest of the NAS. The services sit in three Docker networks:
+Jellyfin, Seerr, Aurral and Authelia face the internet, so a flaw in one of them must not land next to the rest of the NAS. The services sit in five Docker networks:
 
-| Zone            | Services                                               |
-| --------------- | ------------------------------------------------------ |
-| `jellyfin-zone` | Caddy, Jellyfin                                        |
-| `seerr-zone`    | Caddy, Seerr, Radarr, Sonarr                           |
-| `internal-zone` | every other service, Caddy, Radarr and Sonarr included |
+| Zone            | Services                                                       |
+| --------------- | -------------------------------------------------------------- |
+| `jellyfin-zone` | Caddy, Jellyfin, lldap                                         |
+| `seerr-zone`    | Caddy, Seerr, Radarr, Sonarr                                   |
+| `aurral-zone`   | Caddy, Aurral, Lidarr                                          |
+| `identity-zone` | Caddy, Authelia, lldap                                         |
+| `internal-zone` | every other service, Caddy, Radarr, Sonarr and Lidarr included |
 
-qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal zone, and the Beszel agent the network of the Host. A service of the internal zone that needs Jellyfin or Seerr, such as Homepage, Uptime Kuma or the Music bot, reaches it through Caddy at its public name, so the zones only open towards Jellyfin and Seerr, never from them. `python3 -m unittest` checks the members of each zone. Jellyfin and Seerr face the internet, so a flaw in one of them should not land next to Radarr, qBittorrent or Dozzle.
+qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal zone, and the Beszel agent the network of the Host. A service that needs Jellyfin, Seerr, Aurral or Authelia from another zone, such as Homepage, Uptime Kuma, the Music bot, or Aurral signing in with Authelia, reaches it through Caddy at its public name, so the zones only open towards the public services, never from them. lldap speaks LDAP, which Caddy cannot carry, so it sits in the zones of Jellyfin and of Authelia, the only two services that read the Accounts, and has no public name. `python3 -m unittest` checks the members of each zone.
 
 Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS provider, swap the `caddy-dns/ovh` module in `services/caddy/Dockerfile` for its own, and its settings in the `acme_dns` and `dynamic_dns` blocks of `services/caddy/Caddyfile` and in `.env`.
 
 ### DNS zone
 
-In the [OVH Control Panel](https://www.ovh.com/manager/), open Web Cloud > Domain names > `<DOMAIN>` > DNS zone, click "Add an entry", pick `A`, enter `*.lan` as the subdomain and the fixed local IP of the NAS as the target. Leave every other entry as it is, such as the ones of the OVH email. Caddy creates the `jellyfin` and `seerr` entries itself at its first start.
+In the [OVH Control Panel](https://www.ovh.com/manager/), open Web Cloud > Domain names > `<DOMAIN>` > DNS zone, click "Add an entry", pick `A`, enter `*.lan` as the subdomain and the fixed local IP of the NAS as the target. Leave every other entry as it is, such as the ones of the OVH email. Caddy creates the `jellyfin`, `seerr`, `auth` and `aurral` entries itself at its first start.
 
 ### API keys
 
@@ -344,9 +362,13 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with `:<CA
 | ----------- | ----------------------------------- | ------------- |
 | Jellyfin    | `https://jellyfin.<DOMAIN>`         | Anywhere      |
 | Seerr       | `https://seerr.<DOMAIN>`            | Anywhere      |
+| Aurral      | `https://aurral.<DOMAIN>`           | Anywhere      |
+| Authelia    | `https://auth.<DOMAIN>`             | Anywhere      |
 | TrueNAS     | `https://truenas.lan.<DOMAIN>`      | Local network |
 | Jellyfin    | `https://jellyfin.lan.<DOMAIN>`     | Local network |
 | Seerr       | `https://seerr.lan.<DOMAIN>`        | Local network |
+| Aurral      | `https://aurral.lan.<DOMAIN>`       | Local network |
+| lldap       | `https://lldap.lan.<DOMAIN>`        | Local network |
 | qBittorrent | `https://qbittorrent.lan.<DOMAIN>`  | Local network |
 | Prowlarr    | `https://prowlarr.lan.<DOMAIN>`     | Local network |
 | Radarr      | `https://radarr.lan.<DOMAIN>`       | Local network |
@@ -439,27 +461,26 @@ Jellyfin streams the Library to the Admin and the Friends. Emby or Plex can repl
 
 ### Libraries
 
-The media tree is mounted read-only under `/data/media`, so Jellyfin can never delete or change a file. In Dashboard > Libraries, add one library per folder:
+The media tree is mounted read-only under `/data/media`, so Jellyfin can never delete or change a file. In Dashboard > Libraries, add one library per row:
 
-| Library | Content type | Folder               |
-| ------- | ------------ | -------------------- |
-| Movies  | Movies       | `/data/media/movies` |
-| Shows   | Shows        | `/data/media/shows`  |
-| Anime   | Shows        | `/data/media/anime`  |
-| Music   | Music        | `/data/media/music`  |
-| Books   | Books        | `/data/media/books`  |
-| Manga   | Books        | `/data/media/manga`  |
+| Library | Content type | Folders                                      |
+| ------- | ------------ | -------------------------------------------- |
+| Movies  | Movies       | `/data/media/movies`                         |
+| Shows   | Shows        | `/data/media/shows`                          |
+| Anime   | Shows        | `/data/media/anime`                          |
+| Music   | Music        | `/data/media/music` and `/data/media/aurral` |
+| Books   | Books        | `/data/media/books`                          |
+| Manga   | Books        | `/data/media/manga`                          |
 
 For each library, leave "Save artwork into media folders" and every "Metadata savers" option unchecked: Jellyfin cannot write into the Library and keeps its metadata in its appdata folder instead.
 
 ### Friend Accounts
 
-Each Friend gets their own Account, so their watch history and progress are theirs. In Dashboard > Users, click "+" and:
+Each Friend gets their own Account, so their watch history and progress are theirs. The Accounts live in lldap, as [Accounts](#accounts) sets out, and Jellyfin creates its user at the first sign-in of a Friend. Then, in Dashboard > Users, open the user and:
 
-1. Enter the Friend's name and a password, then give both to the Friend privately.
-2. Grant access to all libraries.
-3. Leave "Allow this user to manage the server" unchecked.
-4. Check "Allow media downloading" so the Friend can download videos, books and manga to their phone.
+1. Grant access to all libraries.
+2. Leave "Allow this user to manage the server" unchecked.
+3. Check "Allow media downloading" so the Friend can download videos, books and manga to their phone.
 
 ### Login lockout
 
@@ -473,9 +494,66 @@ In Dashboard > Networking, add `caddy` to "Known proxies" and save. Jellyfin the
 docker compose restart jellyfin
 ```
 
-## Seerr
+## Accounts
 
 Requires [Jellyfin](#jellyfin).
+
+Each Friend and the Admin has a single Account, kept in [lldap](https://github.com/lldap/lldap), a small LDAP directory with a web UI. Jellyfin checks every password against lldap through its LDAP plugin, which works in every app, TV and phone included, and Seerr signs in through Jellyfin. [Authelia](https://www.authelia.com) reads the same Accounts and signs the Friends in to Aurral with OpenID Connect, on `auth.<DOMAIN>`. Authentik or Keycloak can replace both, with more services to run. Neither Seerr nor the Jellyfin apps speak OpenID Connect, which is why Jellyfin reads lldap directly.
+
+Only the Admin creates an Account or changes a password, in lldap, from the local network. Authelia has no email to send, so it offers no password reset, and after 5 wrong passwords in 10 minutes it refuses the Account for an hour.
+
+### Keys of Authelia
+
+Fill the Accounts block of `.env`, then create the signing key of Authelia and the digest of the secret of Aurral in the appdata of Authelia. Authelia restarts in a loop until both files are there:
+
+```bash
+. <(grep -E '^(APPDATA_ROOT|AURRAL_OIDC_CLIENT_SECRET|PUID|PGID)=' .env)
+image="$(docker inspect -f '{{.Config.Image}}' authelia)"
+docker run --rm -u "$PUID:$PGID" -v "$APPDATA_ROOT/authelia:/keys" "$image" authelia crypto pair rsa generate --directory /keys
+docker run --rm "$image" authelia crypto hash generate pbkdf2 --variant sha512 --password "$AURRAL_OIDC_CLIENT_SECRET" | sed -n 's/^Digest: //p' > "$APPDATA_ROOT/authelia/aurral.digest"
+chown "$PUID:$PGID" "$APPDATA_ROOT/authelia/aurral.digest"
+docker restart authelia
+```
+
+After a change of `AURRAL_OIDC_CLIENT_SECRET`, run these lines again without the key line.
+
+### lldap
+
+Open `https://lldap.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `admin` and `LLDAP_ADMIN_PASSWORD`. Then:
+
+1. In Groups, create `jellynas_users` and `jellynas_admins`.
+2. In Users, create `authelia` with `LLDAP_AUTHELIA_PASSWORD`, and add it to `lldap_strict_readonly`.
+3. Create `jellyfin` with a long random password, and add it to `lldap_strict_readonly`. Keep the password for the next step, nothing else uses it.
+4. Create one user per Friend and one for the Admin, with the same username as their Jellyfin user if they already have one, and add each to `jellynas_users`. Add the Admin to `jellynas_admins` too.
+
+### Jellyfin with lldap
+
+1. In Jellyfin, Dashboard > Plugins > Catalog, install "LDAP Authentication" and restart Jellyfin.
+2. In Dashboard > Plugins > LDAP Authentication, set:
+
+   | Setting                   | Value                                                 |
+   | ------------------------- | ----------------------------------------------------- |
+   | LDAP Server               | `lldap`                                               |
+   | LDAP Port                 | `3890`                                                |
+   | Secure LDAP, StartTLS     | unchecked, lldap never leaves the zone of Jellyfin    |
+   | LDAP Bind User            | `uid=jellyfin,ou=people,dc=jellynas`                  |
+   | LDAP Bind User Password   | the password of `jellyfin`                            |
+   | LDAP Base DN for searches | `ou=people,dc=jellynas`                               |
+   | LDAP Search Filter        | `(memberof=cn=jellynas_users,ou=groups,dc=jellynas)`  |
+   | LDAP Search Attributes    | `uid, mail`                                           |
+   | LDAP Uid Attribute        | `uid`                                                 |
+   | LDAP Username Attribute   | `uid`                                                 |
+   | LDAP Admin Base DN        | `ou=people,dc=jellynas`                               |
+   | LDAP Admin Filter         | `(memberof=cn=jellynas_admins,ou=groups,dc=jellynas)` |
+   | Enable User Creation      | checked                                               |
+   | Allow Password Change     | unchecked                                             |
+
+3. Click "Save and Test LDAP Server Settings", then "Save and Test LDAP Filter Settings".
+4. For each Jellyfin user that existed before lldap, open it in Dashboard > Users and set "Authentication Provider" to "LDAP-Authentication". Their watch history stays, and they sign in with their password of lldap from now on.
+
+## Seerr
+
+Requires [Accounts](#accounts).
 
 Friends make Requests in Seerr, on its own public name, and log in with their Jellyfin Account. Seerr has no access to the Library files. Ombi can replace it.
 
@@ -495,7 +573,7 @@ Friends make Requests in Seerr, on its own public name, and log in with their Je
 3. In Settings > Jellyfin, set "External URL" to `https://jellyfin.<DOMAIN>:<CADDY_HTTPS_PORT>` so links to a movie open the public Jellyfin.
 4. In Settings > Users, check "Enable Jellyfin Sign-In" and "Enable New Jellyfin Sign-In", uncheck "Enable Local Sign-In", and leave the default permissions on "Request".
 
-A Friend then opens the Seerr address, picks "Sign in with Jellyfin" and enters their Jellyfin Account, with no second login to create.
+A Friend then opens the Seerr address, picks "Sign in with Jellyfin" and enters their Account, with no second login to create.
 
 ## qBittorrent
 
@@ -764,6 +842,33 @@ For slskd:
 ### Follow an artist
 
 In Library > Add New, search an artist, pick `/data/media/music` as the root folder and the albums to monitor, and check "Start search for missing albums". Lidarr searches the indexers and Soulseek, sends each album to qBittorrent or slskd, then copies it into the music folder, where the Music library of Jellyfin picks it up.
+
+## Aurral
+
+Requires [Lidarr](#lidarr) and [Accounts](#accounts).
+
+[Aurral](https://github.com/lklynet/aurral) is the music side of Seerr. Each Friend signs in with their Account, discovers artists from what they listen to, asks Lidarr for an artist or an album, and gets playlists of their own, which Aurral publishes to their Jellyfin user, and so to Finamp. It reads the music folder of Lidarr, read-only, and downloads the tracks of its playlists that Lidarr does not have into `/data/media/aurral`, which Jellyfin reads with the music. It sits in a zone of its own with Lidarr, and reaches Jellyfin and Authelia through Caddy. Lidify only discovers, and Ombi requests music without playlists.
+
+### First start
+
+1. Open `https://aurral.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from the local network and create the local admin account, a recovery login stored in your password manager.
+2. In Settings > Users > Sign-in, turn on "SSO-only". Friends then sign in with Authelia only. Aurral creates their user at the first sign-in, and gives the admin role to the members of `jellynas_admins`.
+3. In Settings > Users, leave the default permissions of a new user, which may add an artist or an album but delete nothing.
+
+### Lidarr
+
+1. In Settings > Library > Lidarr, turn on "Enabled", enter `http://lidarr:8686` and `LIDARR_API_KEY`, then click "Test connection".
+2. Pick `/data/media/music` as the root folder, the quality and metadata profiles of Lidarr, and check "Search on add".
+3. Never click "Apply to Lidarr", it would replace the quality profiles of Lidarr.
+
+### Jellyfin
+
+1. In Jellyfin, check that the Music library holds `/data/media/aurral`, as [Libraries](#libraries) sets out, and create an API key named `Aurral` in Dashboard > API Keys.
+2. In Aurral, Settings > Playback > Jellyfin, enter `https://jellyfin.<DOMAIN>:<CADDY_HTTPS_PORT>`, the key, and the user id of the Admin, then click "Test connection". Aurral publishes each playlist to the Jellyfin user with the same username as its owner, which lldap keeps the same.
+
+### Listening history
+
+Each Friend links their Last.fm or ListenBrainz account in Settings > Listening, so that Aurral recommends from what they play. With ListenBrainz, its Jellyfin plugin sends what each Friend plays in Jellyfin.
 
 ## LazyLibrarian
 

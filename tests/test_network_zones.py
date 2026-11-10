@@ -4,14 +4,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCO_CD = ROOT / "services" / "doco-cd" / "compose.yaml"
-PUBLIC_ALIASES = {"jellyfin.${DOMAIN}", "seerr.${DOMAIN}"}
+PUBLIC_ALIASES = {"jellyfin.${DOMAIN}", "seerr.${DOMAIN}", "auth.${DOMAIN}", "aurral.${DOMAIN}"}
 ZONE_MEMBERS = {
-    "jellyfin-zone": {"caddy", "jellyfin"},
+    "jellyfin-zone": {"caddy", "jellyfin", "lldap"},
     "seerr-zone": {"caddy", "seerr", "radarr", "sonarr"},
+    "identity-zone": {"caddy", "authelia", "lldap"},
+    "aurral-zone": {"caddy", "aurral", "lidarr"},
 }
-OUTSIDE_INTERNAL_ZONE = {"jellyfin", "seerr"}
+OUTSIDE_INTERNAL_ZONE = {"jellyfin", "seerr", "authelia", "lldap", "aurral"}
 SOCKET_HOLDERS = {"socket-proxy", "backup", "doco-cd"}
-DIRECT_ADDRESSES = ("jellyfin:8096", "seerr:5055")
+DIRECT_ADDRESSES = ("jellyfin:8096", "seerr:5055", "authelia:9091", "aurral:3001")
 
 
 def included_compose_files():
@@ -102,13 +104,24 @@ class NetworkZonesTest(unittest.TestCase):
     def test_the_zones_are_declared_once_at_the_root(self):
         text = (ROOT / "compose.yaml").read_text(encoding="utf-8")
         block = re.search(r"^networks:\n((?:  .*\n)+)", text, re.MULTILINE)
-        self.assertEqual({"jellyfin-zone", "seerr-zone", "internal-zone"}, set(re.findall(r"^  ([a-z-]+):$", block.group(1), re.MULTILINE)))
+        self.assertEqual(set(ZONE_MEMBERS) | {"internal-zone"}, set(re.findall(r"^  ([a-z-]+):$", block.group(1), re.MULTILINE)))
 
-    def test_jellyfin_sits_alone_with_caddy(self):
+    def test_jellyfin_sits_with_caddy_and_lldap_only(self):
         self.assertEqual(ZONE_MEMBERS["jellyfin-zone"], zone_members("jellyfin-zone"))
 
     def test_seerr_sits_with_caddy_radarr_and_sonarr_only(self):
         self.assertEqual(ZONE_MEMBERS["seerr-zone"], zone_members("seerr-zone"))
+
+    def test_authelia_sits_with_caddy_and_lldap_only(self):
+        self.assertEqual(ZONE_MEMBERS["identity-zone"], zone_members("identity-zone"))
+
+    def test_aurral_sits_with_caddy_and_lidarr_only(self):
+        self.assertEqual(ZONE_MEMBERS["aurral-zone"], zone_members("aurral-zone"))
+
+    def test_lldap_has_no_public_name(self):
+        caddyfile = (ROOT / "services" / "caddy" / "Caddyfile").read_text(encoding="utf-8")
+        public = caddyfile.split("*.lan.{$DOMAIN}")[0]
+        self.assertNotIn("lldap", public)
 
     def test_every_other_service_sits_in_the_internal_zone(self):
         expected = {
@@ -129,10 +142,10 @@ class NetworkZonesTest(unittest.TestCase):
 
     def test_caddy_answers_the_public_names_inside_the_nas(self):
         found = aliases(all_services()["caddy"])
-        self.assertEqual(PUBLIC_ALIASES, found["internal-zone"])
-        self.assertEqual(PUBLIC_ALIASES, found["seerr-zone"])
+        for zone in ("seerr-zone", "aurral-zone", "internal-zone"):
+            self.assertEqual(PUBLIC_ALIASES, found[zone], zone)
 
-    def test_only_caddy_names_jellyfin_and_seerr_directly(self):
+    def test_only_caddy_names_the_public_services_directly(self):
         paths = [path for path in included_compose_files() if path.parent.name != "caddy"]
         paths += sorted((ROOT / "services" / "homepage").glob("*.yaml")) + sorted((ROOT / "services" / "music-bot").glob("*.py"))
         for path in paths:

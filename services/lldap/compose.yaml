@@ -1,0 +1,29 @@
+services:
+  lldap:
+    image: lldap/lldap:v0.6.3-alpine-rootless
+    container_name: lldap
+    restart: unless-stopped
+    networks:
+      - identity-zone
+      - jellyfin-zone
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    user: ${PUID}:${PGID}
+    environment:
+      TZ: ${TZ}
+      LLDAP_LDAP_BASE_DN: dc=jellynas
+      LLDAP_HTTP_URL: https://lldap.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      LLDAP_JWT_SECRET: ${LLDAP_JWT_SECRET}
+      LLDAP_KEY_SEED: ${LLDAP_KEY_SEED}
+      LLDAP_LDAP_USER_PASS: ${LLDAP_ADMIN_PASSWORD}
+    labels:
+      kuma.lldap.docker.name: lldap
+      docker-volume-backup.stop-during-backup: "true"
+    volumes:
+      - ${APPDATA_ROOT}/lldap:/data
+    healthcheck:
+      test: ["CMD", "/app/lldap", "healthcheck", "--config-file", "/data/lldap_config.toml"]
+      timeout: 10s
+      start_period: 30s
