@@ -36,11 +36,6 @@ SEEDING = ("uploading", "stalledUP", "queuedUP", "forcedUP")
 SHARE_LIMITS = ("max_ratio_enabled", "max_seeding_time_enabled", "max_inactive_seeding_time_enabled")
 SEEDING_STEPS = ((180, 0.5), (90, 0.35), (30, 0.25), (7, 0.1))
 RARE_STEP = 0.25
-BEST_NOTE = 1 + SEEDING_STEPS[0][1] + RARE_STEP
-GOOD_NOTE = 0.625
-SEED_STEPS = (100, 150, 200, 250, 300)
-CONTRIBUTION_SHARES = ("62.5", "75", "100", "100", "100", "100")
-DURATION_STEPS = ((25, 7), (100, 30), (150, 90), (250, 180), (300, 365))
 HISTORY_DAYS = 30
 SOURCES = ("paid", "free", "library", "volume-hunt", "unknown")
 RETIRED_SOURCES = {"zen-hunt": "volume-hunt", "twin": "free", "freeleech": "free", "cross-seed": "free"}
@@ -681,26 +676,6 @@ def seeded_on_c411(state, settings, torrents):
     return [t for t in torrents.values() if is_c411(state, settings, t) and is_seeding(t)]
 
 
-def challenges_of(state, settings, torrents):
-    seeded = seeded_on_c411(state, settings, torrents)
-    kinds = [state["kinds"].get(t["hash"]) for t in seeded]
-    tops = sorted((kinds.count(name) for name in QUEST_CATEGORIES), reverse=True)
-
-    def good(share_of_best):
-        return sum(1 for t in seeded if note_of(t) >= share_of_best * BEST_NOTE)
-
-    def lasting(days):
-        return sum(1 for t in seeded if t["seeding_time"] >= days * DAY)
-
-    return [
-        ("seed_volume", [(n, len(seeded)) for n in SEED_STEPS], True),
-        ("contribution", [(50, good(GOOD_NOTE)), (100, good(0.75))] + [(n, good(1)) for n in (150, 200, 250, 300)], True),
-        ("duration", [(n, lasting(days)) for n, days in DURATION_STEPS], True),
-        ("diversity", [(25 * k, sum(min(c, 25) for c in tops[:k])) for k in range(1, len(QUEST_CATEGORIES) + 1)], False),
-        ("category", [(50, tops[0]), (100, tops[0]), (250, kinds.count(FILMS)), (500, kinds.count(FILMS))], False),
-    ]
-
-
 def board_of(state, settings, torrents):
     farm = [t for t in torrents.values() if t["category"] == FARM]
     slices = {}
@@ -710,10 +685,6 @@ def board_of(state, settings, torrents):
         slices[source] = slices.get(source, 0) + t["size"]
     return {
         "history": [dict(e) for e in state["daily"]],
-        "challenges": [
-            {"key": key, "steps": [{"target": t, "progress": p} for t, p in steps], "max": has_max}
-            for key, steps, has_max in challenges_of(state, settings, torrents)
-        ],
         "farm": {
             "budget_gb": gigabytes(settings["farm_size"]),
             "slices": [{"source": s, "gb": gigabytes(size)} for s, size in sorted(slices.items(), key=lambda i: -i[1])],
@@ -727,7 +698,6 @@ def board_of(state, settings, torrents):
 def waiting_board(state, settings):
     return {
         "history": [dict(e) for e in state["daily"]],
-        "challenges": [],
         "farm": {"budget_gb": gigabytes(settings["farm_size"]), "slices": []},
         "sources": [],
     }
@@ -861,31 +831,6 @@ COLORS = {
     "paid": "#f472b6", "free": "#34d399", "library": "#38bdf8",
     "volume-hunt": "#fb923c", "unknown": "#94a3b8", PUBLIC: "#64748b",
 }
-REWARDS = {
-    "seed_volume": (("100 Zen",) * 2, ("150 Zen",) * 2, ("200 Zen",) * 2, ("250 Zen",) * 2, ("300 Zen",) * 2),
-    "contribution": (
-        ("5 free downloads", "5 DL gratuits"), ("+1 % weight", "+1 % de pondération"),
-        ("+2 % weight", "+2 % de pondération"), ("+3 % weight", "+3 % de pondération"),
-        ("+4 % weight", "+4 % de pondération"), ("+5 % weight", "+5 % de pondération"),
-    ),
-    "duration": (
-        ("25 Zen",) * 2, ("Silver Leech 7 days", "Silver Leech 7 jours"), ("300 Zen",) * 2, ("C411",) * 2,
-        ("Free Leech 7 days", "Free Leech 7 jours"),
-    ),
-    "diversity": (
-        ("25 Zen",) * 2, ("C411",) * 2, ("Corridor certified badge", "Badge Certifié Corridor"),
-        ("T411 badge", "Badge T411"), ("C411 badge", "Badge C411"),
-    ),
-    "category": (
-        ("Category badge", "Badge Catégorie"), ("Specialty badge", "Badge Spécialité"),
-        ("Silver upgrade, Specialty dial", "Upgrade Argent, Cadran Spécialité"), ("Gold upgrade", "Upgrade Or"),
-    ),
-}
-MAX_REWARDS = {
-    "seed_volume": ("Prime badge", "Badge Prime"),
-    "contribution": ("Contributor badge", "Badge Contributeur"),
-    "duration": ("Timeless badge", "Badge Timeless"),
-}
 TEXT = {
     "en": {
         "gb": "GB", "decimal": ".", "empty": "No history yet, ratio records its first day after its first run.",
@@ -893,15 +838,6 @@ TEXT = {
         "actual": "{v} real", "one": "{v} before a ratio of 1", "downloaded": "Downloaded", "day": "{v} in 24 h", "zen": "Zen", "paid_last": "+{v} last night",
         "theory": "Theoretical GB",
         "zen_chart": "Zen", "paid": "paid each night", "balance": "balance", "transfer": "Upload and download",
-        "challenges": {
-            "seed_volume": "Seed volume", "contribution": "Minimum contribution", "duration": "Seed duration",
-            "diversity": "Category diversity", "category": "Category volume",
-        },
-        "short": {
-            "seed_volume": "{n} seeds", "contribution": "{n} at {share} % of best", "duration": "{n} for {days} days",
-            "diversity": ("25 in 1 category", "25 in {k} categories"), "category": ("{n} in one category", "{n} in Films"),
-        },
-        "max": "Every step",
         "disk": "Farm disk", "free": "Free", "of": "of {budget} {gb}",
         "earned": "Earned by Source", "columns": ("Source", "Torrents", "Down", "Up", "Ratio"), "total": "Total",
         "week": "7 days: {down} down, {up} up, ratio {ratio}, {days} days in the Farm",
@@ -920,16 +856,6 @@ TEXT = {
         "actual": "{v} réels", "one": "{v} avant un ratio de 1", "downloaded": "Reçu", "day": "{v} en 24 h", "zen": "Zen", "paid_last": "+{v} cette nuit",
         "theory": "Go théoriques",
         "zen_chart": "Zen", "paid": "payé chaque nuit", "balance": "solde", "transfer": "Envoi et réception",
-        "challenges": {
-            "seed_volume": "Volume de seed", "contribution": "Contribution minimum", "duration": "Durée de seed",
-            "diversity": "Diversité catégories", "category": "Volume catégorie",
-        },
-        "short": {
-            "seed_volume": "{n} seeds", "contribution": "{n} à {share} % du max", "duration": "{n} pendant {days} jours",
-            "diversity": ("25 dans 1 catégorie", "25 dans {k} catégories"),
-            "category": ("{n} dans une catégorie", "{n} en Films"),
-        },
-        "max": "Tous les paliers",
         "disk": "Disque de la Farm", "free": "Libre", "of": "sur {budget} {gb}",
         "earned": "Gains par Source", "columns": ("Source", "Torrents", "Reçu", "Envoyé", "Ratio"), "total": "Total",
         "week": "7 jours : {down} reçus, {up} envoyés, ratio {ratio}, {days} jours dans la Farm",
@@ -956,7 +882,7 @@ html.padded .legend { flex: 1; }
 main { display: flex; flex-direction: column; gap: 10px; height: 100vh; padding: 6px; overflow: auto;
   scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, 0.35) transparent; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-.kpi, figure, .quest { background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025));
+.kpi, figure { background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025));
   border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 10px; padding: 9px 12px;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 6px 18px rgba(0, 0, 0, 0.12); }
 .kpi { position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
@@ -968,6 +894,7 @@ main { display: flex; flex-direction: column; gap: 10px; height: 100vh; padding:
 .sub { color: var(--muted); font-size: 12px; min-height: 16px; }
 .ratio .value { color: var(--violet); } .left .value { color: var(--green); } .zen .value { color: var(--amber); } .theory .value { color: var(--cyan); }
 .charts, .bottom { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; flex: 1; min-height: 140px; }
+.bottom { flex: 1 0 auto; }
 figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
 figcaption { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
 .key { text-transform: none; letter-spacing: 0; font-size: 11px; }
@@ -986,16 +913,6 @@ polygon.area { stroke: none; fill-opacity: 0.14; }
 .c-ratio { stroke: var(--violet); color: var(--violet); } .c-balance { stroke: var(--green); color: var(--green); }
 .c-paid { fill: var(--amber); fill-opacity: 0.85; color: var(--amber); } .c-up { stroke: var(--blue); color: var(--blue); }
 .c-down { stroke: var(--rose); color: var(--rose); }
-.quests { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
-.quest ol { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
-.quest li { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; font-size: 12px; }
-.quest .reward { color: var(--muted); font-size: 11px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
-.quest .done { color: var(--muted); opacity: 0.55; } .quest .done .step::before { content: "✓ "; color: var(--green); }
-.quest .later { color: var(--muted); opacity: 0.7; }
-.quest .next { color: var(--text); font-weight: 600; background: rgba(251, 191, 36, 0.08); border-radius: 6px; margin: 1px -6px; padding: 2px 6px; } .quest .next .reward { color: var(--amber); }
-.bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 400; color: var(--muted); }
-.bar span { flex: 1; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
-.bar i { display: block; height: 100%; background: var(--amber); }
 .disk { display: flex; gap: 14px; align-items: center; min-height: 0; }
 .donut { position: relative; width: 118px; height: 118px; flex: none; }
 .donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
@@ -1170,42 +1087,6 @@ def trends(history, words):
     )
 
 
-def short_step(key, index, target, words):
-    text = words["short"][key]
-    if key == "duration":
-        return text.format(n=target, days=DURATION_STEPS[index][1])
-    if key == "contribution":
-        return text.format(n=target, share=CONTRIBUTION_SHARES[index].replace(".", words["decimal"]))
-    if key == "diversity":
-        return text[0 if index == 0 else 1].format(k=index + 1)
-    if key == "category":
-        return text[0 if index < 2 else 1].format(n=target)
-    return text.format(n=target)
-
-
-def quest_column(challenge, words, pick):
-    key = challenge["key"]
-    rows, waiting = [], False
-    for index, step in enumerate(challenge["steps"]):
-        reached = step["progress"] >= step["target"]
-        status = "done" if reached else "later" if waiting else "next"
-        waiting = waiting or not reached
-        bar = ""
-        if status == "next":
-            fill = min(100, 100 * step["progress"] / step["target"])
-            bar = f'<span class="bar"><span><i style="width:{fill:.0f}%"></i></span>{step["progress"]} / {step["target"]}</span>'
-        rows.append(
-            f'<li class="{status}"><span class="step">{html.escape(short_step(key, index, step["target"], words))}</span>'
-            f'<span class="reward" title="{html.escape(REWARDS[key][index][pick])}">{html.escape(REWARDS[key][index][pick])}</span>{bar}</li>'
-        )
-    if challenge["max"]:
-        rows.append(
-            f'<li class="{"later" if waiting else "done"}"><span class="step">{html.escape(words["max"])}</span>'
-            f'<span class="reward">{html.escape(MAX_REWARDS[key][pick])}</span></li>'
-        )
-    return f'<div class="quest"><h3>{html.escape(words["challenges"][key])}</h3><ol>{"".join(rows)}</ol></div>'
-
-
 def donut(farm, words):
     budget = farm["budget_gb"] or 1
     used = sum(s["gb"] for s in farm["slices"])
@@ -1280,9 +1161,8 @@ def earned(sources, words):
     )
 
 
-def goals(board, words, pick):
-    columns = "".join(quest_column(c, words, pick) for c in board["challenges"])
-    return f'<section class="quests">{columns}</section><section class="bottom">{donut(board["farm"], words)}{earned(board.get("sources", []), words)}</section>'
+def earnings(board, words):
+    return f'<section class="bottom">{donut(board["farm"], words)}{earned(board.get("sources", []), words)}</section>'
 
 
 def pixels(text):
@@ -1292,13 +1172,12 @@ def pixels(text):
 def board_page(board, part=None, language="en", height=None):
     language = language if language in TEXT else "en"
     words = TEXT[language]
-    pick = 0 if language == "en" else 1
     if not board or not board["history"]:
         body = f'<p class="empty">{html.escape(words["empty"])}</p>'
     elif part == "disk":
         body = f'<section class="bottom">{donut(board["farm"], words)}</section>'
     else:
-        body = (trends(board["history"], words) if part != "2" else "") + (goals(board, words, pick) if part != "1" else "")
+        body = (trends(board["history"], words) if part != "2" else "") + (earnings(board, words) if part != "1" else "")
     classes = " ".join(c for c, on in (("standalone", not part), ("padded", height)) if on)
     fixed = f"html.padded main {{ height: {height}px; }}" if height else ""
     return (

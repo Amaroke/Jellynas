@@ -89,14 +89,15 @@ class PublishTest(unittest.TestCase):
         }
 
     def publish(self):
-        return publish("links", self.message, self.env, self.discord.url)
+        return publish("links", self.message, self.env, self.discord.url, datetime.datetime(2026, 11, 10, 0, 30))
 
     def test_posts_the_message_filled_from_the_env(self):
         self.publish()
         method, path, body = self.discord.calls[0]
         self.assertEqual(("POST", "/1234/abcd?wait=true"), (method, path))
         self.assertEqual("", body["content"])
-        self.assertEqual([{"description": "https://jellyfin.example.com:443", "color": 0x60A5FA}], body["embeds"])
+        footer = {"text": "Dernière mise à jour : 10/11/2026 à 00:30"}
+        self.assertEqual([{"description": "https://jellyfin.example.com:443", "color": 0x60A5FA, "footer": footer}], body["embeds"])
         self.assertEqual({"parse": []}, body["allowed_mentions"])
 
     def test_the_first_heading_is_the_title_of_the_embed(self):
@@ -204,7 +205,8 @@ class ActionsTest(unittest.TestCase):
         url, page = self.post("/actions/discord")
         self.assertTrue(self.wake.is_set())
         self.assertTrue(url.endswith("/actions?done=discord"))
-        self.assertIn("Messages Discord en cours de publication", page)
+        self.assertIn('class="discord running"', page)
+        self.assertIn("Publication en cours", page)
 
     def test_the_farm_report_button_asks_the_farm_report(self):
         self.start("http://farm-report:8000/refresh")
@@ -212,13 +214,15 @@ class ActionsTest(unittest.TestCase):
             _, page = self.post("/actions/farm-report")
         ask.assert_called_once_with("http://farm-report:8000/refresh")
         self.assertFalse(self.wake.is_set())
-        self.assertIn("Farm report en cours de publication", page)
+        self.assertIn('class="farm-report running"', page)
+        self.assertIn("Publication en cours", page)
 
     def test_a_farm_report_that_does_not_answer_says_so(self):
         self.start()
         with contextlib.redirect_stdout(io.StringIO()):
             _, page = self.post("/actions/farm-report")
-        self.assertIn("ne répond pas", page)
+        self.assertIn('class="farm-report failed"', page)
+        self.assertIn("Pas de réponse", page)
 
     def test_an_unknown_action_is_refused(self):
         self.start()

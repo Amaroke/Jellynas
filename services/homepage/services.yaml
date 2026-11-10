@@ -95,28 +95,6 @@
           fields: ["slskStatus", "downloads", "uploads", "sharedFiles"]
 
 - Ratio:
-    - Account:
-        icon: mdi-scale-balance-#a78bfa
-        description: Account on C411, downloads paused under the Ratio floor
-        widget:
-          type: customapi
-          url: http://ratio:8000/summary
-          refreshInterval: 60000
-          mappings:
-            - field: account.ratio
-              label: Ratio
-              format: float
-            - field: account.left_gb
-              label: Before floor
-              format: float
-              suffix: " GB"
-            - field: account.zen
-              label: Zen
-              format: number
-            - field: account.week_uploaded_gb
-              label: Up, 7 days
-              format: float
-              suffix: " GB"
     - autobrr:
         icon: autobrr.svg
         description: IRC announces
@@ -150,11 +128,11 @@
           referrerPolicy: same-origin
           loadingStrategy: lazy
           refreshInterval: 600000
-    - Farm quests:
-        description: Quests of C411, Farm disk, earnings by Source
+    - Farm earnings:
+        description: Farm disk and earnings by Source
         widget:
           type: iframe
-          name: farm-quests
+          name: farm-earnings
           src:
             https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs?lang=fr&part=2
           classes: h-96

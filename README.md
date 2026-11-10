@@ -1892,7 +1892,8 @@ Discord. `-#` is the small grey text of Discord.
 
 The `discord-posts` service republishes these two files every day at 00:30, in
 the time zone of `TZ`, from the `main` branch that doco-cd deployed. A message
-then follows the repo by itself. A failure on one channel leaves the others
+then follows the repo by itself, and its footer gives the date of its last
+publication. A failure on one channel leaves the others
 alone and waits for the next night, as `docker compose logs discord-posts`
 shows.
 
@@ -2190,10 +2191,8 @@ shows the big figures of the account, among them the theoretical GB, the upload
 over a ratio of 1 plus the Zen balance, 1 GB per Zen and 1024 GB per full 1000
 Zen, and three curves on a fixed axis of 30 days: the Account ratio with the
 floor, the Zen paid each night with the balance, and the uploaded and downloaded
-totals. `?part=2` shows every step of the five challenges of the Seed and
-Specialization paths of the Swarm Keeper class, with its reward, the reached
-steps faded and the next one with its progress, then the disk of the Farm split
-by Source, and a table of what each Source earned since the Ledger began, most
+totals. `?part=2` shows the disk of the Farm split by Source, and a table of
+what each Source earned since the Ledger began, most
 uploaded first: its torrents, download, upload and ratio, then its download,
 upload and ratio of the last 7 days and its days in the Farm, with a total.
 `?part=disk` shows only the disk of the Farm, and `pad=<height>` adds a margin
@@ -2215,8 +2214,8 @@ above is fixed in `settings_from_env` of `services/ratio/ratio.py`.
 farm-report, `services/farm-report/report.py`, posts the board of ratio to a
 channel of the Discord server dedicated to the NAS, the one of the [Discord
 alerts](#discord-alerts), every hour. Its message holds two pictures, the first
-part of the board, the trends, and the Farm disk, without the challenges, in
-violet, or in rose when the downloads of C411 are paused under the Ratio floor.
+part of the board, the trends, and the Farm disk, in violet, or in rose when the
+downloads of C411 are paused under the Ratio floor.
 
 Each day at midnight, it posts a new message, then edits that one every hour
 until the next midnight. The message of the day before keeps its last state, so
@@ -2532,9 +2531,7 @@ local network can read it.
 Open `https://homepage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with
 `HOMEPAGE_PASSWORD`. The playback controls of Jellyfin stay off, so Homepage
 only reads the services. A tile whose service is down, or whose key is wrong,
-shows an error in place of its figures. The Ratio group shows the Account of the
-summary of ratio in one tile: its ratio, the download left before the floor, its
-Zen and its upload of the last 7 days. The board shows the Farm and the Quests.
+shows an error in place of its figures. The board shows the Farm.
 The tiles of Recyclarr, Caddy, LazyLibrarian and Indexarr show no figures, since
 Homepage has no widget for them.
 
