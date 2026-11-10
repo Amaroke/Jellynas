@@ -51,6 +51,16 @@ QUEST_CATEGORIES = {
     "Imprimante 3D": "108010",
 }
 ANIME = "102060,105070"
+HUNT_TERMS = {
+    FILMS: ("vostfr", "french", "multi", "documentaire", "court", "720p", "1080p", "s01", "concert", "spectacle"),
+    "Ebook": ("roman", "bd", "manga", "comics", "guide", "magazine", "collection", "epub", "pdf", "histoire"),
+    "Audio": ("flac", "mp3", "live", "jazz", "classique", "album", "ep", "single", "soundtrack", "best of", "rock", "rap"),
+    "Emulation": (
+        "nes", "nintendo", "sega", "game boy", "mega drive", "pack", "collection", "atari", "arcade", "mame",
+        "playstation", "wii", "gamecube", "psp",
+    ),
+    "Imprimante 3D": ("stl", "3mf", "bust", "figurine", "miniature", "cosplay", "terrain", "articulated"),
+}
 FILE_KINDS = {
     FILMS: {"mkv", "mp4", "avi", "m2ts", "ts", "mov", "wmv", "webm", "m4v"},
     "Ebook": {"epub", "pdf", "mobi", "azw3", "cbz", "cbr", "djvu", "fb2"},
@@ -210,8 +220,9 @@ class Prowlarr:
         fields = {"t": "search", "cat": "2000,5000", "limit": 100}
         return self.query(indexer, fields, now, self.tracker_seeders_in_peers)
 
-    def category(self, indexer, cats, now):
-        return self.query(indexer, {"t": "search", "cat": cats, "limit": 100}, now, self.tracker_seeders_in_peers)
+    def category(self, indexer, cats, now, term=""):
+        fields = {"t": "search", "cat": cats, "limit": 100, **({"q": term} if term else {})}
+        return self.query(indexer, fields, now, self.tracker_seeders_in_peers)
 
     def search(self, indexer, title, now):
         return self.query(indexer, {"t": "search", "q": re.sub(r"[._]+", " ", title), "limit": 100}, now, 1)
@@ -438,6 +449,7 @@ def load_state(path):
         "restore": state.get("restore", {}),
         "kinds": state.get("kinds", {}),
         "hunt_at": state.get("hunt_at", {}),
+        "hunt_terms": state.get("hunt_terms", {}),
         "daily": state.get("daily", []),
     }
 
@@ -1663,9 +1675,14 @@ def hunt_volume(qbt, prowlarr, settings, state, torrents, known, budget, now):
     held = [state["kinds"].get(t["hash"]) for t in torrents.values() if is_c411(state, settings, t)]
     counts = {name: held.count(name) for name in QUEST_CATEGORIES}
     kind, cats, filling = hunt_target(settings, state, counts, now)
-    releases = fetch(settings, lambda indexer: prowlarr.category(indexer, cats, now), f"{kind} of indexer")
+    term = ""
     if filling:
+        terms = ("", *HUNT_TERMS.get(kind, ()))
+        turn = state["hunt_terms"].get(kind, 0) % len(terms)
+        term = terms[turn]
+        state["hunt_terms"][kind] = turn + 1
         state["hunt_at"][kind] = now
+    releases = fetch(settings, lambda indexer: prowlarr.category(indexer, cats, now, term), f"{kind} of indexer")
     for release in pick_small(releases, known, rules["max_size"]):
         if budget["slots"] <= 0 or (filling and counts[kind] >= rules["per_category"]):
             return
