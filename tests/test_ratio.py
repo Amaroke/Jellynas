@@ -19,6 +19,7 @@ from ratio import (
     C411,
     DAY,
     GB,
+    HUNT_TERMS,
     QUEST_CATEGORIES,
     Prowlarr,
     QBittorrent,
@@ -158,6 +159,7 @@ class FakeProwlarr:
         self.feed = list(newest)
         self.hunt = hunt or {}
         self.hunts = []
+        self.terms = []
         self.twins = list(twins)
         self.files = files or {}
         self.throttle = throttle
@@ -178,8 +180,9 @@ class FakeProwlarr:
             raise Throttled(self.throttle, self.disabled)
         return list(self.feed)
 
-    def category(self, indexer, cats, now):
+    def category(self, indexer, cats, now, term=""):
         self.hunts.append(cats)
+        self.terms.append(term)
         return list(self.hunt.get(cats, []))
 
     def search(self, indexer, title, now):
@@ -279,7 +282,7 @@ def empty_state(**changes):
     return {
         "transfers": {}, "hunted": {}, "twins": {}, "free": {}, "checked": {}, "paused": False,
         "sources": {}, "history": {}, "zen": {}, "report": {}, "account": [], "received": [], "held": None, "backoff_until": 0,
-        "stuck": {}, "restore": {}, "kinds": {}, "hunt_at": {}, "daily": [], "given_up": {}, **changes,
+        "stuck": {}, "restore": {}, "kinds": {}, "hunt_at": {}, "hunt_terms": {}, "daily": [], "given_up": {}, **changes,
     }
 
 
@@ -732,6 +735,30 @@ class VolumeHunt(unittest.TestCase):
         run(qbt, prowlarr, empty_state(kinds=kinds, hunt_at={"Films & Vidéos": NOW - 60}))
         self.assertEqual(prowlarr.hunts, [QUEST_CATEGORIES["Ebook"]])
         self.assertEqual(qbt.added, [("a", "farm")])
+
+    def test_a_short_category_is_searched_by_a_new_term_each_run(self):
+        held, kinds = filled("Ebook", 25)
+        for name in ("Films & Vidéos", "Audio", "Imprimante 3D"):
+            more, names = filled(name, 25)
+            held += more
+            kinds.update(names)
+        prowlarr = FakeProwlarr()
+        state = empty_state(kinds=kinds)
+        for minutes in (0, 10, 20):
+            run(FakeQBittorrent(held), prowlarr, state, now=NOW + 60 * minutes)
+        terms = HUNT_TERMS["Emulation"]
+        self.assertEqual(prowlarr.hunts, [QUEST_CATEGORIES["Emulation"]] * 3)
+        self.assertEqual(prowlarr.terms, ["", terms[0], terms[1]])
+
+    def test_the_terms_of_a_category_start_over_after_the_last(self):
+        held, kinds = filled("Ebook", 25)
+        for name in ("Films & Vidéos", "Audio", "Imprimante 3D"):
+            more, names = filled(name, 25)
+            held += more
+            kinds.update(names)
+        prowlarr = FakeProwlarr()
+        run(FakeQBittorrent(held), prowlarr, empty_state(kinds=kinds, hunt_terms={"Emulation": len(HUNT_TERMS["Emulation"]) + 1}))
+        self.assertEqual(prowlarr.terms, [""])
 
     def test_once_every_category_holds_25_the_hunt_concentrates_on_anime(self):
         held, kinds = all_filled()
