@@ -1,3 +1,4 @@
+---
 services:
   backup:
     image: offen/docker-volume-backup:v2.50.1
@@ -13,8 +14,10 @@ services:
       BACKUP_FILENAME: appdata-%Y-%m-%dT%H-%M-%S.tar.gz
       BACKUP_PRUNING_PREFIX: appdata-
       BACKUP_RETENTION_DAYS: "30"
-      BACKUP_EXCLUDE_REGEXP: ^/backup/appdata/(jellyfin/cache|jellyfin/data/metadata|jellyfin/data/transcodes|tdarr/cache|tdarr/logs)/
-      NOTIFICATION_URLS: discord://${DISCORD_ALERTS_WEBHOOK_TOKEN}@${DISCORD_ALERTS_WEBHOOK_ID}
+      BACKUP_EXCLUDE_REGEXP:
+        ^/backup/appdata/(jellyfin/cache|jellyfin/data/metadata|jellyfin/data/transcodes|tdarr/cache|tdarr/logs)/
+      NOTIFICATION_URLS:
+        discord://${DISCORD_ALERTS_WEBHOOK_TOKEN}@${DISCORD_ALERTS_WEBHOOK_ID}
       NOTIFICATION_LEVEL: error
     labels:
       kuma.backup.docker.name: Backup

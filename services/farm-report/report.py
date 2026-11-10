@@ -1,11 +1,13 @@
 import datetime
+import http.server
 import json
+import logging
 import os
 import re
 import subprocess
 import sys
 import tempfile
-import time
+import threading
 import urllib.error
 import urllib.request
 import uuid
@@ -22,6 +24,8 @@ API = "https://discord.com/api/v10/webhooks"
 USER_AGENT = "DiscordBot (https://github.com/Amaroke/Jellynas, 1.0)"
 VIOLET = 0xA78BFA
 ROSE = 0xFB7185
+
+LOG = logging.getLogger("farm-report")
 
 
 def required(env, name):
@@ -172,16 +176,38 @@ def report(webhook, state_path=STATE, now=None, summary_reader=read_summary, sho
         print(f"Farm report {action}, message {after['message_id']} of {after['day']}")
     except urllib.error.HTTPError as error:
         print(f"Cannot publish the Farm report, the next try is in one hour: {error} {error.read()[:300]!r}")
-    except Exception as error:
-        print(f"Cannot publish the Farm report, the next try is in one hour: {error}")
+    except Exception:
+        LOG.exception("Cannot publish the Farm report, the next try is in one hour")
+
+
+def serve(wake, port=8000):
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            if self.path != "/refresh":
+                self.send_error(404)
+                return
+            wake.set()
+            self.send_response(202)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("", port), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
 
 
 def main():
+    wake = threading.Event()
+    serve(wake)
     webhook = Webhook(required(os.environ, "DISCORD_FARM_WEBHOOK_ID"), required(os.environ, "DISCORD_FARM_WEBHOOK_TOKEN"))
     while True:
         report(webhook)
         now = datetime.datetime.now().astimezone()
-        time.sleep(max(1.0, (next_hour(now) - now).total_seconds() + 30))
+        wake.wait(max(1.0, (next_hour(now) - now).total_seconds() + 30))
+        wake.clear()
 
 
 if __name__ == "__main__":

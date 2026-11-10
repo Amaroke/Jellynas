@@ -1,3 +1,4 @@
+---
 services:
   uptime-kuma:
     image: louislam/uptime-kuma:2.5.9
@@ -44,7 +45,11 @@ services:
       kuma.nas.docker_host.path: http://socket-proxy:2375
       kuma.discord.notification.name: discord
       kuma.discord.notification.active: "true"
-      kuma.discord.notification.config: '{"type": "discord", "discordWebhookUrl": "https://discord.com/api/webhooks/${DISCORD_ALERTS_WEBHOOK_ID}/${DISCORD_ALERTS_WEBHOOK_TOKEN}", "discordUsername": "Uptime Kuma", "applyExisting": false}'
+      kuma.discord.notification.config: >-
+        {"type": "discord",
+        "discordWebhookUrl":
+        "https://discord.com/api/webhooks/${DISCORD_ALERTS_WEBHOOK_ID}/${DISCORD_ALERTS_WEBHOOK_TOKEN}",
+        "discordUsername": "Uptime Kuma", "applyExisting": false}
       kuma.autokuma.docker.name: AutoKuma
     volumes:
       - ${APPDATA_ROOT}/autokuma:/data

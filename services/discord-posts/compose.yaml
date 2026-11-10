@@ -1,0 +1,31 @@
+---
+services:
+  discord-posts:
+    image: python:3.15.2-slim-trixie
+    container_name: discord-posts
+    restart: unless-stopped
+    command: ["python", "-u", "/app/scripts/discord_post.py", "--daily"]
+    networks:
+      - internal-zone
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    user: ${PUID}:${PGID}
+    mem_limit: 128m
+    environment:
+      TZ: ${TZ}
+      APPDATA_ROOT: /state
+      DOMAIN: ${DOMAIN}
+      CADDY_HTTPS_PORT: ${CADDY_HTTPS_PORT:-443}
+      DISCORD_LINKS_WEBHOOK_ID: ${DISCORD_LINKS_WEBHOOK_ID}
+      DISCORD_LINKS_WEBHOOK_TOKEN: ${DISCORD_LINKS_WEBHOOK_TOKEN}
+      DISCORD_NEWS_WEBHOOK_ID: ${DISCORD_NEWS_WEBHOOK_ID}
+      DISCORD_NEWS_WEBHOOK_TOKEN: ${DISCORD_NEWS_WEBHOOK_TOKEN}
+    labels:
+      kuma.discord-posts.docker.name: Discord messages
+      docker-volume-backup.stop-during-backup: "true"
+    volumes:
+      - ../../scripts:/app/scripts:ro
+      - ../../discord-posts:/app/discord-posts:ro
+      - ${APPDATA_ROOT}/discord-posts:/state/discord-posts

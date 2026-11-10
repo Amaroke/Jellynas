@@ -1,3 +1,4 @@
+---
 services:
   bazarr:
     image: lscr.io/linuxserver/bazarr:v1.6.2-ls371
@@ -23,6 +24,13 @@ services:
       - ${DATA_ROOT}/media/anime:/data/media/anime
       - ./tdarr_requeue.py:/scripts/tdarr_requeue.py:ro
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:6767/api/system/ping"]
+      test:
+        - "CMD"
+        - "curl"
+        - "--fail"
+        - "--silent"
+        - "--output"
+        - "/dev/null"
+        - "http://localhost:6767/api/system/ping"
       timeout: 10s
       start_period: 30s

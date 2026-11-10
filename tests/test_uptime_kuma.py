@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parent.parent
 UPTIME_KUMA = ROOT / "services" / "uptime-kuma" / "compose.yaml"
 WITHOUT_MONITOR = {"uptime-kuma"}
 MONITOR_TYPES = {"http", "docker"}
-LABEL = re.compile(r"^      kuma\.([a-z0-9-]+)\.([a-z_]+)\.([a-z_]+): (.*)$")
+LABEL = re.compile(r"^      kuma\.([a-z0-9-]+)\.([a-z_]+)\.([a-z_]+):(?: (.*))?$")
 
 
 def included_compose_files():
@@ -22,7 +22,7 @@ def unquoted(value):
 
 
 def labels_by_service(path):
-    services, section, service = {}, None, None
+    services, section, service, last = {}, None, None, None
     for line in path.read_text(encoding="utf-8").splitlines():
         top = re.match(r"^([a-z_]+):", line)
         if top:
@@ -35,7 +35,16 @@ def labels_by_service(path):
             continue
         label = LABEL.match(line)
         if service and label:
-            services[service].append((label.group(1), label.group(2), label.group(3), unquoted(label.group(4))))
+            value = label.group(4) or ""
+            services[service].append([label.group(1), label.group(2), label.group(3), value])
+            last = services[service][-1]
+            continue
+        if last and line.startswith("        "):
+            last[3] = line.strip() if last[3] in ("", ">-") else f"{last[3]} {line.strip()}"
+            continue
+        last = None
+    for service, labels in services.items():
+        services[service] = [(entity_id, kind, key, unquoted(value)) for entity_id, kind, key, value in labels]
     return services
 
 

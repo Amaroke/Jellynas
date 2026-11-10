@@ -1,3 +1,4 @@
+---
 services:
   cross-seed:
     image: ghcr.io/cross-seed/cross-seed:6.13.9
@@ -29,6 +30,13 @@ services:
       - ./config.js:/config/config.js:ro
       - ${DATA_ROOT}/torrents:/data/torrents
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:2468/api/ping"]
+      test:
+        - "CMD"
+        - "curl"
+        - "--fail"
+        - "--silent"
+        - "--output"
+        - "/dev/null"
+        - "http://localhost:2468/api/ping"
       timeout: 10s
       start_period: 30s

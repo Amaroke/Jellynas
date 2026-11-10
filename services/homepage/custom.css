@@ -8,3 +8,12 @@ li.service[data-name="Farm quests"] .service-block {
   background: transparent !important;
   margin: 0 !important;
 }
+
+li.service[data-name="Actions"] .service-title {
+  display: none;
+}
+
+li.service[data-name="Actions"] .service-block {
+  background: transparent !important;
+  margin: 0 !important;
+}

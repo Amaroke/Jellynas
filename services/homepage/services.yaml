@@ -1,11 +1,24 @@
+---
+- Actions rapides:
+    - Actions:
+        widget:
+          type: iframe
+          name: quick-actions
+          src:
+            https://actions.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/actions
+          classes: h-24
+          referrerPolicy: same-origin
+
 - Watch:
     - Jellyfin:
         icon: jellyfin.svg
         description: Streams the Library
-        href: https://jellyfin.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://jellyfin.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: jellyfin
-          url: https://jellyfin.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+          url:
+            https://jellyfin.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
           key: '{{HOMEPAGE_VAR_JELLYFIN_API_KEY}}'
           version: 2
           enableBlocks: true
@@ -17,7 +30,8 @@
     - Seerr:
         icon: seerr.svg
         description: Requests of the Friends
-        href: https://seerr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://seerr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: seerr
           url: https://seerr.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
@@ -26,8 +40,10 @@
     - Aurral:
         icon: aurral.png
         description: Music discovery and playlists of the Friends
-        href: https://aurral.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
-        siteMonitor: https://aurral.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/api/health/live
+        href:
+          https://aurral.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        siteMonitor:
+          https://aurral.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/api/health/live
     - Music bot:
         icon: mdi-music-circle-#ab47bc
         description: Music of the Library on Discord
@@ -50,7 +66,8 @@
     - qBittorrent:
         icon: qbittorrent.svg
         description: Torrents, through the VPN only
-        href: https://qbittorrent.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://qbittorrent.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: qbittorrent
           url: http://gluetun:8080
@@ -69,7 +86,8 @@
     - slskd:
         icon: slskd.svg
         description: Soulseek, through the VPN only
-        href: https://slskd.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://slskd.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: slskd
           url: http://gluetun:5030
@@ -102,7 +120,8 @@
     - autobrr:
         icon: autobrr.svg
         description: IRC announces
-        href: https://autobrr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://autobrr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: autobrr
           url: http://autobrr:7474
@@ -115,6 +134,9 @@
     - Farm report:
         icon: mdi-message-image-#a78bfa
         description: Board of the Farm on Discord, every hour
+    - Discord posts:
+        icon: mdi-message-text-#a78bfa
+        description: Republishes the Discord messages, every day at 00:30
 
 - Graphs:
     - Farm board:
@@ -122,7 +144,8 @@
         widget:
           type: iframe
           name: farm-board
-          src: https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs?lang=fr&part=1
+          src:
+            https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs?lang=fr&part=1
           classes: h-96
           referrerPolicy: same-origin
           loadingStrategy: lazy
@@ -132,7 +155,8 @@
         widget:
           type: iframe
           name: farm-quests
-          src: https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs?lang=fr&part=2
+          src:
+            https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs?lang=fr&part=2
           classes: h-96
           referrerPolicy: same-origin
           loadingStrategy: lazy
@@ -142,16 +166,22 @@
     - Prowlarr:
         icon: prowlarr.svg
         description: Indexers
-        href: https://prowlarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://prowlarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: prowlarr
           url: http://prowlarr:9696
           key: '{{HOMEPAGE_VAR_PROWLARR_API_KEY}}'
-          fields: ["numberOfGrabs", "numberOfQueries", "numberOfFailGrabs", "numberOfFailQueries"]
+          fields:
+            - numberOfGrabs
+            - numberOfQueries
+            - numberOfFailGrabs
+            - numberOfFailQueries
     - Radarr:
         icon: radarr.svg
         description: Movies
-        href: https://radarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://radarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: radarr
           url: http://radarr:7878
@@ -161,7 +191,8 @@
     - Sonarr:
         icon: sonarr.svg
         description: Shows and anime
-        href: https://sonarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://sonarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: sonarr
           url: http://sonarr:8989
@@ -171,7 +202,8 @@
     - Lidarr:
         icon: lidarr.svg
         description: Music
-        href: https://lidarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://lidarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: lidarr
           url: http://lidarr:8686
@@ -180,11 +212,13 @@
     - LazyLibrarian:
         icon: lazylibrarian.png
         description: Books
-        href: https://lazylibrarian.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://lazylibrarian.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
     - Suwayomi:
         icon: suwayomi.svg
         description: Manga, through the VPN only
-        href: https://suwayomi.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://suwayomi.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: suwayomi
           url: http://gluetun:4567
@@ -194,7 +228,8 @@
     - Bazarr:
         icon: bazarr.svg
         description: Subtitles
-        href: https://bazarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://bazarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: bazarr
           url: http://bazarr:6767
@@ -202,7 +237,8 @@
     - Tdarr:
         icon: tdarr.svg
         description: MKV H265 1080p
-        href: https://tdarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://tdarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: tdarr
           url: http://tdarr:8265
@@ -220,7 +256,8 @@
     - Beszel:
         icon: beszel.svg
         description: Resources of the Host and the containers
-        href: https://beszel.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://beszel.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: beszel
           url: http://beszel:8090
@@ -232,7 +269,8 @@
     - Uptime Kuma:
         icon: uptime-kuma.svg
         description: Checks of every service
-        href: https://uptime-kuma.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://uptime-kuma.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         widget:
           type: uptimekuma
           url: http://uptime-kuma:3001
@@ -241,7 +279,8 @@
     - Dozzle:
         icon: dozzle.svg
         description: Logs of every container
-        href: https://dozzle.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://dozzle.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         siteMonitor: http://dozzle:8080/healthcheck
     - Backup:
         icon: mdi-archive-arrow-down-#00897b
@@ -249,22 +288,26 @@
     - Indexarr:
         icon: mdi-file-table-box-multiple-#00897b
         description: Catalog of the Library files, read-only
-        href: https://indexarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://indexarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         siteMonitor: http://indexarr:8787/health
 
 - Hosting:
     - TrueNAS:
         icon: truenas-scale.svg
         description: Host, pool and datasets
-        href: https://truenas.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://truenas.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
     - Caddy:
         icon: caddy.svg
         description: HTTPS proxy, the only published port
     - Authelia:
         icon: authelia.svg
         description: Sign-in of Aurral with the Account
-        siteMonitor: https://auth.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/api/health
+        siteMonitor:
+          https://auth.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/api/health
     - lldap:
         icon: lldap.svg
         description: Accounts of the Friends and the Admin
-        href: https://lldap.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
+        href:
+          https://lldap.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
