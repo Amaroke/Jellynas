@@ -1,10 +1,19 @@
 li.service[data-name="Farm board"] .service-title,
-li.service[data-name="Farm quests"] .service-title {
+li.service[data-name="Farm earnings"] .service-title {
   display: none;
 }
 
 li.service[data-name="Farm board"] .service-block,
-li.service[data-name="Farm quests"] .service-block {
+li.service[data-name="Farm earnings"] .service-block {
+  background: transparent !important;
+  margin: 0 !important;
+}
+
+li.service[data-name="Actions"] .service-title {
+  display: none;
+}
+
+li.service[data-name="Actions"] .service-block {
   background: transparent !important;
   margin: 0 !important;
 }

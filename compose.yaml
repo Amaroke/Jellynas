@@ -1,3 +1,4 @@
+---
 name: jellynas
 
 include:
@@ -26,6 +27,7 @@ include:
   - services/cross-seed/compose.yaml
   - services/ratio/compose.yaml
   - services/farm-report/compose.yaml
+  - services/discord-posts/compose.yaml
   - services/beszel/compose.yaml
   - services/uptime-kuma/compose.yaml
   - services/dozzle/compose.yaml

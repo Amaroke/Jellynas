@@ -1,3 +1,4 @@
+---
 services:
   seerr:
     image: ghcr.io/seerr-team/seerr:v3.5.1
@@ -16,12 +17,18 @@ services:
       LOG_LEVEL: info
     labels:
       kuma.seerr.http.name: Seerr
-      kuma.seerr.http.url: https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/v1/settings/public
+      kuma.seerr.http.url:
+        https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/v1/settings/public
       kuma.seerr.http.expiry_notification: "true"
       docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/seerr:/app/config
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:5055/api/v1/settings/public"]
+      test:
+        - "CMD"
+        - "wget"
+        - "--quiet"
+        - "--spider"
+        - "http://localhost:5055/api/v1/settings/public"
       timeout: 10s
       start_period: 30s

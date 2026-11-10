@@ -1,6 +1,7 @@
 # Triage Labels
 
-The skills speak in terms of five triage roles. This repo uses the same label strings:
+The skills speak in terms of five triage roles. This repo uses the same label
+strings:
 
 | Label             | Meaning                                  |
 | ----------------- | ---------------------------------------- |

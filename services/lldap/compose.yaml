@@ -1,3 +1,4 @@
+---
 services:
   lldap:
     image: lldap/lldap:v0.6.3-alpine-rootless
@@ -26,6 +27,11 @@ services:
     volumes:
       - ${APPDATA_ROOT}/lldap:/data
     healthcheck:
-      test: ["CMD", "/app/lldap", "healthcheck", "--config-file", "/data/lldap_config.toml"]
+      test:
+        - "CMD"
+        - "/app/lldap"
+        - "healthcheck"
+        - "--config-file"
+        - "/data/lldap_config.toml"
       timeout: 10s
       start_period: 30s

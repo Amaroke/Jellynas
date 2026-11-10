@@ -38,10 +38,11 @@ def all_services():
 
 
 def setting(lines, key):
-    for line in lines:
-        found = re.match(rf"^      {re.escape(key)}: (.*)$", line)
+    for index, line in enumerate(lines):
+        found = re.match(rf"^      {re.escape(key)}:(?: (.*))?$", line)
         if found:
-            return found.group(1).strip("'\"")
+            value = found.group(1) or lines[index + 1].strip()
+            return value.strip("'\"")
     return None
 
 

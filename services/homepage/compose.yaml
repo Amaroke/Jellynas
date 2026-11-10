@@ -1,3 +1,4 @@
+---
 services:
   homepage:
     image: ghcr.io/gethomepage/homepage:v2.7.0
@@ -11,8 +12,10 @@ services:
       PUID: ${PUID}
       PGID: ${PGID}
       LOG_TARGETS: stdout
-      HOMEPAGE_ALLOWED_HOSTS: homepage.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443},homepage.lan.${DOMAIN},homepage:3000
-      HOMEPAGE_EXTERNAL_URL: https://homepage.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      HOMEPAGE_ALLOWED_HOSTS:
+        homepage.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443},homepage.lan.${DOMAIN},homepage:3000
+      HOMEPAGE_EXTERNAL_URL:
+        https://homepage.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       HOMEPAGE_AUTH_ENABLED: "true"
       HOMEPAGE_AUTH_PASSWORD: ${HOMEPAGE_PASSWORD}
       HOMEPAGE_AUTH_SECRET: ${HOMEPAGE_AUTH_SECRET}
@@ -47,6 +50,11 @@ services:
       - ./background.svg:/app/public/images/background.svg:ro
       - ${DATA_ROOT}/.homepage:/data-disk:ro
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:3000/api/healthcheck"]
+      test:
+        - "CMD"
+        - "wget"
+        - "--quiet"
+        - "--spider"
+        - "http://127.0.0.1:3000/api/healthcheck"
       timeout: 10s
       start_period: 30s

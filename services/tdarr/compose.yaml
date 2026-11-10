@@ -1,3 +1,4 @@
+---
 services:
   tdarr:
     image: ghcr.io/haveagitgat/tdarr:3.06.00
@@ -33,6 +34,13 @@ services:
       - ${DATA_ROOT}/media/shows:/data/media/shows
       - ${DATA_ROOT}/media/anime:/data/media/anime
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8265/api/v2/status"]
+      test:
+        - "CMD"
+        - "curl"
+        - "--fail"
+        - "--silent"
+        - "--output"
+        - "/dev/null"
+        - "http://localhost:8265/api/v2/status"
       timeout: 10s
       start_period: 60s

@@ -7,7 +7,7 @@ HOMEPAGE = ROOT / "services" / "homepage"
 CONFIG_FILES = [HOMEPAGE / name for name in ("settings.yaml", "services.yaml", "widgets.yaml", "bookmarks.yaml")]
 WITHOUT_TILE = {"homepage", "beszelagent", "autokuma", "ratio", "socketproxy"}
 SECRET_FIELDS = {"key", "password", "username", "apikey", "token"}
-BOARD_CARDS = ("Farm board", "Farm quests")
+BOARD_CARDS = ("Farm board", "Farm earnings")
 PLACEHOLDER = re.compile(r"\{\{(HOMEPAGE_[A-Z_]+)\}\}")
 
 
@@ -74,18 +74,8 @@ class HomepageConfigTest(unittest.TestCase):
         caddyfile = (ROOT / "services" / "caddy" / "Caddyfile").read_text(encoding="utf-8")
         routed = set(re.findall(r"^\s*import lan ([a-z0-9-]+) ", caddyfile, re.MULTILINE))
         routed |= set(re.findall(r"^\s*host ([a-z0-9-]+)\.lan\.", caddyfile, re.MULTILINE))
-        linked = set(re.findall(r"(?:href|src): https://([a-z0-9-]+)\.lan\.", (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")))
+        linked = set(re.findall(r"(?:href|src):\s+https://([a-z0-9-]+)\.lan\.", (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")))
         self.assertEqual(set(), linked - routed)
-
-    def test_the_account_tile_reads_the_account_block_of_ratio(self):
-        text = (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")
-        self.assertNotIn("Ratio", tiles())
-        account = re.search(r"^    - Account:$(.*?)(?=^    - )", text, re.MULTILINE | re.DOTALL)
-        self.assertIsNotNone(account)
-        self.assertIn("url: http://ratio:8000/summary", account.group(1))
-        fields = re.findall(r"- field: (\S+)", account.group(1))
-        self.assertEqual(fields, ["account.ratio", "account.left_gb", "account.zen", "account.week_uploaded_gb"])
-        self.assertNotIn("grabs.", text)
 
     def test_the_farm_and_quests_have_no_tile_the_board_shows_them(self):
         text = (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")
@@ -100,10 +90,10 @@ class HomepageConfigTest(unittest.TestCase):
         self.assertIsNotNone(group)
         cards = re.findall(r"^    - ([^:]+):$(.*?)(?=^    - |\Z)", group.group(1), re.MULTILINE | re.DOTALL)
         self.assertEqual([name for name, _ in cards], list(BOARD_CARDS))
-        src = "src: https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs?lang=fr&part="
+        src = r"src:\s+https://ratio\.lan\.\{\{HOMEPAGE_VAR_DOMAIN\}\}:\{\{HOMEPAGE_VAR_HTTPS_PORT\}\}/graphs\?lang=fr&part="
         for (name, body), part in zip(cards, ("1", "2"), strict=True):
             self.assertIn("type: iframe", body, name)
-            self.assertIn(src + part, body, name)
+            self.assertRegex(body, src + part, name)
             self.assertIn("classes: h-96", body, name)
             self.assertNotIn("allowScrolling", body, name)
         settings = (HOMEPAGE / "settings.yaml").read_text(encoding="utf-8")

@@ -1,3 +1,4 @@
+---
 services:
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:5.3.0_v2.1.2-ls486
@@ -22,6 +23,13 @@ services:
       - ${APPDATA_ROOT}/qbittorrent:/config
       - ${DATA_ROOT}/torrents:/data/torrents
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8080"]
+      test:
+        - "CMD"
+        - "curl"
+        - "--fail"
+        - "--silent"
+        - "--output"
+        - "/dev/null"
+        - "http://localhost:8080"
       timeout: 10s
       start_period: 30s

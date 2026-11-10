@@ -1,3 +1,4 @@
+---
 services:
   indexarr:
     image: ghcr.io/techn0phil/indexarr:1.1.1
@@ -35,6 +36,14 @@ services:
       - ${DATA_ROOT}/media/shows:/data/media/shows:ro
       - ${DATA_ROOT}/media/anime:/data/media/anime:ro
     healthcheck:
-      test: ["CMD", "busybox", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://127.0.0.1:8787/health"]
+      test:
+        - "CMD"
+        - "busybox"
+        - "wget"
+        - "--quiet"
+        - "--tries=1"
+        - "-O"
+        - "/dev/null"
+        - "http://127.0.0.1:8787/health"
       timeout: 10s
       start_period: 30s
