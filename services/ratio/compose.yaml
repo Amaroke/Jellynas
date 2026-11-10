@@ -26,6 +26,7 @@ services:
       RATIO_FLOOR: ${RATIO_FLOOR:-}
       RATIO_VOLUME_DAILY_GB: ${RATIO_VOLUME_DAILY_GB:-}
       RATIO_MAX_DOWNLOADING: ${RATIO_MAX_DOWNLOADING:-}
+      RATIO_VOLUME_PER_CATEGORY: ${RATIO_VOLUME_PER_CATEGORY:-}
     labels:
       kuma.ratio.docker.name: ratio
       docker-volume-backup.stop-during-backup: "true"

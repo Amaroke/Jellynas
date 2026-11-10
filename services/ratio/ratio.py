@@ -46,7 +46,7 @@ FILMS = "Films & Vidéos"
 QUEST_CATEGORIES = {
     FILMS: "102000,102010,102030,102050,102060,102070,102080,102090,105000,105060,105070,105080",
     "Ebook": "107000,107010,107020,107030",
-    "Audio": "103000,103010,103030,103050",
+    "Audio": "103010",
     "Emulation": "101000,101030,101040,101080,101090",
     "Imprimante 3D": "108010",
 }
@@ -1779,7 +1779,11 @@ def settings_from_env():
         "farm_size": positive("RATIO_MAX_SIZE_GB", 100) * GB,
         "floor": positive("RATIO_FLOOR", 1.2),
         "paused_profile": "Paused",
-        "volume": {"max_size": GB, "per_category": 25, "daily": number("RATIO_VOLUME_DAILY_GB", 5) * GB},
+        "volume": {
+            "max_size": GB,
+            "per_category": int(positive("RATIO_VOLUME_PER_CATEGORY", 30)),
+            "daily": number("RATIO_VOLUME_DAILY_GB", 5) * GB,
+        },
         "free_max_size": 5 * GB,
         "min_seeding": number("RATIO_MIN_SEEDING_DAYS") * DAY,
         "public_seeding": 14 * DAY,
