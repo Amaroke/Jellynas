@@ -321,7 +321,7 @@ Jellyfin, Seerr, Aurral and Authelia face the internet, so a flaw in one of them
 | `identity-zone` | Caddy, Authelia, lldap                                         |
 | `internal-zone` | every other service, Caddy, Radarr, Sonarr and Lidarr included |
 
-qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal zone, and the Beszel agent the network of the Host. A service that needs Jellyfin, Seerr, Aurral or Authelia from another zone, such as Homepage, Uptime Kuma, the Music bot, or Aurral signing in with Authelia, reaches it through Caddy at its public name, so the zones only open towards the public services, never from them. lldap speaks LDAP, which Caddy cannot carry, so it sits in the zones of Jellyfin and of Authelia, the only two services that read the Accounts, and has no public name. `python3 -m unittest` checks the members of each zone.
+qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal zone, and the Beszel agent the network of the Host. A service that needs Jellyfin, Seerr, Aurral or Authelia from another zone, such as Homepage, Uptime Kuma, the Music bot, or Aurral signing in with Authelia, reaches it through Caddy at its public name, so the zones only open towards the public services, never from them. lldap speaks LDAP, which Caddy cannot carry, so it sits in the zones of Jellyfin and of Authelia, the only two services that read the Accounts, and has no public name. The zones hand out IPv6 addresses too, and Jellyfin tries them first, so lldap listens on `::`. `python3 -m unittest` checks the members of each zone.
 
 Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS provider, swap the `caddy-dns/ovh` module in `services/caddy/Dockerfile` for its own, and its settings in the `acme_dns` and `dynamic_dns` blocks of `services/caddy/Caddyfile` and in `.env`.
 
@@ -531,22 +531,23 @@ Open `https://lldap.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `admin` an
 1. In Jellyfin, Dashboard > Plugins > Catalog, install "LDAP Authentication" and restart Jellyfin.
 2. In Dashboard > Plugins > LDAP Authentication, set:
 
-   | Setting                   | Value                                                 |
-   | ------------------------- | ----------------------------------------------------- |
-   | LDAP Server               | `lldap`                                               |
-   | LDAP Port                 | `3890`                                                |
-   | Secure LDAP, StartTLS     | unchecked, lldap never leaves the zone of Jellyfin    |
-   | LDAP Bind User            | `uid=jellyfin,ou=people,dc=jellynas`                  |
-   | LDAP Bind User Password   | the password of `jellyfin`                            |
-   | LDAP Base DN for searches | `ou=people,dc=jellynas`                               |
-   | LDAP Search Filter        | `(memberof=cn=jellynas_users,ou=groups,dc=jellynas)`  |
-   | LDAP Search Attributes    | `uid, mail`                                           |
-   | LDAP Uid Attribute        | `uid`                                                 |
-   | LDAP Username Attribute   | `uid`                                                 |
-   | LDAP Admin Base DN        | `ou=people,dc=jellynas`                               |
-   | LDAP Admin Filter         | `(memberof=cn=jellynas_admins,ou=groups,dc=jellynas)` |
-   | Enable User Creation      | checked                                               |
-   | Allow Password Change     | unchecked                                             |
+   | Setting                        | Value                                                 |
+   | ------------------------------ | ----------------------------------------------------- |
+   | LDAP Server                    | `lldap`                                               |
+   | LDAP Port                      | `3890`                                                |
+   | Secure LDAP, StartTLS          | unchecked, lldap never leaves the zone of Jellyfin    |
+   | LDAP Bind User                 | `uid=jellyfin,ou=people,dc=jellynas`                  |
+   | LDAP Bind User Password        | the password of `jellyfin`                            |
+   | LDAP Base DN for searches      | `ou=people,dc=jellynas`                               |
+   | LDAP Search Filter             | `(memberof=cn=jellynas_users,ou=groups,dc=jellynas)`  |
+   | LDAP Search Attributes         | `uid, mail`                                           |
+   | LDAP Uid Attribute             | `uid`                                                 |
+   | LDAP Username Attribute        | `uid`                                                 |
+   | LDAP Admin Base DN             | `ou=people,dc=jellynas`                               |
+   | LDAP Admin Filter              | `(memberof=cn=jellynas_admins,ou=groups,dc=jellynas)` |
+   | Enable User Creation           | checked                                               |
+   | Enable access to all libraries | checked                                               |
+   | Allow Password Change          | unchecked                                             |
 
 3. Click "Save and Test LDAP Server Settings", then "Save and Test LDAP Filter Settings".
 4. For each Jellyfin user that existed before lldap, open it in Dashboard > Users and set "Authentication Provider" to "LDAP-Authentication". Their watch history stays, and they sign in with their password of lldap from now on.

@@ -14,6 +14,8 @@ services:
     environment:
       TZ: ${TZ}
       LLDAP_LDAP_BASE_DN: dc=jellynas
+      LLDAP_LDAP_HOST: "::"
+      LLDAP_HTTP_HOST: "::"
       LLDAP_HTTP_URL: https://lldap.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       LLDAP_JWT_SECRET: ${LLDAP_JWT_SECRET}
       LLDAP_KEY_SEED: ${LLDAP_KEY_SEED}
