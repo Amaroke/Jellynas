@@ -500,7 +500,11 @@ Requires [Jellyfin](#jellyfin).
 
 Each Friend and the Admin has a single Account, kept in [lldap](https://github.com/lldap/lldap), a small LDAP directory with a web UI. Jellyfin checks every password against lldap through its LDAP plugin, which works in every app, TV and phone included, and Seerr signs in through Jellyfin. [Authelia](https://www.authelia.com) reads the same Accounts and signs the Friends in to Aurral with OpenID Connect, on `auth.<DOMAIN>`. Authentik or Keycloak can replace both, with more services to run. Neither Seerr nor the Jellyfin apps speak OpenID Connect, which is why Jellyfin reads lldap directly.
 
-Only the Admin creates an Account or changes a password, in lldap, from the local network. Authelia has no email to send, so it offers no password reset, and after 5 wrong passwords in 10 minutes it refuses the Account for an hour.
+Only the Admin creates an Account or changes a password, in lldap, from the local network. Authelia has no email to send, so it offers no password reset, and after 5 wrong passwords in 10 minutes it refuses the Account for an hour. To lift the ban sooner, for example once the password is right:
+
+```sh
+docker exec authelia authelia storage bans user revoke <username>
+```
 
 ### Keys of Authelia
 
