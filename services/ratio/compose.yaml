@@ -25,6 +25,7 @@ services:
       C411_PROFILE_API_KEY: ${C411_PROFILE_API_KEY:-}
       RATIO_FLOOR: ${RATIO_FLOOR:-}
       RATIO_VOLUME_DAILY_GB: ${RATIO_VOLUME_DAILY_GB:-}
+      RATIO_MAX_DOWNLOADING: ${RATIO_MAX_DOWNLOADING:-}
     labels:
       kuma.ratio.docker.name: ratio
       docker-volume-backup.stop-during-backup: "true"

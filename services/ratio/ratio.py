@@ -1766,7 +1766,7 @@ def settings_from_env():
         "free_max_size": 5 * GB,
         "min_seeding": number("RATIO_MIN_SEEDING_DAYS") * DAY,
         "public_seeding": 14 * DAY,
-        "max_downloading": 5,
+        "max_downloading": int(positive("RATIO_MAX_DOWNLOADING", 2)),
         "twin_lookups": 10,
         "twin_max_age_hours": 24,
         "twin_min_leechers": 1,
