@@ -491,7 +491,9 @@ Kuma, the Music bot, or Aurral signing in with Authelia, reaches it through
 Caddy at its public name, so the zones only open towards the public services,
 never from them. lldap speaks LDAP, which Caddy cannot carry, so it sits in the
 zones of Jellyfin and of Authelia, the only two services that read the Accounts,
-and has no public name. `python3 -m unittest` checks the members of each zone.
+and has no public name. The zones hand out IPv6 addresses too, and Jellyfin
+tries them first, so lldap listens on `::`. `python3 -m unittest` checks the
+members of each zone.
 
 Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS
 provider, swap the `caddy-dns/ovh` module in `services/caddy/Dockerfile` for its
@@ -747,7 +749,12 @@ Jellyfin apps speak OpenID Connect, which is why Jellyfin reads lldap directly.
 
 Only the Admin creates an Account or changes a password, in lldap, from the
 local network. Authelia has no email to send, so it offers no password reset,
-and after 5 wrong passwords in 10 minutes it refuses the Account for an hour.
+and after 5 wrong passwords in 10 minutes it refuses the Account for an hour. To
+lift the ban sooner, for example once the password is right:
+
+```sh
+docker exec authelia authelia storage bans user revoke <username>
+```
 
 ### Keys of Authelia
 
@@ -807,6 +814,7 @@ and `LLDAP_ADMIN_PASSWORD`. Then:
    | LDAP Admin Base DN | `ou=people,dc=jellynas` |
    | LDAP Admin Filter | `(memberof=cn=jellynas_admins,ou=groups,dc=jellynas)` |
    | Enable User Creation | checked |
+   | Enable access to all libraries | checked |
    | Allow Password Change | unchecked |
 
 3. Click "Save and Test LDAP Server Settings", then "Save and Test LDAP Filter
