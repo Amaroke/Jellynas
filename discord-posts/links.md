@@ -40,10 +40,10 @@ playlists faites pour toi. Elles arrivent dans Jellyfin et Finamp.
 
 **<https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT}>**
 -# Dans le navigateur, connexion avec le bouton SSO, même compte que Jellyfin.
--# Relie Last.fm ou ListenBrainz dans Settings > Listening pour des
-recommandations selon ce que tu écoutes.
--# Également possible de relier son Spotify, pour recevoir des playlists basées
-sur ce que tu écoutes.
+-# Relie Last.fm ou ListenBrainz
+ou même Spotify pour des
+recommandations selon ce
+que tu écoutes.
 
 ## 📚 Livres et mangas
 
@@ -54,7 +54,7 @@ Jellybook est également disponible sur Github, si tu veux creuser.
 ## 🎶 Bot musique
 
 Toute la musique de Jellyfin dans un salon vocal Discord.
--# Réservé au rôle MusicDJ, sans compte Jellyfin. Rejoins un salon vocal, puis :
+-# Réservé au rôle MusicDJ, et dans les serveurs où il est présent. Rejoins un salon vocal, puis :
 
 - `/play` · lecture aléatoire de toute la musique
 - `/play <recherche>` · choisir un artiste, un album, une playlist ou un titre
