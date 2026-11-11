@@ -54,7 +54,8 @@ Jellybook est également disponible sur Github, si tu veux creuser.
 ## 🎶 Bot musique
 
 Toute la musique de Jellyfin dans un salon vocal Discord.
--# Réservé au rôle MusicDJ, et dans les serveurs où il est présent. Rejoins un salon vocal, puis :
+-# Réservé au rôle MusicDJ, et dans les serveurs où il est présent. Rejoins un
+salon vocal, puis :
 
 - `/play` · lecture aléatoire de toute la musique
 - `/play <recherche>` · choisir un artiste, un album, une playlist ou un titre
