@@ -280,7 +280,8 @@ class PageTest(unittest.TestCase):
         for text in ("Ratio du compte", "616", "199", "Paliers de ratio", "0,8 bloqué", "2,0 objectif"):
             self.assertIn(text, page)
         self.assertNotIn("Bronze", page)
-        self.assertIn("Go effectifs disponibles", page)
+        self.assertIn("Go effectifs", page)
+        self.assertNotIn("disponibles", page)
         self.assertNotIn("cette nuit", page)
         self.assertNotIn("catégorie connue", page)
         self.assertIn("2,5 Go en 24 h", page)
