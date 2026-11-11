@@ -2163,12 +2163,13 @@ docker compose logs ratio | grep Source
 
 ratio also keeps one entry per day in `daily` of its state file, the last 30
 days: the Account ratio, the download left before the floor, the uploaded total
-with its real upload, the downloaded total with the download of the last 24
-hours, the Zen balance, the Zen paid that night and the Seed count. It serves
-everything the board shows at `http://ratio:8000/board`, and takes a change of
-switch or setting at `http://ratio:8000/controls`, on the Compose network only.
-The switches and settings live in `${APPDATA_ROOT}/ratio/controls.json`. The
-settings of `.env` only give their first value.
+with its real upload and the real upload of the last 24 hours, the downloaded
+total with the download of the last 24 hours, the Zen balance, the Zen paid that
+night and the Seed count. It serves everything the board shows at
+`http://ratio:8000/board`, and takes a change of switch or setting at
+`http://ratio:8000/controls`, on the Compose network only. The switches and
+settings live in `${APPDATA_ROOT}/ratio/controls.json`. The settings of `.env`
+only give their first value.
 
 To start the Deficit over, stop ratio, delete its state file and start it again.
 Every other limit above is fixed in `settings_from_env` of
@@ -2184,15 +2185,15 @@ The board, `services/farm-board/page.py`, sits at
 `https://ratio.lan.<DOMAIN>/graphs`, in English or with `?lang=fr` in French,
 from the last run of ratio. It loads no script but the one that tells Homepage
 its height. `?part=1` shows the account: the Account ratio, the upload with its
-real and bought parts, the download with the last 24 hours, the Zen, the Seed
-count and the effective GB available, the download left before the block at 0.8
-once every Zen is traded for upload, 1 GB each or 1024 GB for 1000, then a gauge
-of the ratio tiers, 0.8 where C411 blocks downloads, 1, the floor and 2, with
-how much upload reaches each tier above and how much download each tier under
-allows, and two curves over 30 days: the Zen paid each night with the balance,
-and the uploaded and downloaded totals. `?part=2` shows the Quests, one card per
-challenge with every level and its count: a switch for the Seed count, an
-indicator for the seeding time, the note and the diversity, and in the Volume
+real upload of the last 24 hours, the download with the last 24 hours, the Zen,
+the Seed count and the effective GB available, the download left before the
+block at 0.8 once every Zen is traded for upload, 1 GB each or 1024 GB for 1000,
+then a gauge of the ratio tiers, 0.8 where C411 blocks downloads, 1, the floor
+and 2, with how much upload reaches each tier above and how much download each
+tier under allows, and two curves over 30 days: the Zen paid each night with the
+balance, and the uploaded and downloaded totals. `?part=2` shows the Quests, one
+card per challenge with every level and its count: a switch for the Seed count,
+an indicator for the seeding time, the note and the diversity, and in the Volume
 challenge its ten categories, each with its switch. `?part=3` shows each switch
 and setting of the Farm with what it does, its disk split by Source and what
 each Source earned.

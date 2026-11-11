@@ -221,7 +221,7 @@ class RefreshTest(unittest.TestCase):
 def entry(n, **changes):
     return {
         "day": f"2027-01-{n:02d}", "floor": 1.2, "ratio": 1.5, "left_gb": 20.0, "uploaded_gb": 60.0, "actual_gb": 5.0,
-        "downloaded_gb": 40.0, "downloaded_day_gb": 1.5, "zen": 25, "earned": 25, "zen_paid": 3, "seeds": 199, **changes,
+        "downloaded_gb": 40.0, "downloaded_day_gb": 1.5, "uploaded_day_gb": 2.5, "zen": 25, "earned": 25, "zen_paid": 3, "seeds": 199, **changes,
     }
 
 
@@ -281,6 +281,8 @@ class PageTest(unittest.TestCase):
             self.assertIn(text, page)
         self.assertNotIn("Bronze", page)
         self.assertIn("Go effectifs disponibles", page)
+        self.assertIn("2,5 Go en 24 h", page)
+        self.assertNotIn("achetés", page)
         self.assertIn("805 Go", page)
         self.assertNotIn("plancher 1,20", page)
         self.assertNotIn("téléchargement bloqué", page)

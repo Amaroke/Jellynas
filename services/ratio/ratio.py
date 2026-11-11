@@ -571,6 +571,7 @@ def load_state(path):
         "report": state.get("report", {}),
         "account": state.get("account", []),
         "received": state.get("received", []),
+        "sent": state.get("sent", []),
         "held": state.get("held"),
         "backoff_until": state.get("backoff_until", 0),
         "stuck": state.get("stuck", {}),
@@ -1308,7 +1309,7 @@ def grab(qbt, prowlarr, c411, settings, switches, state, torrents, account, hunt
 def entry_of(day, settings):
     return {
         "day": day, "floor": settings["floor"], "ratio": None, "left_gb": None, "uploaded_gb": None,
-        "actual_gb": None, "downloaded_gb": None, "downloaded_day_gb": None, "zen": None, "earned": None,
+        "actual_gb": None, "uploaded_day_gb": None, "downloaded_gb": None, "downloaded_day_gb": None, "zen": None, "earned": None,
         "zen_paid": None, "seeds": None,
     }
 
@@ -1332,11 +1333,14 @@ def backfill(state, settings, today):
     state["daily"][:0] = [older[day] for day in sorted(older)]
 
 
-def received_base(state, account, now):
-    samples = state["received"]
-    samples.append([now, account["downloaded"]])
+def base_of(samples, now, value):
+    samples.append([now, value])
     samples[:] = [s for s in samples if s[0] <= now - DAY][-1:] + [s for s in samples if s[0] > now - DAY]
     return samples[0][1]
+
+
+def real_upload(account):
+    return account["uploaded"] if account.get("actual") is None else account["actual"]
 
 
 def record_day(state, settings, seeds, account, now):
@@ -1352,7 +1356,8 @@ def record_day(state, settings, seeds, account, now):
     if account is not None:
         entry.update(
             account_fields(account["uploaded"], account["downloaded"], settings),
-            downloaded_day_gb=gigabytes(account["downloaded"] - received_base(state, account, now)),
+            downloaded_day_gb=gigabytes(account["downloaded"] - base_of(state["received"], now, account["downloaded"])),
+            uploaded_day_gb=gigabytes(real_upload(account) - base_of(state["sent"], now, real_upload(account))),
             actual_gb=None if account.get("actual") is None else gigabytes(account["actual"]),
             zen=account["zen"],
             earned=account["earned"],

@@ -320,7 +320,7 @@ def controls_of(found, switches=None):
 def empty_state(**changes):
     return {
         "transfers": {}, "hunted": {}, "twins": {}, "free": {}, "checked": {}, "paused": False,
-        "sources": {}, "history": {}, "zen": {}, "report": {}, "account": [], "received": [], "held": None, "backoff_until": 0,
+        "sources": {}, "history": {}, "zen": {}, "report": {}, "account": [], "received": [], "sent": [], "held": None, "backoff_until": 0,
         "stuck": {}, "restore": {}, "categories": {}, "pages": {}, "daily": [], "given_up": {},
         "done": list(DONE_AT_START), "scales": None, "tier": None, **changes,
     }
@@ -1091,6 +1091,14 @@ class History(unittest.TestCase):
         self.assertEqual(state["daily"][-1]["downloaded_day_gb"], 1)
         run(FakeQBittorrent(), state=state, now=NOW + DAY + 600, c411=FakeC411(downloaded_gb=34))
         self.assertEqual(state["daily"][-1]["downloaded_day_gb"], 4)
+
+    def test_the_real_upload_of_the_last_24_hours_counts_from_the_sample_a_day_old(self):
+        state = empty_state()
+        run(FakeQBittorrent(), state=state, c411=FakeC411(actual_gb=5))
+        run(FakeQBittorrent(), state=state, now=NOW + DAY // 2, c411=FakeC411(actual_gb=7, uploaded_gb=100))
+        self.assertEqual(state["daily"][-1]["uploaded_day_gb"], 2)
+        run(FakeQBittorrent(), state=state, now=NOW + DAY + 600, c411=FakeC411(actual_gb=12))
+        self.assertEqual(state["daily"][-1]["uploaded_day_gb"], 7)
 
     def test_the_zen_paid_each_night_is_what_the_zen_earned_grew_by(self):
         state = empty_state()

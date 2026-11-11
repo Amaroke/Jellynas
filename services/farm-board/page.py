@@ -17,7 +17,7 @@ NUMBER_LIMITS = {"farm_size_gb": (1, 100000), "floor": (0.5, 5), "daily_gb": (0,
 TEXT = {
     "en": {
         "gb": "GB", "decimal": ".", "empty": "No history yet, ratio records its first day after its first run.",
-        "ratio": "Account ratio", "uploaded": "Uploaded", "credit": "{v} real, {c} bought",
+        "ratio": "Account ratio", "uploaded": "Uploaded",
         "downloaded": "Downloaded", "day": "{v} in 24 h", "zen": "Zen", "paid_last": "+{v} last night",
         "seeds": "Seeds on C411", "known": "{v} with a known category",
         "available": "Effective GB available",
@@ -65,7 +65,7 @@ TEXT = {
     },
     "fr": {
         "gb": "Go", "decimal": ",", "empty": "Pas encore d'historique, ratio note son premier jour après son premier passage.",
-        "ratio": "Ratio du compte", "uploaded": "Envoyé", "credit": "{v} réels, {c} achetés",
+        "ratio": "Ratio du compte", "uploaded": "Envoyé",
         "downloaded": "Reçu", "day": "{v} en 24 h", "zen": "Zen", "paid_last": "+{v} cette nuit",
         "seeds": "Seeds sur C411", "known": "{v} de catégorie connue",
         "available": "Go effectifs disponibles",
@@ -328,13 +328,12 @@ def kpi(css, label, value, sub=""):
 def strip(board, words):
     account = board.get("account") or {}
     today = board["history"][-1] if board.get("history") else {}
-    actual, credit = account.get("actual_gb"), account.get("credit_gb")
-    paid, day = today.get("zen_paid"), today.get("downloaded_day_gb")
+    paid, day, sent = today.get("zen_paid"), today.get("downloaded_day_gb"), today.get("uploaded_day_gb")
     seeds = board.get("seeds")
     return "".join([
         kpi("ratio", words["ratio"], figure_text(account.get("ratio"), 2, words)),
         kpi("up", words["uploaded"], size_text(account.get("uploaded_gb"), words),
-            "" if actual is None else words["credit"].format(v=size_text(actual, words), c=size_text(credit, words))),
+            "" if sent is None else words["day"].format(v=size_text(sent, words))),
         kpi("down", words["downloaded"], size_text(account.get("downloaded_gb"), words),
             "" if day is None else words["day"].format(v=size_text(day, words))),
         kpi("zen", words["zen"], figure_text(account.get("zen"), 0, words),
