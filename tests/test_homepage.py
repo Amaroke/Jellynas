@@ -7,7 +7,7 @@ HOMEPAGE = ROOT / "services" / "homepage"
 CONFIG_FILES = [HOMEPAGE / name for name in ("settings.yaml", "services.yaml", "widgets.yaml", "bookmarks.yaml")]
 WITHOUT_TILE = {"homepage", "beszelagent", "autokuma", "ratio", "socketproxy"}
 SECRET_FIELDS = {"key", "password", "username", "apikey", "token"}
-BOARD_CARDS = ("Farm board", "Farm earnings")
+BOARD_CARDS = ("Farm account", "Farm quests", "Farm settings")
 PLACEHOLDER = re.compile(r"\{\{(HOMEPAGE_[A-Z_]+)\}\}")
 
 
@@ -84,14 +84,14 @@ class HomepageConfigTest(unittest.TestCase):
         self.assertNotIn("farm.", text)
         self.assertNotIn("quests.", text)
 
-    def test_the_board_of_ratio_fills_two_iframes_of_their_own_group_in_french(self):
+    def test_the_board_of_the_farm_fills_three_iframes_of_their_own_group_in_french(self):
         text = (HOMEPAGE / "services.yaml").read_text(encoding="utf-8")
         group = re.search(r"^- Graphs:$(.*?)(?=^- |\Z)", text, re.MULTILINE | re.DOTALL)
         self.assertIsNotNone(group)
         cards = re.findall(r"^    - ([^:]+):$(.*?)(?=^    - |\Z)", group.group(1), re.MULTILINE | re.DOTALL)
         self.assertEqual([name for name, _ in cards], list(BOARD_CARDS))
         src = r"src:\s+https://ratio\.lan\.\{\{HOMEPAGE_VAR_DOMAIN\}\}:\{\{HOMEPAGE_VAR_HTTPS_PORT\}\}/graphs\?lang=fr&part="
-        for (name, body), part in zip(cards, ("1", "2"), strict=True):
+        for (name, body), part in zip(cards, ("1", "2", "3"), strict=True):
             self.assertIn("type: iframe", body, name)
             self.assertRegex(body, src + part, name)
             self.assertIn("classes: h-96", body, name)
