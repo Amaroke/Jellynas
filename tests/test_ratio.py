@@ -1466,7 +1466,7 @@ class FakeC411Server(http.server.BaseHTTPRequestHandler):
         FakeC411Server.calls.append((self.path, self.headers.get("Authorization")))
         if self.path.startswith("/api/user/profile"):
             body = json.dumps(PROFILE).encode()
-        elif self.path.startswith("/api/torrents/ab/download"):
+        elif self.path.startswith("/api?t=get&id=ab"):
             body = b"d4:infod6:lengthi1e4:name1:aee"
         elif self.path.startswith("/api/torrents/ab"):
             body = json.dumps({"infoHash": "AB", "category": {"slug": "audio"}}).encode()
@@ -1510,7 +1510,7 @@ class RealC411(unittest.TestCase):
     def test_a_torrent_tells_its_category_and_downloads_with_the_torznab_key(self):
         self.assertEqual(self.c411.category("ab"), "audio")
         self.assertTrue(self.c411.download("ab").startswith(b"d4:info"))
-        self.assertEqual(FakeC411Server.calls[1], ("/api/torrents/ab/download?apikey=torznab", "Bearer torznab"))
+        self.assertEqual(FakeC411Server.calls[1], ("/api?t=get&id=ab&apikey=torznab", "Bearer torznab"))
 
     def test_the_scales_of_the_class_are_read(self):
         self.assertEqual(self.c411.scales("swarm_keeper")["rare"], SCALES["rare"])
