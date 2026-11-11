@@ -439,7 +439,7 @@ class C411:
         return (item.get("category") or {}).get("slug", "")
 
     def download(self, infohash):
-        return self.get(f"/api/torrents/{infohash}/download", self.torznab_key, {"apikey": self.torznab_key})
+        return self.get("/api", self.torznab_key, {"t": "get", "id": infohash, "apikey": self.torznab_key})
 
     def scales(self, slug):
         classes = self.json("/api/classes", self.profile_key).get("classes", [])
