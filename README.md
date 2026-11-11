@@ -898,6 +898,10 @@ Once you have a provider:
 The line `Public IP address is` in `docker compose logs gluetun` shows the VPN
 address, never your home address. Gluetun then turns healthy.
 
+Gluetun also serves an HTTP proxy at `gluetun:8888`, on the Compose network
+only. ratio and the indexers of Prowlarr send their requests to the trackers
+through it, see [VPN of the indexers](#vpn-of-the-indexers).
+
 ### Example: AirVPN
 
 1. Sign in on the [AirVPN Client Area](https://airvpn.org/client/) and open the
@@ -1024,12 +1028,19 @@ In Settings > Indexers, click "+" and pick FlareSolverr. Enter `flaresolverr` as
 the tag and `http://flaresolverr:8191/` as the host, then save. FlareSolverr has
 no web UI and is reachable by the other containers only.
 
+### VPN of the indexers
+
+In Settings > Indexers, click "+" and pick Http. Enter `vpn` as the tag,
+`gluetun` as the host and `8888` as the port, then save. Gluetun serves that
+proxy, and its requests leave through the VPN only.
+
 ### Indexers
 
 In Indexers, click "Add Indexer", pick a tracker and fill in what it asks for,
 an account for a private one. For an indexer behind Cloudflare, add the
-`flaresolverr` tag so its requests go through FlareSolverr. Click "Test", then
-"Save".
+`flaresolverr` tag so its requests go through FlareSolverr. Add the `vpn` tag to
+every tracker, so its searches and torrent files go through the VPN. Click
+"Test", then "Save".
 
 ### Seeding goals of private trackers
 
@@ -2050,8 +2061,9 @@ shows the `curl` command it ran. cross-seed then names the torrent in its logs.
 ratio, `services/ratio/ratio.py`, runs every 10 minutes, and at once when a
 switch or a setting of the Farm changes. It works for C411 only and reads it
 through its own API, ten calls a minute at most and 30 per run, the rest waiting
-for the next run. Every switch and setting below lives in Homepage, see [Farm
-board](#farm-board).
+for the next run. Every HTTPS call of ratio goes through the proxy of Gluetun,
+so C411 only sees the VPN address. Every switch and setting below lives in
+Homepage, see [Farm board](#farm-board).
 
 1. **Reads the account.** It reads the profile of C411 once per run with
    `C411_PROFILE_API_KEY`: uploaded and downloaded totals with the credit bought

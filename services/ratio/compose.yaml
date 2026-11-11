@@ -14,6 +14,7 @@ services:
     command: ["python", "-u", "/app/ratio.py"]
     environment:
       TZ: ${TZ}
+      HTTPS_PROXY: http://gluetun:8888
       QBITTORRENT_USER: ${QBITTORRENT_USER}
       QBITTORRENT_PASSWORD: ${QBITTORRENT_PASSWORD}
       PROWLARR_API_KEY: ${PROWLARR_API_KEY}
