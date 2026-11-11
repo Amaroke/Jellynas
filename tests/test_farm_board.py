@@ -234,7 +234,7 @@ BOARD = {
     "account": {
         "ratio": 1.5, "floor": 1.2, "paused": False, "allowed": True, "uploaded_gb": 60, "downloaded_gb": 40,
         "actual_gb": 10, "credit_gb": 50, "zen": 616, "class": "swarm_keeper", "grade": ["bronze", 3],
-        "zen_gb": 616, "available_gb": 805, "available_now_gb": 35,
+        "zen_gb": 616, "available_gb": 805,
         "voies": {"seed": 3, "specialization": 6},
     },
     "tiers": [
@@ -281,15 +281,16 @@ BOARD = {
 class PageTest(unittest.TestCase):
     def test_the_first_part_shows_the_figures_the_tiers_and_three_curves(self):
         page = board_page(BOARD, "1", "fr")
-        for text in ("Ratio du compte", "616", "199", "Paliers de ratio", "0,8 téléchargement bloqué", "2,0 objectif"):
+        for text in ("Ratio du compte", "616", "199", "Paliers de ratio", "0,8 bloqué", "2,0 objectif"):
             self.assertIn(text, page)
         self.assertNotIn("Bronze", page)
         self.assertIn("Go effectifs disponibles", page)
         self.assertIn("805 Go", page)
-        self.assertIn("35,0 Go sans le Zen, blocage à 0,8", page)
+        self.assertNotIn("plancher 1,20", page)
+        self.assertNotIn("téléchargement bloqué", page)
         self.assertIn("20,0 Go à envoyer", page)
         self.assertIn("10,0 Go de marge", page)
-        self.assertEqual(page.count("<figure>"), 3)
+        self.assertEqual(page.count("<figure>"), 2)
         self.assertNotIn('action="/controls"', page)
 
     def test_the_second_part_shows_the_quests_with_a_switch_only_where_the_farm_can_help(self):

@@ -834,7 +834,6 @@ class Tiers(unittest.TestCase):
         board, _ = run_board(FakeQBittorrent(), c411=FakeC411(uploaded_gb=40, downloaded_gb=30, zen=2616))
         self.assertEqual(board["account"]["zen_gb"], 2664)
         self.assertEqual(board["account"]["available_gb"], 3350)
-        self.assertEqual(board["account"]["available_now_gb"], 20)
 
     def test_crossing_a_tier_asks_farm_board_to_refresh(self):
         told = []

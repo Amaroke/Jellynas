@@ -1419,7 +1419,6 @@ def account_board(account, state, settings):
         "zen": account["zen"],
         "zen_gb": zen_gigabytes(account["zen"]),
         "available_gb": left_before_block(gigabytes(account["uploaded"]) + zen_gigabytes(account["zen"]), gigabytes(account["downloaded"])),
-        "available_now_gb": left_before_block(gigabytes(account["uploaded"]), gigabytes(account["downloaded"])),
         "class": account["class"],
         "grade": account["grade"],
         "voies": account["voies"],

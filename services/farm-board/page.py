@@ -17,13 +17,13 @@ NUMBER_LIMITS = {"farm_size_gb": (1, 100000), "floor": (0.5, 5), "daily_gb": (0,
 TEXT = {
     "en": {
         "gb": "GB", "decimal": ".", "empty": "No history yet, ratio records its first day after its first run.",
-        "ratio": "Account ratio", "floor": "floor {v}", "uploaded": "Uploaded", "credit": "{v} real, {c} bought",
+        "ratio": "Account ratio", "uploaded": "Uploaded", "credit": "{v} real, {c} bought",
         "downloaded": "Downloaded", "day": "{v} in 24 h", "zen": "Zen", "paid_last": "+{v} last night",
         "seeds": "Seeds on C411", "known": "{v} with a known category",
-        "available": "Effective GB available", "without_zen": "{v} before the Zen, block at 0.8",
+        "available": "Effective GB available",
         "zen_chart": "Zen", "paid": "paid each night", "balance": "balance", "transfer": "Upload and download",
         "tiers": "Ratio tiers", "to_upload": "{v} to upload", "margin": "{v} of margin",
-        "tier_names": {"blocked": "download blocked", "even": "even", "floor": "floor", "goal": "goal"},
+        "tier_names": {"blocked": "blocked", "even": "even", "floor": "floor", "goal": "goal"},
         "challenges": "Quests", "voie": {"seed": "Seed path", "specialization": "Specialization path"},
         "voie_done": "{d} of {t} done here, {c} on C411",
         "names": {
@@ -65,13 +65,13 @@ TEXT = {
     },
     "fr": {
         "gb": "Go", "decimal": ",", "empty": "Pas encore d'historique, ratio note son premier jour après son premier passage.",
-        "ratio": "Ratio du compte", "floor": "plancher {v}", "uploaded": "Envoyé", "credit": "{v} réels, {c} achetés",
+        "ratio": "Ratio du compte", "uploaded": "Envoyé", "credit": "{v} réels, {c} achetés",
         "downloaded": "Reçu", "day": "{v} en 24 h", "zen": "Zen", "paid_last": "+{v} cette nuit",
         "seeds": "Seeds sur C411", "known": "{v} de catégorie connue",
-        "available": "Go effectifs disponibles", "without_zen": "{v} sans le Zen, blocage à 0,8",
+        "available": "Go effectifs disponibles",
         "zen_chart": "Zen", "paid": "payé chaque nuit", "balance": "solde", "transfer": "Envoi et réception",
         "tiers": "Paliers de ratio", "to_upload": "{v} à envoyer", "margin": "{v} de marge",
-        "tier_names": {"blocked": "téléchargement bloqué", "even": "équilibre", "floor": "plancher", "goal": "objectif"},
+        "tier_names": {"blocked": "bloqué", "even": "équilibre", "floor": "plancher", "goal": "objectif"},
         "challenges": "Quêtes", "voie": {"seed": "Voie seed", "specialization": "Voie spécialisation"},
         "voie_done": "{d} sur {t} faites ici, {c} sur C411",
         "names": {
@@ -124,7 +124,7 @@ html.shot { background: #0f172a radial-gradient(circle at 20% 0%, #2e1065 0%, #0
 html.shot body { display: flex; align-items: center; justify-content: center; }
 html.shot main { height: auto; overflow: visible; padding: 24px; margin: 0; }
 html.shot .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-html.shot .charts { flex: none; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+html.shot .charts { flex: none; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 html.shot .chart { flex: none; height: 150px; }
 main { display: flex; flex-direction: column; gap: 10px; height: 100vh; padding: 6px; overflow: auto;
   scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, 0.35) transparent; }
@@ -332,8 +332,7 @@ def strip(board, words):
     paid, day = today.get("zen_paid"), today.get("downloaded_day_gb")
     seeds = board.get("seeds")
     return "".join([
-        kpi("ratio", words["ratio"], figure_text(account.get("ratio"), 2, words),
-            words["floor"].format(v=figure_text(account.get("floor"), 2, words))),
+        kpi("ratio", words["ratio"], figure_text(account.get("ratio"), 2, words)),
         kpi("up", words["uploaded"], size_text(account.get("uploaded_gb"), words),
             "" if actual is None else words["credit"].format(v=size_text(actual, words), c=size_text(credit, words))),
         kpi("down", words["downloaded"], size_text(account.get("downloaded_gb"), words),
@@ -342,8 +341,7 @@ def strip(board, words):
             words["paid_last"].format(v=figure_text(paid, 0, words)) if paid else ""),
         kpi("seeds", words["seeds"], figure_text(seeds, 0, words),
             "" if seeds is None else words["known"].format(v=figure_text(board.get("known"), 0, words))),
-        kpi("available", words["available"], size_text(account.get("available_gb"), words, 0),
-            "" if account.get("available_now_gb") is None else words["without_zen"].format(v=size_text(account["available_now_gb"], words))),
+        kpi("available", words["available"], size_text(account.get("available_gb"), words, 0)),
     ])
 
 
@@ -385,15 +383,6 @@ def gauge(board, words):
 def trends(board, words):
     history = board["history"]
     start, end, entries, offsets = window_of(history)
-    tiers = board.get("tiers") or []
-    ratios = [e.get("ratio") for e in entries]
-    top = top_of(ratios + [t["ratio"] for t in tiers]) * 1.05
-    guides = [f'<line class="guide" x1="0" y1="{y_of(t["ratio"], top):.2f}" x2="100" y2="{y_of(t["ratio"], top):.2f}"/>' for t in tiers]
-    ratio_chart = chart(
-        words["ratio"], [], [*guides, *lines("c-ratio", offsets, ratios, top)],
-        [("right", y_of(t["ratio"], top), figure_text(t["ratio"], 1, words)) for t in tiers],
-        start, end,
-    )
     paid_values = [e.get("zen_paid") for e in entries]
     balance = [e.get("zen") for e in entries]
     zen_chart = chart(
@@ -411,7 +400,7 @@ def trends(board, words):
         [("left", 10, size_text(both, words, 0))],
         start, end,
     )
-    return f'<section class="charts">{ratio_chart}{zen_chart}{transfer_chart}</section>'
+    return f'<section class="charts">{zen_chart}{transfer_chart}</section>'
 
 
 def switch(name, on, label, words, part, language):
