@@ -32,8 +32,8 @@ from page import board_page
 
 PARIS = datetime.timezone(datetime.timedelta(hours=1))
 SUMMARY = {"updated_at": "2026-11-09T13:00:00+00:00", "account": {"ratio": 1.4567, "floor": 1.2, "paused": False, "zen": 12345}}
-IMAGES = [b"a", b"b", b"c"]
-NAMES = [("part1.png", b"a"), ("part2.png", b"b"), ("part3.png", b"c")]
+IMAGES = [b"a"]
+NAMES = [("part1.png", b"a")]
 
 
 def at(day, hour, minute=0):
@@ -101,19 +101,15 @@ class PictureTest(unittest.TestCase):
 
 
 class EmbedsTest(unittest.TestCase):
-    def test_the_message_holds_the_pictures_of_the_three_parts_of_the_board(self):
+    def test_the_message_holds_the_picture_of_the_account_part_only(self):
         self.assertEqual(
             embeds(SUMMARY, at(9, 14)),
-            [
-                {"color": VIOLET, "image": {"url": "attachment://part1.png"}},
-                {"color": VIOLET, "image": {"url": "attachment://part2.png"}},
-                {"color": VIOLET, "image": {"url": "attachment://part3.png"}, "timestamp": "2026-11-09T14:00:00+01:00"},
-            ],
+            [{"color": VIOLET, "image": {"url": "attachment://part1.png"}, "timestamp": "2026-11-09T14:00:00+01:00"}],
         )
 
     def test_a_pause_under_the_floor_turns_the_message_rose(self):
         paused = embeds({"account": {**SUMMARY["account"], "paused": True}}, at(9, 14))
-        self.assertEqual([e["color"] for e in paused], [ROSE, ROSE, ROSE])
+        self.assertEqual([e["color"] for e in paused], [ROSE])
 
 
 class PublishTest(unittest.TestCase):
@@ -124,7 +120,7 @@ class PublishTest(unittest.TestCase):
         kind, _, payload, files = webhook.calls[0]
         self.assertEqual(kind, "post")
         self.assertEqual(files, NAMES)
-        self.assertEqual([a["filename"] for a in payload["attachments"]], ["part1.png", "part2.png", "part3.png"])
+        self.assertEqual([a["filename"] for a in payload["attachments"]], ["part1.png"])
 
     def test_each_hour_of_the_day_edits_the_same_message(self):
         webhook = FakeWebhook()

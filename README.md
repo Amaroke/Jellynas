@@ -2204,16 +2204,16 @@ refreshes the Discord message and shows the same part again. It refuses a form
 sent from another site. Caddy routes `/graphs` and `/controls` of that lan name
 to farm-board, from the local network only.
 
-Every hour, a headless Chromium measures each part at a few widths, keeps the
-one that fits in the smallest square, and takes it square, twice the pixels for
-sharpness, on the dark background of Homepage. farm-board puts the three
-pictures in one message, in violet, or in rose when the downloads of C411 are
-paused under the Ratio floor. Each day at midnight it posts a new message, then
-edits that one every hour until the next midnight, and at once when a switch or
-a setting changes or when the Account ratio crosses a tier. The id of the
-message of the day sits in `${APPDATA_ROOT}/farm-board/state.json`. "Actualiser
-le Farm board" in Actions rapides on Homepage publishes it at once. Its
-container is capped at 512 MB.
+Every hour, a headless Chromium measures the account part at a few widths, keeps
+the one that fits in the smallest square, and takes it square, twice the pixels
+for sharpness, on the dark background of Homepage. farm-board puts the picture
+of the account part, `?part=1`, in one message, in violet, or in rose when the
+downloads of C411 are paused under the Ratio floor. Each day at midnight it
+posts a new message, then edits that one every hour until the next midnight, and
+at once when a switch or a setting changes or when the Account ratio crosses a
+tier. The id of the message of the day sits in
+`${APPDATA_ROOT}/farm-board/state.json`. "Actualiser le Farm board" in Actions
+rapides on Homepage publishes it at once. Its container is capped at 512 MB.
 
 1. In Discord, in the server of the NAS, create a text channel for the Farm.
 2. In Server Settings > Integrations > Webhooks, click "New Webhook", pick that

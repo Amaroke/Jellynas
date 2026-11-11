@@ -19,7 +19,7 @@ from page import PARTS, SCRIPT_HASH, board_page, pixels
 
 RATIO = "http://ratio:8000"
 SELF = "http://127.0.0.1:8000"
-SHOTS = PARTS
+SHOTS = ("1",)
 WIDTHS = (560, 680, 800, 920, 1040)
 SCALE = 2
 PROBE_HEIGHT = 1000
