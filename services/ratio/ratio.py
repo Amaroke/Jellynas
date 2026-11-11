@@ -52,7 +52,9 @@ RETIRED_KINDS = {"Films & Vidéos": "films-videos", "Ebook": "ebook", "Audio": "
 SPECIALIZATION = "films-videos"
 BADGE_SEEDS = 50
 DEFAULT_SCALES = {"duration": [[7, 0.1], [30, 0.25], [90, 0.35], [180, 0.5]], "rare": []}
-TIERS = (("blocked", 0.8), ("even", 1.0), ("floor", None), ("goal", 2.0))
+BLOCKED = 0.8
+TIERS = (("blocked", BLOCKED), ("even", 1.0), ("floor", None), ("goal", 2.0))
+ZEN_PACK = (1000, 1024)
 
 
 def quest(id, voie, challenge, level, description, **criteria):
@@ -569,6 +571,7 @@ def load_state(path):
         "report": state.get("report", {}),
         "account": state.get("account", []),
         "received": state.get("received", []),
+        "sent": state.get("sent", []),
         "held": state.get("held"),
         "backoff_until": state.get("backoff_until", 0),
         "stuck": state.get("stuck", {}),
@@ -1306,7 +1309,7 @@ def grab(qbt, prowlarr, c411, settings, switches, state, torrents, account, hunt
 def entry_of(day, settings):
     return {
         "day": day, "floor": settings["floor"], "ratio": None, "left_gb": None, "uploaded_gb": None,
-        "actual_gb": None, "downloaded_gb": None, "downloaded_day_gb": None, "zen": None, "earned": None,
+        "actual_gb": None, "uploaded_day_gb": None, "downloaded_gb": None, "downloaded_day_gb": None, "zen": None, "earned": None,
         "zen_paid": None, "seeds": None,
     }
 
@@ -1330,11 +1333,14 @@ def backfill(state, settings, today):
     state["daily"][:0] = [older[day] for day in sorted(older)]
 
 
-def received_base(state, account, now):
-    samples = state["received"]
-    samples.append([now, account["downloaded"]])
+def base_of(samples, now, value):
+    samples.append([now, value])
     samples[:] = [s for s in samples if s[0] <= now - DAY][-1:] + [s for s in samples if s[0] > now - DAY]
     return samples[0][1]
+
+
+def real_upload(account):
+    return account["uploaded"] if account.get("actual") is None else account["actual"]
 
 
 def record_day(state, settings, seeds, account, now):
@@ -1350,7 +1356,8 @@ def record_day(state, settings, seeds, account, now):
     if account is not None:
         entry.update(
             account_fields(account["uploaded"], account["downloaded"], settings),
-            downloaded_day_gb=gigabytes(account["downloaded"] - received_base(state, account, now)),
+            downloaded_day_gb=gigabytes(account["downloaded"] - base_of(state["received"], now, account["downloaded"])),
+            uploaded_day_gb=gigabytes(real_upload(account) - base_of(state["sent"], now, real_upload(account))),
             actual_gb=None if account.get("actual") is None else gigabytes(account["actual"]),
             zen=account["zen"],
             earned=account["earned"],
@@ -1393,6 +1400,15 @@ def tier_index(account, settings):
     return sum(1 for t in tiers_of(account, settings) if ratio >= t["ratio"])
 
 
+def zen_gigabytes(zen):
+    packs, rest = divmod(zen or 0, ZEN_PACK[0])
+    return packs * ZEN_PACK[1] + rest
+
+
+def left_before_block(uploaded_gb, downloaded_gb):
+    return round(uploaded_gb / BLOCKED - downloaded_gb, 2)
+
+
 def account_board(account, state, settings):
     if account is None:
         return {"ratio": None, "floor": settings["floor"], "paused": True, "allowed": None}
@@ -1406,10 +1422,17 @@ def account_board(account, state, settings):
         "actual_gb": None if account["actual"] is None else gigabytes(account["actual"]),
         "credit_gb": None if account["credit"] is None else gigabytes(account["credit"]),
         "zen": account["zen"],
+        "zen_gb": zen_gigabytes(account["zen"]),
+        "available_gb": left_before_block(gigabytes(account["uploaded"]) + zen_gigabytes(account["zen"]), gigabytes(account["downloaded"])),
         "class": account["class"],
         "grade": account["grade"],
         "voies": account["voies"],
     }
+
+
+def step_of(q, seeds, counts, scales, done):
+    current, target = progress_of(q, seeds, counts, scales, done)
+    return {"level": q["level"], "description": q["description"], "current": current, "target": target, "done": q["id"] in done}
 
 
 def board_of(state, settings, controls, torrents, seeds, account, now):
@@ -1432,6 +1455,7 @@ def board_of(state, settings, controls, torrents, seeds, account, now):
             "current": current,
             "target": target,
             "switch": challenge if challenge in SWITCHES else None,
+            "steps": [step_of(q, seeds, counts, scales, done) for q in levels],
         })
     farm = [t for t in torrents.values() if t["category"] == FARM]
     slices = {}

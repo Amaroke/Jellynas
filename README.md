@@ -2163,12 +2163,13 @@ docker compose logs ratio | grep Source
 
 ratio also keeps one entry per day in `daily` of its state file, the last 30
 days: the Account ratio, the download left before the floor, the uploaded total
-with its real upload, the downloaded total with the download of the last 24
-hours, the Zen balance, the Zen paid that night and the Seed count. It serves
-everything the board shows at `http://ratio:8000/board`, and takes a change of
-switch or setting at `http://ratio:8000/controls`, on the Compose network only.
-The switches and settings live in `${APPDATA_ROOT}/ratio/controls.json`. The
-settings of `.env` only give their first value.
+with its real upload and the real upload of the last 24 hours, the downloaded
+total with the download of the last 24 hours, the Zen balance, the Zen paid that
+night and the Seed count. It serves everything the board shows at
+`http://ratio:8000/board`, and takes a change of switch or setting at
+`http://ratio:8000/controls`, on the Compose network only. The switches and
+settings live in `${APPDATA_ROOT}/ratio/controls.json`. The settings of `.env`
+only give their first value.
 
 To start the Deficit over, stop ratio, delete its state file and start it again.
 Every other limit above is fixed in `settings_from_env` of
@@ -2184,17 +2185,19 @@ The board, `services/farm-board/page.py`, sits at
 `https://ratio.lan.<DOMAIN>/graphs`, in English or with `?lang=fr` in French,
 from the last run of ratio. It loads no script but the one that tells Homepage
 its height. `?part=1` shows the account: the Account ratio, the upload with its
-real and bought parts, the download with the last 24 hours, the Zen, the Seed
-count and the grade of the class, then a gauge of the ratio tiers, 0.8 where
-C411 blocks downloads, 1, the floor and 2, with how much upload reaches the next
-tier and how much download the tier under it allows, and three curves over 30
-days: the Account ratio with the tiers, the Zen paid each night with the
-balance, and the uploaded and downloaded totals. `?part=2` shows the Quests:
-each challenge at its next level with its count, a switch for the Seed count, an
-indicator for the seeding time, the note and the diversity, and the ten
-categories of the Volume challenge, each with its switch. `?part=3` shows the
-switches of the Farm, its settings, its disk split by Source and what each
-Source earned. `pad=<height>` adds a margin and sets the height in pixels.
+real upload of the last 24 hours, the download with the last 24 hours, the Zen,
+the Seed count and the effective GB available, the download left before the
+block at 0.8 once every Zen is traded for upload, 1 GB each or 1024 GB for 1000,
+then a gauge of the ratio tiers, 0.8 where C411 blocks downloads, 1, the floor
+and 2, with how much upload reaches each tier above and how much download each
+tier under allows, and two curves over 30 days: the Zen paid each night with the
+balance, and the uploaded and downloaded totals. `?part=2` shows the Quests, one
+card per challenge with every level and its count: a switch for the Seed count,
+an indicator for the seeding time, the note and the diversity, and in the Volume
+challenge its ten categories, each with its switch. `?part=3` shows each switch
+and setting of the Farm with what it does, its disk split by Source and what
+each Source earned.
+`shot=<width>` sets the width in pixels for the pictures of Discord.
 
 Homepage embeds the three parts, in French, in three iframes. A switch or a
 setting is a plain form: farm-board passes it to ratio, which runs at once,
@@ -2202,15 +2205,16 @@ refreshes the Discord message and shows the same part again. It refuses a form
 sent from another site. Caddy routes `/graphs` and `/controls` of that lan name
 to farm-board, from the local network only.
 
-Every hour, a headless Chromium opens the three parts at 1200 pixels wide on the
-dark background of Homepage, and farm-board puts the three pictures in one
-message, in violet, or in rose when the downloads of C411 are paused under the
-Ratio floor. Each day at midnight it posts a new message, then edits that one
-every hour until the next midnight, and at once when a switch or a setting
-changes or when the Account ratio crosses a tier. The id of the message of the
-day sits in `${APPDATA_ROOT}/farm-board/state.json`. "Actualiser le Farm board"
-in Actions rapides on Homepage publishes it at once. Its container is capped at
-512 MB.
+Every hour, a headless Chromium measures the account part at a few widths, keeps
+the one that fits in the smallest square, and takes it square, twice the pixels
+for sharpness, on the dark background of Homepage. farm-board puts the picture
+of the account part, `?part=1`, in one message, in violet, or in rose when the
+downloads of C411 are paused under the Ratio floor. Each day at midnight it
+posts a new message, then edits that one every hour until the next midnight, and
+at once when a switch or a setting changes or when the Account ratio crosses a
+tier. The id of the message of the day sits in
+`${APPDATA_ROOT}/farm-board/state.json`. "Actualiser le Farm board" in Actions
+rapides on Homepage publishes it at once. Its container is capped at 512 MB.
 
 1. In Discord, in the server of the NAS, create a text channel for the Farm.
 2. In Server Settings > Integrations > Webhooks, click "New Webhook", pick that

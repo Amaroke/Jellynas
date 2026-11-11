@@ -19,19 +19,21 @@ from board import (
     cropped,
     embeds,
     hidden_height,
+    measured_height,
     multipart,
     next_hour,
     publish,
     report,
     report_day,
     serve,
+    square_of,
 )
 from page import board_page
 
 PARIS = datetime.timezone(datetime.timedelta(hours=1))
 SUMMARY = {"updated_at": "2026-11-09T13:00:00+00:00", "account": {"ratio": 1.4567, "floor": 1.2, "paused": False, "zen": 12345}}
-IMAGES = [b"a", b"b", b"c"]
-NAMES = [("part1.png", b"a"), ("part2.png", b"b"), ("part3.png", b"c")]
+IMAGES = [b"a"]
+NAMES = [("part1.png", b"a")]
 
 
 def at(day, hour, minute=0):
@@ -81,6 +83,13 @@ def png(width, rows):
 
 
 class PictureTest(unittest.TestCase):
+    def test_the_page_tells_its_height_in_its_dom(self):
+        self.assertEqual(measured_height('<html lang="fr" class="shot" data-height="734"><body></body></html>'), 734)
+
+    def test_the_width_that_gives_the_smallest_square_wins(self):
+        self.assertEqual(square_of({560: 1300, 680: 1010, 800: 850, 920: 760, 1040: 700}), (800, 850))
+        self.assertEqual(square_of({560: 400, 680: 380}), (560, 560))
+
     def test_the_height_chromium_hides_is_the_window_minus_the_viewport(self):
         self.assertEqual(hidden_height("<html><head></head><body>913</body></html>"), 87)
 
@@ -92,19 +101,15 @@ class PictureTest(unittest.TestCase):
 
 
 class EmbedsTest(unittest.TestCase):
-    def test_the_message_holds_the_pictures_of_the_three_parts_of_the_board(self):
+    def test_the_message_holds_the_picture_of_the_account_part_only(self):
         self.assertEqual(
             embeds(SUMMARY, at(9, 14)),
-            [
-                {"color": VIOLET, "image": {"url": "attachment://part1.png"}},
-                {"color": VIOLET, "image": {"url": "attachment://part2.png"}},
-                {"color": VIOLET, "image": {"url": "attachment://part3.png"}, "timestamp": "2026-11-09T14:00:00+01:00"},
-            ],
+            [{"color": VIOLET, "image": {"url": "attachment://part1.png"}, "timestamp": "2026-11-09T14:00:00+01:00"}],
         )
 
     def test_a_pause_under_the_floor_turns_the_message_rose(self):
         paused = embeds({"account": {**SUMMARY["account"], "paused": True}}, at(9, 14))
-        self.assertEqual([e["color"] for e in paused], [ROSE, ROSE, ROSE])
+        self.assertEqual([e["color"] for e in paused], [ROSE])
 
 
 class PublishTest(unittest.TestCase):
@@ -115,7 +120,7 @@ class PublishTest(unittest.TestCase):
         kind, _, payload, files = webhook.calls[0]
         self.assertEqual(kind, "post")
         self.assertEqual(files, NAMES)
-        self.assertEqual([a["filename"] for a in payload["attachments"]], ["part1.png", "part2.png", "part3.png"])
+        self.assertEqual([a["filename"] for a in payload["attachments"]], ["part1.png"])
 
     def test_each_hour_of_the_day_edits_the_same_message(self):
         webhook = FakeWebhook()
@@ -216,7 +221,7 @@ class RefreshTest(unittest.TestCase):
 def entry(n, **changes):
     return {
         "day": f"2027-01-{n:02d}", "floor": 1.2, "ratio": 1.5, "left_gb": 20.0, "uploaded_gb": 60.0, "actual_gb": 5.0,
-        "downloaded_gb": 40.0, "downloaded_day_gb": 1.5, "zen": 25, "earned": 25, "zen_paid": 3, "seeds": 199, **changes,
+        "downloaded_gb": 40.0, "downloaded_day_gb": 1.5, "uploaded_day_gb": 2.5, "zen": 25, "earned": 25, "zen_paid": 3, "seeds": 199, **changes,
     }
 
 
@@ -225,6 +230,7 @@ BOARD = {
     "account": {
         "ratio": 1.5, "floor": 1.2, "paused": False, "allowed": True, "uploaded_gb": 60, "downloaded_gb": 40,
         "actual_gb": 10, "credit_gb": 50, "zen": 616, "class": "swarm_keeper", "grade": ["bronze", 3],
+        "zen_gb": 616, "available_gb": 805,
         "voies": {"seed": 3, "specialization": 6},
     },
     "tiers": [
@@ -237,7 +243,15 @@ BOARD = {
     "voies": {"seed": {"done": 3, "total": 19}, "specialization": {"done": 6, "total": 9}},
     "challenges": [
         {"key": "quantity_seed", "voie": "seed", "level": 3, "levels": 5, "done": False, "description": "200 seeds",
-         "current": 199, "target": 200, "switch": "quantity_seed"},
+         "current": 205, "target": 200, "switch": "quantity_seed", "steps": [
+             {"level": 1, "description": "100 seeds", "current": 205, "target": 100, "done": True},
+             {"level": 2, "description": "150 seeds", "current": 205, "target": 150, "done": True},
+             {"level": 3, "description": "200 seeds", "current": 205, "target": 200, "done": False},
+             {"level": 4, "description": "250 seeds", "current": 205, "target": 250, "done": False},
+             {"level": 5, "description": "300 seeds", "current": 205, "target": 300, "done": False},
+         ]},
+        {"key": "category_volume_seed", "voie": "specialization", "level": 2, "levels": 4, "done": False,
+         "description": "100 seeds dans la même catégorie", "current": 75, "target": 100, "switch": None},
         {"key": "duration_seed", "voie": "seed", "level": 1, "levels": 5, "done": False,
          "description": "25 seeds pendant 7 jours", "current": 3, "target": 25, "switch": None},
     ],
@@ -263,16 +277,29 @@ BOARD = {
 class PageTest(unittest.TestCase):
     def test_the_first_part_shows_the_figures_the_tiers_and_three_curves(self):
         page = board_page(BOARD, "1", "fr")
-        for text in ("Ratio du compte", "616", "Bronze III", "199", "Paliers de ratio", "téléchargement bloqué", "objectif"):
+        for text in ("Ratio du compte", "616", "199", "Paliers de ratio", "0,8 bloqué", "2,0 objectif"):
             self.assertIn(text, page)
-        self.assertIn("Palier suivant 2,0, objectif : 20,0 Go à envoyer", page)
-        self.assertIn("Palier en dessous 1,2, plancher : 10,0 Go de marge", page)
-        self.assertEqual(page.count("<figure>"), 3)
+        self.assertNotIn("Bronze", page)
+        self.assertIn("Go effectifs disponibles", page)
+        self.assertIn("2,5 Go en 24 h", page)
+        self.assertNotIn("achetés", page)
+        self.assertIn("805 Go", page)
+        self.assertNotIn("plancher 1,20", page)
+        self.assertNotIn("téléchargement bloqué", page)
+        self.assertIn("20,0 Go à envoyer", page)
+        self.assertIn("10,0 Go de marge", page)
+        self.assertEqual(page.count("<figure>"), 2)
         self.assertNotIn('action="/controls"', page)
 
     def test_the_second_part_shows_the_quests_with_a_switch_only_where_the_farm_can_help(self):
         page = board_page(BOARD, "2", "fr")
-        self.assertIn("199 / 200", page)
+        self.assertIn("205 / 200", page)
+        self.assertIn("atteint, en attente de C411", page)
+        self.assertEqual(page.count('class="challenge"'), 3)
+        self.assertEqual(page.count('class="step '), 5)
+        self.assertIn('class="step done"', page)
+        self.assertIn('class="step reached"', page)
+        self.assertIn('class="step next"', page)
         self.assertIn("75 / 100", page)
         self.assertIn('name="name" value="quantity_seed"', page)
         self.assertIn('name="name" value="volume:ebook"', page)
@@ -285,6 +312,8 @@ class PageTest(unittest.TestCase):
         page = board_page(BOARD, "3", "fr")
         for text in ("Grabs payants frais", "Pause Prowlarr sous le plancher", "Budget de la Farm (Go)", "Disque de la Farm", "Gains par Source"):
             self.assertIn(text, page)
+        self.assertEqual(page.count('class="setting"'), 11)
+        self.assertIn("Le hardlink garde les fichiers", page)
         self.assertIn('type="number" name="value" step="0.05" min="0.5" max="5" value="1.2"', page)
 
     def test_without_a_part_the_page_shows_everything_on_a_dark_background(self):
@@ -292,6 +321,11 @@ class PageTest(unittest.TestCase):
         self.assertIn('class="standalone"', page)
         self.assertIn("Account ratio", page)
         self.assertIn("Seed count", page)
+
+    def test_a_shot_sets_the_width_of_the_board(self):
+        page = board_page(BOARD, "1", "fr", 800)
+        self.assertIn('class="shot"', page)
+        self.assertIn("html.shot main { width: 800px; flex: none; }", page)
 
     def test_without_history_the_page_says_so(self):
         self.assertIn("No history yet", board_page({"history": []}, "1"))
