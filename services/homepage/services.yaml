@@ -109,16 +109,16 @@
         icon: cross-seed.png
         description: Seeds the same data on C411
         siteMonitor: http://cross-seed:2468/api/ping
-    - Farm report:
+    - Farm board:
         icon: mdi-message-image-#a78bfa
-        description: Board of the Farm on Discord, every hour
+        description: Board of the Farm on Discord, hourly and on each change
     - Discord posts:
         icon: mdi-message-text-#a78bfa
         description: Republishes the Discord messages, every day at 00:30
 
 - Graphs:
-    - Farm board:
-        description: Account ratio, Zen, upload and download over 30 days
+    - Farm account:
+        description: Account ratio, its tiers, Zen, upload and download
         widget:
           type: iframe
           name: farm-board
@@ -128,13 +128,24 @@
           referrerPolicy: same-origin
           loadingStrategy: lazy
           refreshInterval: 600000
-    - Farm earnings:
-        description: Farm disk and earnings by Source
+    - Farm quests:
+        description: Quests of C411 and their switches
         widget:
           type: iframe
-          name: farm-earnings
+          name: farm-quests
           src:
             https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs?lang=fr&part=2
+          classes: h-96
+          referrerPolicy: same-origin
+          loadingStrategy: lazy
+          refreshInterval: 600000
+    - Farm settings:
+        description: Switches, settings, disk and earnings of the Farm
+        widget:
+          type: iframe
+          name: farm-settings
+          src:
+            https://ratio.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/graphs?lang=fr&part=3
           classes: h-96
           referrerPolicy: same-origin
           loadingStrategy: lazy

@@ -84,11 +84,15 @@ private tracker.
 _Avoid_: seed limit, share limit
 
 **Farm**:
-The C411 torrents the NAS seeds only for what they earn on C411, upload and Zen,
-whatever their Source, cross-seeds included. It holds them within one disk
-budget and, once that budget is full, lets go first of what pays the least Zen
-for its size.
+The C411 torrents the NAS grabs only for what they earn on C411, the Account
+ratio first and the Quests next, cross-seeds included. It grabs nothing more
+once its disk budget is full, and never lets a torrent go.
 _Avoid_: ratio, ratio folder, ratio torrents, cross-seed torrents, Zen reserve
+
+**Switch**:
+An on or off setting of the Farm that the Admin flips in Homepage, one per kind
+of grab, per Quest farm and per cleaning.
+_Avoid_: toggle, flag, button
 
 **Public torrent**:
 A torrent of a public tracker. It seeds two weeks whatever its ratio, and leaves
@@ -100,14 +104,15 @@ The currency C411 pays for long seeding, traded for upload in its shop.
 _Avoid_: bonus points
 
 **Rare**:
-Said of a C411 torrent whose seeders are few enough to count for the Swarm
-Keeper class of C411.
+Said of a C411 torrent whose size and seeders fall in a bucket where the class
+of the Admin on C411 adds a bonus to its note.
 _Avoid_: dead, unpopular
 
-**Volume hunt**:
-The grabbing of small Rare C411 torrents into the Farm to raise the Seed count,
-spread over the categories of C411 the Quests count.
-_Avoid_: Zen hunt, rare hunt
+**Quest farm**:
+The grabbing of small C411 torrents into the Farm, behind a Switch, until the
+count of a Quest reaches its target: the Seed count, or the seeds of one
+category of C411.
+_Avoid_: Volume hunt, Zen hunt, rare hunt
 
 **Seed count**:
 How many C411 torrents the NAS seeds at once, whatever their size, which the
@@ -115,9 +120,10 @@ Quests of C411 reward.
 _Avoid_: seeds, torrent count
 
 **Quest**:
-A one-off reward of C411, mostly Zen, paid when the Seed count, the seeding time
-or the categories of the seeded torrents reach a step.
-_Avoid_: challenge, achievement
+One level of a challenge of C411, rewarded once, when the Seed count, the
+seeding time, the note or the categories of the seeded torrents reach its
+target. Only the seed and specialization paths count for the Farm.
+_Avoid_: achievement
 
 **Account ratio**:
 The ratio C411 shows for the account of the Admin, every torrent ever included,
@@ -129,16 +135,21 @@ The Account ratio of 1.2 under which the NAS spends no download on C411, not
 even for the Library, freeleech and Twins aside.
 _Avoid_: margin, buffer
 
+**Ratio tier**:
+An Account ratio the board marks: 0.8 where C411 blocks downloads, 1, the
+Ratio floor and 2.
+_Avoid_: threshold, level
+
 **Twin**:
 The same release, byte for byte, on a public tracker, downloaded there so that
 its C411 copy costs no download on C411.
 _Avoid_: mirror, duplicate
 
 **Source**:
-How a C411 torrent came to the NAS: a paid grab, a free grab, a Library download
-from C411, or a Volume hunt grab. A free grab costs no download on C411: a Twin,
-a freeleech grab or a cross-seed of the Library. It never changes, even when a
-Library torrent later moves to the Farm.
+How a C411 torrent came to the NAS: a fresh paid grab, a free grab, a Library
+download from C411, or a Quest farm grab. A free grab costs no download on
+C411: a Twin, a freeleech grab or a cross-seed of the Library. It never changes,
+even when a Library torrent later moves to the Farm.
 _Avoid_: origin, kind, pool
 
 **Ledger**:

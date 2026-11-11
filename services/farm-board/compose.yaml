@@ -1,8 +1,8 @@
 ---
 services:
-  farm-report:
+  farm-board:
     build: .
-    container_name: farm-report
+    container_name: farm-board
     restart: unless-stopped
     depends_on:
       - ratio
@@ -20,7 +20,7 @@ services:
       DISCORD_FARM_WEBHOOK_ID: ${DISCORD_FARM_WEBHOOK_ID}
       DISCORD_FARM_WEBHOOK_TOKEN: ${DISCORD_FARM_WEBHOOK_TOKEN}
     labels:
-      kuma.farm-report.docker.name: Farm report
+      kuma.farm-board.docker.name: Farm board
       docker-volume-backup.stop-during-backup: "true"
     volumes:
-      - ${APPDATA_ROOT}/farm-report:/state
+      - ${APPDATA_ROOT}/farm-board:/state

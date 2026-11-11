@@ -90,10 +90,10 @@
 	@ratio {
 		host ratio.lan.{$DOMAIN}
 		remote_ip {$LAN_SUBNET}
-		path /graphs
+		path /graphs /controls
 	}
 	handle @ratio {
-		reverse_proxy ratio:8000
+		reverse_proxy farm-board:8000
 	}
 	@actions {
 		host actions.lan.{$DOMAIN}

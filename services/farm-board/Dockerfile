@@ -9,5 +9,5 @@ RUN apk add --no-cache \
     chromium="${CHROMIUM_VERSION}" \
     font-dejavu="${FONT_DEJAVU_VERSION}" \
     tzdata="${TZDATA_VERSION}"
-COPY report.py /app/report.py
-CMD ["python", "-u", "/app/report.py"]
+COPY board.py page.py /app/
+CMD ["python", "-u", "/app/board.py"]
