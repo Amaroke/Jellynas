@@ -124,7 +124,7 @@ html.shot { background: #0f172a radial-gradient(circle at 20% 0%, #2e1065 0%, #0
 html.shot body { display: flex; align-items: center; justify-content: center; }
 html.shot main { height: auto; overflow: visible; padding: 24px; margin: 0; }
 html.shot .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-html.shot .charts { flex: none; }
+html.shot .charts { flex: none; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 html.shot .chart { flex: none; height: 150px; }
 main { display: flex; flex-direction: column; gap: 10px; height: 100vh; padding: 6px; overflow: auto;
   scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, 0.35) transparent; }
