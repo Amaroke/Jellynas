@@ -281,6 +281,8 @@ class PageTest(unittest.TestCase):
             self.assertIn(text, page)
         self.assertNotIn("Bronze", page)
         self.assertIn("Go effectifs disponibles", page)
+        self.assertNotIn("cette nuit", page)
+        self.assertNotIn("catégorie connue", page)
         self.assertIn("2,5 Go en 24 h", page)
         self.assertNotIn("achetés", page)
         self.assertIn("805 Go", page)
@@ -295,6 +297,7 @@ class PageTest(unittest.TestCase):
         page = board_page(BOARD, "2", "fr")
         self.assertIn("205 / 200", page)
         self.assertIn("atteint, en attente de C411", page)
+        self.assertNotIn("faites ici", page)
         self.assertEqual(page.count('class="challenge"'), 3)
         self.assertEqual(page.count('class="step '), 5)
         self.assertIn('class="step done"', page)
@@ -362,7 +365,7 @@ class ServerTest(unittest.TestCase):
         url = self.start()
         with urllib.request.urlopen(f"{url}/graphs?lang=fr&part=2", timeout=10) as response:
             self.assertIn("form-action 'self'", response.headers["Content-Security-Policy"])
-            self.assertIn("Quêtes", response.read().decode())
+            self.assertIn("Nombre de seeds", response.read().decode())
 
     def test_a_switch_goes_to_ratio_then_back_to_its_part(self):
         url = self.start()
