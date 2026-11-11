@@ -18,14 +18,13 @@ TEXT = {
     "en": {
         "gb": "GB", "decimal": ".", "empty": "No history yet, ratio records its first day after its first run.",
         "ratio": "Account ratio", "uploaded": "Uploaded",
-        "downloaded": "Downloaded", "day": "{v} in 24 h", "zen": "Zen", "paid_last": "+{v} last night",
-        "seeds": "Seeds on C411", "known": "{v} with a known category",
+        "downloaded": "Downloaded", "day": "{v} in 24 h", "zen": "Zen",
+        "seeds": "Seeds on C411",
         "available": "Effective GB available",
         "zen_chart": "Zen", "paid": "paid each night", "balance": "balance", "transfer": "Upload and download",
         "tiers": "Ratio tiers", "to_upload": "{v} to upload", "margin": "{v} of margin",
         "tier_names": {"blocked": "blocked", "even": "even", "floor": "floor", "goal": "goal"},
-        "challenges": "Quests", "voie": {"seed": "Seed path", "specialization": "Specialization path"},
-        "voie_done": "{d} of {t} done here, {c} on C411",
+        "voie": {"seed": "Seed path", "specialization": "Specialization path"},
         "names": {
             "quantity_seed": "Seed count", "duration_seed": "Seeding time", "vtr_min": "Seed note",
             "category_volume_seed": "Category volume", "category_diversity_seed": "Diversity",
@@ -66,14 +65,13 @@ TEXT = {
     "fr": {
         "gb": "Go", "decimal": ",", "empty": "Pas encore d'historique, ratio note son premier jour après son premier passage.",
         "ratio": "Ratio du compte", "uploaded": "Envoyé",
-        "downloaded": "Reçu", "day": "{v} en 24 h", "zen": "Zen", "paid_last": "+{v} cette nuit",
-        "seeds": "Seeds sur C411", "known": "{v} de catégorie connue",
+        "downloaded": "Reçu", "day": "{v} en 24 h", "zen": "Zen",
+        "seeds": "Seeds sur C411",
         "available": "Go effectifs disponibles",
         "zen_chart": "Zen", "paid": "payé chaque nuit", "balance": "solde", "transfer": "Envoi et réception",
         "tiers": "Paliers de ratio", "to_upload": "{v} à envoyer", "margin": "{v} de marge",
         "tier_names": {"blocked": "bloqué", "even": "équilibre", "floor": "plancher", "goal": "objectif"},
-        "challenges": "Quêtes", "voie": {"seed": "Voie seed", "specialization": "Voie spécialisation"},
-        "voie_done": "{d} sur {t} faites ici, {c} sur C411",
+        "voie": {"seed": "Voie seed", "specialization": "Voie spécialisation"},
         "names": {
             "quantity_seed": "Nombre de seeds", "duration_seed": "Durée de seed", "vtr_min": "Note des seeds",
             "category_volume_seed": "Volume catégorie", "category_diversity_seed": "Diversité",
@@ -187,8 +185,6 @@ form { margin: 0; display: inline; }
 .switch::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; background: currentColor; }
 .switch.on { background: rgba(52, 211, 153, 0.16); color: var(--green); border-color: rgba(52, 211, 153, 0.4); }
 .tag { font-size: 11px; color: var(--muted); white-space: nowrap; }
-.voies { display: flex; gap: 4px 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
-.voies b { color: var(--text); font-weight: 600; }
 .head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; }
 .head .title { font-weight: 600; font-size: 14px; }
 .head .hint { grid-column: 1 / -1; }
@@ -328,18 +324,15 @@ def kpi(css, label, value, sub=""):
 def strip(board, words):
     account = board.get("account") or {}
     today = board["history"][-1] if board.get("history") else {}
-    paid, day, sent = today.get("zen_paid"), today.get("downloaded_day_gb"), today.get("uploaded_day_gb")
-    seeds = board.get("seeds")
+    day, sent = today.get("downloaded_day_gb"), today.get("uploaded_day_gb")
     return "".join([
         kpi("ratio", words["ratio"], figure_text(account.get("ratio"), 2, words)),
         kpi("up", words["uploaded"], size_text(account.get("uploaded_gb"), words),
             "" if sent is None else words["day"].format(v=size_text(sent, words))),
         kpi("down", words["downloaded"], size_text(account.get("downloaded_gb"), words),
             "" if day is None else words["day"].format(v=size_text(day, words))),
-        kpi("zen", words["zen"], figure_text(account.get("zen"), 0, words),
-            words["paid_last"].format(v=figure_text(paid, 0, words)) if paid else ""),
-        kpi("seeds", words["seeds"], figure_text(seeds, 0, words),
-            "" if seeds is None else words["known"].format(v=figure_text(board.get("known"), 0, words))),
+        kpi("zen", words["zen"], figure_text(account.get("zen"), 0, words)),
+        kpi("seeds", words["seeds"], figure_text(board.get("seeds"), 0, words)),
         kpi("available", words["available"], size_text(account.get("available_gb"), words, 0)),
     ])
 
@@ -467,19 +460,11 @@ def challenge_card(c, board, switches, words, language):
 
 def quests(board, words, language):
     switches = (board.get("controls") or {}).get("switches", {})
-    account = board.get("account") or {}
     challenges = board.get("challenges", [])
-    voies = "".join(
-        f'<span><b>{escape(words["voie"].get(voie, voie))}</b> {escape(words["voie_done"].format(d=v["done"], t=v["total"], c=figure_text((account.get("voies") or {}).get(voie), 0, words)))}</span>'
-        for voie, v in (board.get("voies") or {}).items()
-    )
     cards = "".join(challenge_card(c, board, switches, words, language) for c in challenges)
     if board.get("categories") and not any(c["key"] == "category_volume_seed" for c in challenges):
         cards += f'<figure><figcaption>{escape(words["categories"])}</figcaption>{category_rows(board, switches, words, language)}</figure>'
-    return (
-        f'<section class="quests"><figure><figcaption>{escape(words["challenges"])}</figcaption>'
-        f'<div class="voies">{voies}</div></figure>{cards}</section>'
-    )
+    return f'<section class="quests">{cards}</section>'
 
 
 def setting_row(title, hint, control):
