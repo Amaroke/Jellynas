@@ -19,7 +19,9 @@ from page import PARTS, SCRIPT_HASH, board_page, pixels
 
 RATIO = "http://ratio:8000"
 SELF = "http://127.0.0.1:8000"
-SHOTS = {"1": (1200, 600), "2": (1200, 560), "3": (1200, 470)}
+SHOTS = PARTS
+WIDTHS = (560, 680, 800, 920, 1040)
+SCALE = 2
 PROBE_HEIGHT = 1000
 CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
 BACKGROUND = "0f172aff"
@@ -177,15 +179,35 @@ def hidden_of(folder):
     return MEASURED[folder]
 
 
+def shot_url(part, width):
+    return f"{SELF}/graphs?lang=fr&part={part}&shot={width}"
+
+
+def measured_height(dom):
+    return int(re.search(r'data-height="(\d+)"', dom).group(1))
+
+
+def square_of(heights):
+    sides = {width: max(width, height) for width, height in heights.items()}
+    width = min(sides, key=lambda w: (sides[w], -w))
+    return width, sides[width]
+
+
 def screenshot(part, folder):
     hidden = hidden_of(folder)
-    width, height = SHOTS[part]
+    heights = {
+        width: measured_height(chromium(folder, f"--window-size={width},{PROBE_HEIGHT}", "--dump-dom", shot_url(part, width)))
+        for width in WIDTHS
+    }
+    width, side = square_of(heights)
     path = Path(folder) / f"part{part}.png"
     chromium(
-        folder, f"--window-size={width},{height + hidden}", f"--screenshot={path}",
-        f"{SELF}/graphs?lang=fr&part={part}&pad={height}",
+        folder, f"--window-size={side},{side + hidden}", f"--force-device-scale-factor={SCALE}", f"--screenshot={path}",
+        shot_url(part, width),
     )
-    return cropped(path.read_bytes(), height)
+    png = path.read_bytes()
+    scale = max(1, int.from_bytes(png[16:20]) // side)
+    return cropped(png, side * scale)
 
 
 def load(path):
@@ -238,7 +260,7 @@ def serve(wake, port=8000, board_reader=read_board, sender=send_control):
                 print(f"Cannot read the board of ratio: {error}")
             query = urllib.parse.parse_qs(url.query)
             page = board_page(
-                latest["board"], query.get("part", [None])[0], query.get("lang", ["en"])[0], pixels(query.get("pad", [""])[0]),
+                latest["board"], query.get("part", [None])[0], query.get("lang", ["en"])[0], pixels(query.get("shot", [""])[0]),
             )
             body = page.encode()
             self.send_response(200)

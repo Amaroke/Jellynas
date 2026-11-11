@@ -52,7 +52,9 @@ RETIRED_KINDS = {"Films & Vidéos": "films-videos", "Ebook": "ebook", "Audio": "
 SPECIALIZATION = "films-videos"
 BADGE_SEEDS = 50
 DEFAULT_SCALES = {"duration": [[7, 0.1], [30, 0.25], [90, 0.35], [180, 0.5]], "rare": []}
-TIERS = (("blocked", 0.8), ("even", 1.0), ("floor", None), ("goal", 2.0))
+BLOCKED = 0.8
+TIERS = (("blocked", BLOCKED), ("even", 1.0), ("floor", None), ("goal", 2.0))
+ZEN_PACK = (1000, 1024)
 
 
 def quest(id, voie, challenge, level, description, **criteria):
@@ -1393,6 +1395,15 @@ def tier_index(account, settings):
     return sum(1 for t in tiers_of(account, settings) if ratio >= t["ratio"])
 
 
+def zen_gigabytes(zen):
+    packs, rest = divmod(zen or 0, ZEN_PACK[0])
+    return packs * ZEN_PACK[1] + rest
+
+
+def left_before_block(uploaded_gb, downloaded_gb):
+    return round(uploaded_gb / BLOCKED - downloaded_gb, 2)
+
+
 def account_board(account, state, settings):
     if account is None:
         return {"ratio": None, "floor": settings["floor"], "paused": True, "allowed": None}
@@ -1406,10 +1417,18 @@ def account_board(account, state, settings):
         "actual_gb": None if account["actual"] is None else gigabytes(account["actual"]),
         "credit_gb": None if account["credit"] is None else gigabytes(account["credit"]),
         "zen": account["zen"],
+        "zen_gb": zen_gigabytes(account["zen"]),
+        "available_gb": left_before_block(gigabytes(account["uploaded"]) + zen_gigabytes(account["zen"]), gigabytes(account["downloaded"])),
+        "available_now_gb": left_before_block(gigabytes(account["uploaded"]), gigabytes(account["downloaded"])),
         "class": account["class"],
         "grade": account["grade"],
         "voies": account["voies"],
     }
+
+
+def step_of(q, seeds, counts, scales, done):
+    current, target = progress_of(q, seeds, counts, scales, done)
+    return {"level": q["level"], "description": q["description"], "current": current, "target": target, "done": q["id"] in done}
 
 
 def board_of(state, settings, controls, torrents, seeds, account, now):
@@ -1432,6 +1451,7 @@ def board_of(state, settings, controls, torrents, seeds, account, now):
             "current": current,
             "target": target,
             "switch": challenge if challenge in SWITCHES else None,
+            "steps": [step_of(q, seeds, counts, scales, done) for q in levels],
         })
     farm = [t for t in torrents.values() if t["category"] == FARM]
     slices = {}

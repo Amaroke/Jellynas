@@ -761,6 +761,16 @@ class Quests(unittest.TestCase):
         self.assertEqual((by_key["vtr_min"]["level"], by_key["vtr_min"]["target"]), (2, 100))
         self.assertTrue(by_key["category_diversity_seed"]["done"])
 
+    def test_the_board_shows_every_level_of_each_challenge(self):
+        held = [torrent(f"s{i}", size_gb=0.01) for i in range(160)]
+        board, _ = run_board(FakeQBittorrent(held))
+        steps = {c["key"]: c["steps"] for c in board["challenges"]}["quantity_seed"]
+        self.assertEqual(
+            [(s["level"], s["current"], s["target"], s["done"]) for s in steps],
+            [(1, 160, 100, True), (2, 160, 150, True), (3, 160, 200, False), (4, 160, 250, False), (5, 160, 300, False)],
+        )
+        self.assertEqual(steps[2]["description"], "200 seeds")
+
 
 class Scales(unittest.TestCase):
     def test_the_rare_bonus_follows_the_size_and_seeder_buckets_of_the_class(self):
@@ -819,6 +829,12 @@ class Tiers(unittest.TestCase):
             [(t["name"], t["ratio"], t["gap_gb"]) for t in board["tiers"]],
             [("blocked", 0.8, -26.25), ("even", 1.0, -15), ("floor", 1.2, -7.5), ("goal", 2.0, 15)],
         )
+
+    def test_the_download_left_before_the_block_counts_the_zen_as_upload(self):
+        board, _ = run_board(FakeQBittorrent(), c411=FakeC411(uploaded_gb=40, downloaded_gb=30, zen=2616))
+        self.assertEqual(board["account"]["zen_gb"], 2664)
+        self.assertEqual(board["account"]["available_gb"], 3350)
+        self.assertEqual(board["account"]["available_now_gb"], 20)
 
     def test_crossing_a_tier_asks_farm_board_to_refresh(self):
         told = []
