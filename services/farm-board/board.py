@@ -23,6 +23,7 @@ SHOTS = ("1",)
 WIDTHS = (560, 680, 800, 920, 1040)
 SCALE = 2
 PROBE_HEIGHT = 1000
+RETRY = 60
 CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
 BACKGROUND = "0f172aff"
 STATE = Path("/state/state.json")
@@ -225,6 +226,9 @@ def report(webhook, state_path=STATE, now=None, board_reader=read_board, shooter
     now = now or datetime.datetime.now().astimezone()
     try:
         board = board_reader()
+        if not board.get("updated_at"):
+            print(f"ratio has not filled its board yet, the next try is in {RETRY} seconds")
+            return True
         with tempfile.TemporaryDirectory() as folder:
             images = [shooter(part, folder) for part in SHOTS]
         before = load(state_path)
@@ -236,6 +240,7 @@ def report(webhook, state_path=STATE, now=None, board_reader=read_board, shooter
         print(f"Cannot publish the Farm board, the next try is in one hour: {error} {error.read()[:300]!r}")
     except Exception:
         LOG.exception("Cannot publish the Farm board, the next try is in one hour")
+    return False
 
 
 def same_origin(headers):
@@ -320,9 +325,9 @@ def main():
     serve(wake)
     webhook = Webhook(required(os.environ, "DISCORD_FARM_WEBHOOK_ID"), required(os.environ, "DISCORD_FARM_WEBHOOK_TOKEN"))
     while True:
-        report(webhook)
+        waiting = report(webhook)
         now = datetime.datetime.now().astimezone()
-        wake.wait(max(1.0, (next_hour(now) - now).total_seconds() + 30))
+        wake.wait(RETRY if waiting else max(1.0, (next_hour(now) - now).total_seconds() + 30))
         wake.clear()
 
 
