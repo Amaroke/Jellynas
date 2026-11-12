@@ -1,7 +1,7 @@
 ---
 services:
   radarr:
-    image: lscr.io/linuxserver/radarr:6.4.4.10685-ls325
+    image: lscr.io/linuxserver/radarr:6.4.4.10685-ls326
     container_name: radarr
     restart: unless-stopped
     networks:
