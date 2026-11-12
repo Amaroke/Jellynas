@@ -1,7 +1,7 @@
 ---
 services:
   lazylibrarian:
-    image: lscr.io/linuxserver/lazylibrarian:8b6ba443-ls392
+    image: lscr.io/linuxserver/lazylibrarian:600a11cc-ls396
     container_name: lazylibrarian
     restart: unless-stopped
     networks:
