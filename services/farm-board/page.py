@@ -29,7 +29,7 @@ TEXT = {
             "quantity_seed": "Seed count", "duration_seed": "Seeding time", "vtr_min": "Seed note",
             "category_volume_seed": "Category volume", "category_diversity_seed": "Diversity",
         },
-        "level": "level {l} of {n}", "finished": "every level done", "indicator": "indicator",
+        "level": "level {l} of {n}", "finished": "every level done", "indicator": "indicator", "complete": "completed",
         "reached": "reached, waiting for C411 to count it",
         "categories": "Category volume, a badge at 50 seeds", "on": "on", "off": "off",
         "behaviours": "Farm switches", "numbers_title": "Farm settings", "switches": {
@@ -76,7 +76,7 @@ TEXT = {
             "quantity_seed": "Nombre de seeds", "duration_seed": "Durée de seed", "vtr_min": "Note des seeds",
             "category_volume_seed": "Volume catégorie", "category_diversity_seed": "Diversité",
         },
-        "level": "palier {l} sur {n}", "finished": "tous les paliers faits", "indicator": "indicateur",
+        "level": "palier {l} sur {n}", "finished": "tous les paliers faits", "indicator": "indicateur", "complete": "complété",
         "reached": "atteint, en attente de C411",
         "categories": "Volume catégorie, un badge à 50 seeds", "on": "actif", "off": "coupé",
         "behaviours": "Interrupteurs de la Farm", "numbers_title": "Réglages de la Farm", "switches": {
@@ -185,6 +185,7 @@ form { margin: 0; display: inline; }
 .switch::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; background: currentColor; }
 .switch.on { background: rgba(52, 211, 153, 0.16); color: var(--green); border-color: rgba(52, 211, 153, 0.4); }
 .tag { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.tag.complete { color: var(--green); font-weight: 600; }
 .head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; }
 .head .title { font-weight: 600; font-size: 14px; }
 .head .hint { grid-column: 1 / -1; }
@@ -442,10 +443,12 @@ def category_rows(board, switches, words, language):
 def challenge_card(c, board, switches, words, language):
     level = words["finished"] if c["done"] else words["level"].format(l=c["level"], n=c["levels"])
     voie = words["voie"].get(c.get("voie"), c.get("voie") or "")
-    side = (
-        switch(c["switch"], switches.get(c["switch"], False), "", words, "2", language)
-        if c["switch"] else f'<span class="tag">{escape(words["indicator"])}</span>'
-    )
+    if c["done"]:
+        side = f'<span class="tag complete">{escape(words["complete"])}</span>'
+    elif c["switch"]:
+        side = switch(c["switch"], switches.get(c["switch"], False), "", words, "2", language)
+    else:
+        side = f'<span class="tag">{escape(words["indicator"])}</span>'
     hint = f"{escape(voie)}, {escape(level)}, {escape(c['description'])}"
     if not c["done"] and c["current"] >= c["target"]:
         hint += f', <span class="wait">{escape(words["reached"])}</span>'
