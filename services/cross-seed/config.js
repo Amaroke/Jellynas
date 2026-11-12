@@ -25,6 +25,7 @@ module.exports = {
 	includeSingleEpisodes: true,
 	includeNonVideos: true,
 	seasonFromEpisodes: 1,
+	excludeOlder: "15 days",
 	excludeRecentSearch: "3 days",
 	action: "inject",
 	duplicateCategories: false,
