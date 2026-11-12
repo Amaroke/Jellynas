@@ -2194,9 +2194,10 @@ tier under allows, and two curves over 30 days: the Zen paid each night with the
 balance, and the uploaded and downloaded totals. `?part=2` shows the Quests, one
 card per challenge with every level and its count: a switch for the Seed count,
 an indicator for the seeding time, the note and the diversity, and in the Volume
-challenge its ten categories, each with its switch. `?part=3` shows each switch
-and setting of the Farm with what it does, its disk split by Source and what
-each Source earned.
+challenge its ten categories, each with its switch. A challenge with every level
+done shows a locked completed badge in place of its switch. `?part=3` shows each
+switch and setting of the Farm with what it does, its disk split by Source and
+what each Source earned.
 `shot=<width>` sets the width in pixels for the pictures of Discord.
 
 Homepage embeds the three parts, in French, in three iframes. A switch or a

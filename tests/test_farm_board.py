@@ -312,6 +312,14 @@ class PageTest(unittest.TestCase):
         self.assertIn('class="switch on"', page)
         self.assertIn('name="name" value="volume:films-videos"><input type="hidden" name="value" value="on">', page)
 
+    def test_a_completed_challenge_shows_a_locked_completed_badge_instead_of_its_switch(self):
+        challenge = dict(BOARD["challenges"][0], done=True, level=5, current=305, target=300)
+        board = dict(BOARD, challenges=[challenge])
+        page = board_page(board, "2", "fr")
+        self.assertIn('<span class="tag complete">complété</span>', page)
+        self.assertNotIn('value="quantity_seed"', page)
+        self.assertIn("completed", board_page(board, "2", "en"))
+
     def test_the_third_part_shows_the_switches_the_settings_the_disk_and_the_earnings(self):
         page = board_page(BOARD, "3", "fr")
         for text in ("Grabs payants frais", "Pause Prowlarr sous le plancher", "Budget de la Farm (Go)", "Disque de la Farm", "Gains par Source"):
