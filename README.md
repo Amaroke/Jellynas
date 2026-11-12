@@ -2213,9 +2213,11 @@ of the account part, `?part=1`, in one message, in violet, or in rose when the
 downloads of C411 are paused under the Ratio floor. Each day at midnight it
 posts a new message, then edits that one every hour until the next midnight, and
 at once when a switch or a setting changes or when the Account ratio crosses a
-tier. The id of the message of the day sits in
-`${APPDATA_ROOT}/farm-board/state.json`. "Actualiser le Farm board" in Actions
-rapides on Homepage publishes it at once. Its container is capped at 512 MB.
+tier. While ratio has not filled its board yet, after a restart, farm-board
+publishes nothing and tries again every minute. The id of the message of the day
+sits in `${APPDATA_ROOT}/farm-board/state.json`. "Actualiser le Farm board" in
+Actions rapides on Homepage publishes it at once. Its container is capped at 512
+MB.
 
 1. In Discord, in the server of the NAS, create a text channel for the Farm.
 2. In Server Settings > Integrations > Webhooks, click "New Webhook", pick that

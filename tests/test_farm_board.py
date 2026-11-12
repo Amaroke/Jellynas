@@ -193,6 +193,16 @@ class ReportTest(unittest.TestCase):
             self.assertEqual(webhook.calls, [])
             self.assertFalse(path.exists())
 
+    def test_a_board_ratio_has_not_filled_yet_publishes_nothing_and_asks_for_a_retry_soon(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "state.json"
+            webhook = FakeWebhook()
+            waiting = {**SUMMARY, "updated_at": None}
+            self.assertTrue(report(webhook, path, at(9, 14), lambda: waiting, lambda part, _: b""))
+            self.assertEqual(webhook.calls, [])
+            self.assertFalse(report(webhook, path, at(9, 14), lambda: SUMMARY, lambda part, _: b""))
+            self.assertEqual([call[0] for call in webhook.calls], ["post"])
+
 
 class RefreshTest(unittest.TestCase):
     def start(self):
