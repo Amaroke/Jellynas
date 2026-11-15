@@ -132,7 +132,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - run: npx --yes markdownlint-cli2@0.24.0 "**/*.md"
+      - run: npx --yes markdownlint-cli2@0.24.1 "**/*.md"
 
   actions:
     name: Actions
