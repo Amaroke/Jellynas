@@ -110,7 +110,7 @@ jobs:
         with:
           persist-credentials: false
       - run: shellcheck scripts/*.sh services/gluetun/entrypoint.sh
-      - run: pipx run ruff==0.17.4 check .
+      - run: pipx run ruff==0.17.5 check .
 
   renovate:
     name: Renovate
