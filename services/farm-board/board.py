@@ -15,7 +15,7 @@ import uuid
 import zlib
 from pathlib import Path
 
-from page import PARTS, SCRIPT_HASH, board_page, pixels
+from page import ALL_CATEGORIES, PARTS, SCRIPT_HASH, board_page, open_categories, pixels
 
 RATIO = "http://ratio:8000"
 SELF = "http://127.0.0.1:8000"
@@ -291,7 +291,11 @@ def serve(wake, port=8000, board_reader=read_board, sender=send_control):
             fields = {k: v[0] for k, v in urllib.parse.parse_qs(self.rfile.read(length).decode()).items()}
             try:
                 name, value = control_of(fields)
-                sender(name, value)
+                if name == ALL_CATEGORIES:
+                    for category in open_categories(board_reader()):
+                        sender(category["switch"], value)
+                else:
+                    sender(name, value)
             except ValueError:
                 self.send_error(400)
                 return

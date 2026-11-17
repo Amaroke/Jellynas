@@ -6,6 +6,7 @@ import itertools
 
 HISTORY_DAYS = 30
 PARTS = ("1", "2", "3")
+ALL_CATEGORIES = "volume:all"
 COLORS = {
     "paid": "#f472b6", "free": "#34d399", "library": "#38bdf8",
     "quest": "#fb923c", "unknown": "#94a3b8", "public": "#64748b",
@@ -31,7 +32,7 @@ TEXT = {
         },
         "level": "level {l} of {n}", "finished": "every level done", "indicator": "indicator", "complete": "completed",
         "reached": "reached, waiting for C411 to count it",
-        "categories": "Category volume, a badge at 50 seeds", "on": "on", "off": "off",
+        "categories": "Category volume, a badge at 50 seeds", "on": "on", "off": "off", "all_categories": "Every category",
         "behaviours": "Farm switches", "numbers_title": "Farm settings", "switches": {
             "free": "Freeleech", "twins": "Twins", "paid": "Fresh paid grabs", "clean_public": "Clean Public torrents",
             "drop_twins": "Drop Twins", "hold": "Hold Prowlarr under the floor", "adopt": "Adopt the Library",
@@ -78,7 +79,7 @@ TEXT = {
         },
         "level": "palier {l} sur {n}", "finished": "tous les paliers faits", "indicator": "indicateur", "complete": "complété",
         "reached": "atteint, en attente de C411",
-        "categories": "Volume catégorie, un badge à 50 seeds", "on": "actif", "off": "coupé",
+        "categories": "Volume catégorie, un badge à 50 seeds", "on": "actif", "off": "coupé", "all_categories": "Toutes les catégories",
         "behaviours": "Interrupteurs de la Farm", "numbers_title": "Réglages de la Farm", "switches": {
             "free": "Freeleech", "twins": "Twins", "paid": "Grabs payants frais", "clean_public": "Nettoyage des Public torrents",
             "drop_twins": "Retrait des Twins", "hold": "Pause Prowlarr sous le plancher", "adopt": "Adoption de la Library",
@@ -201,6 +202,7 @@ form { margin: 0; display: inline; }
 .step.next .goal { color: var(--text); font-weight: 600; }
 .step.later .bar span { opacity: 0.45; }
 .cats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 7px 16px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line); }
+.cats .all { grid-column: 1 / -1; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 .setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 14px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); }
 .setting:first-child { border-top: none; padding-top: 2px; }
 .setting .title { font-weight: 600; }
@@ -429,15 +431,36 @@ def steps_of(steps):
     return f'<div class="steps">{cells}</div>'
 
 
+def open_categories(board):
+    return [c for c in (board or {}).get("categories", []) if c["count"] < c["target"]]
+
+
+def category_side(c, switches, words, language):
+    if c["count"] >= c["target"]:
+        return f'<span class="tag complete">{escape(words["complete"])}</span>'
+    return switch(c["switch"], switches.get(c["switch"], False), "", words, "2", language)
+
+
+def category_master(board, switches, words, language):
+    targets = open_categories(board)
+    if not targets:
+        return ""
+    on = all(switches.get(c["switch"], False) for c in targets)
+    return (
+        f'<div class="row all"><div class="what title">{escape(words["all_categories"])}</div>'
+        f'<div class="side">{switch(ALL_CATEGORIES, on, "", words, "2", language)}</div></div>'
+    )
+
+
 def category_rows(board, switches, words, language):
     rows = "".join(
         f'<div class="row"><div class="what title">{escape(c["name"])}</div>'
         f'<div class="side"><span class="count">{c["count"]} / {c["target"]}</span>'
-        f'{switch(c["switch"], switches.get(c["switch"], False), "", words, "2", language)}</div>'
+        f'{category_side(c, switches, words, language)}</div>'
         f'{progress_bar(c["count"], c["target"], c["count"] >= c["target"])}</div>'
         for c in board.get("categories", [])
     )
-    return f'<div class="cats">{rows}</div>'
+    return f'<div class="cats">{category_master(board, switches, words, language)}{rows}</div>'
 
 
 def challenge_card(c, board, switches, words, language):
