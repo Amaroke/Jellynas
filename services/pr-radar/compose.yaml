@@ -1,0 +1,37 @@
+---
+services:
+  pr-radar:
+    image: python:3.15.2-slim-trixie
+    container_name: pr-radar
+    restart: unless-stopped
+    command: ["python", "-u", "/app/radar.py"]
+    networks:
+      - internal-zone
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    user: ${PUID}:${PGID}
+    mem_limit: 128m
+    environment:
+      TZ: ${TZ}
+      PR_RADAR_GITHUB_TOKEN: ${PR_RADAR_GITHUB_TOKEN}
+      DISCORD_PR_WEBHOOK_ID: ${DISCORD_PR_WEBHOOK_ID}
+      DISCORD_PR_WEBHOOK_TOKEN: ${DISCORD_PR_WEBHOOK_TOKEN}
+    labels:
+      kuma.pr-radar.http.name: PR radar
+      kuma.pr-radar.http.url: http://pr-radar:8000/health
+      docker-volume-backup.stop-during-backup: "true"
+    volumes:
+      - ./radar.py:/app/radar.py:ro
+      - ${APPDATA_ROOT}/pr-radar:/state
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/status', timeout=5)
+      timeout: 10s
+      start_period: 60s
