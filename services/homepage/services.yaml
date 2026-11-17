@@ -44,23 +44,23 @@
           https://aurral.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         siteMonitor:
           https://aurral.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}/api/health/live
-    # - Music bot:
-    #     icon: mdi-music-circle-#ab47bc
-    #     description: Music of the Library on Discord
-    #     widget:
-    #       type: customapi
-    #       url: http://music-bot:8000/status
-    #       refreshInterval: 15000
-    #       mappings:
-    #         - field: state
-    #           label: State
-    #         - field: track
-    #           label: Track
-    #         - field: queue
-    #           label: Queue
-    #           format: number
-    #         - field: shuffle
-    #           label: Shuffle
+#     - Music bot:
+#         icon: mdi-music-circle-#ab47bc
+#         description: Music of the Library on Discord
+#         widget:
+#           type: customapi
+#           url: http://music-bot:8000/status
+#           refreshInterval: 15000
+#           mappings:
+#             - field: state
+#               label: State
+#             - field: track
+#               label: Track
+#             - field: queue
+#               label: Queue
+#               format: number
+#             - field: shuffle
+#               label: Shuffle
 
 - Downloads:
     - qBittorrent:
