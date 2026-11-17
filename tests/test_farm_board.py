@@ -330,6 +330,27 @@ class PageTest(unittest.TestCase):
         self.assertNotIn('value="quantity_seed"', page)
         self.assertIn("completed", board_page(board, "2", "en"))
 
+    def test_a_category_at_its_target_shows_completed_instead_of_its_switch(self):
+        categories = BOARD["categories"] + [
+            {"slug": "audio", "name": "Audio", "count": 50, "target": 50, "switch": "volume:audio"},
+        ]
+        page = board_page(dict(BOARD, categories=categories), "2", "fr")
+        self.assertNotIn('value="volume:audio"', page)
+        self.assertEqual(page.count('<span class="tag complete">complété</span>'), 1)
+
+    def test_one_switch_turns_every_open_category_on_or_off(self):
+        page = board_page(BOARD, "2", "fr")
+        self.assertIn("Toutes les catégories", page)
+        self.assertIn('name="name" value="volume:all"><input type="hidden" name="value" value="on">', page)
+        controls = dict(BOARD["controls"], switches=dict(BOARD["controls"]["switches"], **{"volume:films-videos": True}))
+        page = board_page(dict(BOARD, controls=controls), "2", "fr")
+        self.assertIn('name="name" value="volume:all"><input type="hidden" name="value" value="off">', page)
+
+    def test_no_switch_for_every_category_when_all_are_complete(self):
+        categories = [dict(c, count=c["target"]) for c in BOARD["categories"]]
+        page = board_page(dict(BOARD, categories=categories), "2", "fr")
+        self.assertNotIn('value="volume:all"', page)
+
     def test_the_third_part_shows_the_switches_the_settings_the_disk_and_the_earnings(self):
         page = board_page(BOARD, "3", "fr")
         for text in ("Grabs payants frais", "Pause Prowlarr sous le plancher", "Budget de la Farm (Go)", "Disque de la Farm", "Gains par Source"):
@@ -393,6 +414,15 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(answer.headers["Location"], "/graphs?lang=fr&part=3")
         self.assertEqual(self.sent, [("paid", True)])
         self.assertTrue(self.wake.is_set())
+
+    def test_the_switch_for_every_category_leaves_the_complete_ones_alone(self):
+        categories = BOARD["categories"] + [
+            {"slug": "audio", "name": "Audio", "count": 50, "target": 50, "switch": "volume:audio"},
+        ]
+        url = self.start(reader=lambda: dict(BOARD, categories=categories))
+        answer = self.post(url, {"name": "volume:all", "value": "off", "part": "2", "lang": "fr"}, origin=url)
+        self.assertEqual(answer.code, 303)
+        self.assertEqual(self.sent, [("volume:films-videos", False), ("volume:ebook", False)])
 
     def test_a_number_goes_to_ratio_as_a_number(self):
         url = self.start()
