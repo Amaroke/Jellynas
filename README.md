@@ -574,6 +574,7 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with
 | autobrr     | `https://autobrr.lan.<DOMAIN>`         | Local network |
 | ratio       | `https://ratio.lan.<DOMAIN>/graphs`    | Local network |
 | Actions     | `https://actions.lan.<DOMAIN>/actions` | Local network |
+| PR radar    | `https://prs.lan.<DOMAIN>/pulls`       | Local network |
 | Beszel      | `https://beszel.lan.<DOMAIN>`          | Local network |
 | Uptime Kuma | `https://uptime-kuma.lan.<DOMAIN>`     | Local network |
 | Dozzle      | `https://dozzle.lan.<DOMAIN>`          | Local network |
@@ -1937,10 +1938,15 @@ posts to the PR channel of the Discord server dedicated to the NAS:
 - a merge, in purple, and a close without merge, in grey.
 
 The first run only remembers what is open, so it posts nothing. The state lives
-in `${APPDATA_ROOT}/pr-radar/state.json`. The PR radar tile of Homepage counts
-the open pull requests, those opened by a bot and those with a failed CI, from
-`http://pr-radar:8000/status`. Uptime Kuma watches `/health`, which fails after
-three polls in a row that could not reach GitHub or Discord.
+in `${APPDATA_ROOT}/pr-radar/state.json`.
+
+The Pull requests group of Homepage shows `https://prs.lan.<DOMAIN>/pulls`, the
+open pull requests, ready ones first, then those waiting on their CI or on an
+update, then those to fix, then the drafts. Each one gives its repo, author, CI,
+merge state, review, labels, size and age, and links to its files, its checks
+and its merge box on GitHub. `http://pr-radar:8000/status` gives the same counts
+as JSON. Uptime Kuma watches `/health`, which fails after three polls in a row
+that could not reach GitHub or Discord.
 
 1. In GitHub, Settings > Developer settings > Fine-grained tokens, create a
    token for All repositories, read-only, with the permissions Pull requests,
