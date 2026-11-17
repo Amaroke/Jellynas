@@ -716,6 +716,17 @@ class Quests(unittest.TestCase):
         films = next(c for c in board["categories"] if c["slug"] == "films-videos")
         self.assertEqual((films["count"], films["target"]), (75, 100))
 
+    def test_films_is_complete_only_once_its_last_level_is_validated(self):
+        held = [torrent(f"f{i}", size_gb=0.1) for i in range(100)] + [torrent(f"e{i}", size_gb=0.1) for i in range(50)]
+        categories = {**{f"f{i}": "films-videos" for i in range(100)}, **{f"e{i}": "ebook" for i in range(50)}}
+        board, _ = run_board(FakeQBittorrent(held), state=empty_state(categories=categories))
+        by_slug = {c["slug"]: c for c in board["categories"]}
+        self.assertEqual((by_slug["films-videos"]["target"], by_slug["films-videos"]["complete"]), (100, False))
+        self.assertTrue(by_slug["ebook"]["complete"])
+        board, _ = run_board(FakeQBittorrent(held), state=empty_state(categories=categories, done=[72, 73, 74, 75]))
+        films = next(c for c in board["categories"] if c["slug"] == "films-videos")
+        self.assertTrue(films["complete"])
+
     def test_the_seed_count_switch_hunts_every_category_up_to_the_next_level(self):
         held = [torrent(f"s{i}", size_gb=0.01) for i in range(199)]
         c411 = FakeC411(hunt={"all": [small("one"), small("two")]})

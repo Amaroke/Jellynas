@@ -920,6 +920,12 @@ def category_target(slug, done):
     return level["criteria"]["min_seeds_same_cat"] if level else BADGE_SEEDS
 
 
+def category_complete(slug, count, done):
+    if slug == SPECIALIZATION:
+        return next_level("category_volume_seed", done) is None
+    return count >= BADGE_SEEDS
+
+
 def wanted_hunts(switches, state, seeds, counts):
     done = set(state["done"])
     hunts = []
@@ -1478,7 +1484,8 @@ def board_of(state, settings, controls, torrents, seeds, account, now):
         },
         "challenges": challenges,
         "categories": [
-            {"slug": slug, "name": name, "count": counts[slug], "target": category_target(slug, done), "switch": f"volume:{slug}"}
+            {"slug": slug, "name": name, "count": counts[slug], "target": category_target(slug, done),
+             "complete": category_complete(slug, counts[slug], done), "switch": f"volume:{slug}"}
             for slug, (_, name) in C411_CATEGORIES.items()
         ],
         "controls": controls,
