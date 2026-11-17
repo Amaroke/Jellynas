@@ -438,7 +438,8 @@ class C411:
     def category(self, infohash):
         answer = self.json(f"/api/torrents/{infohash}", self.profile_key)
         item = answer.get("data", answer) if isinstance(answer, dict) else {}
-        return (item.get("category") or {}).get("slug", "")
+        category = item.get("category") or {}
+        return category.get("slug") or next((s for s, (i, _) in C411_CATEGORIES.items() if i == category.get("id")), "")
 
     def download(self, infohash):
         return self.get("/api", self.torznab_key, {"t": "get", "id": infohash, "apikey": self.torznab_key})
@@ -917,6 +918,12 @@ def category_target(slug, done):
         return BADGE_SEEDS
     level = next_level("category_volume_seed", done)
     return level["criteria"]["min_seeds_same_cat"] if level else BADGE_SEEDS
+
+
+def category_complete(slug, count, done):
+    if slug == SPECIALIZATION:
+        return next_level("category_volume_seed", done) is None
+    return count >= BADGE_SEEDS
 
 
 def wanted_hunts(switches, state, seeds, counts):
@@ -1477,7 +1484,8 @@ def board_of(state, settings, controls, torrents, seeds, account, now):
         },
         "challenges": challenges,
         "categories": [
-            {"slug": slug, "name": name, "count": counts[slug], "target": category_target(slug, done), "switch": f"volume:{slug}"}
+            {"slug": slug, "name": name, "count": counts[slug], "target": category_target(slug, done),
+             "complete": category_complete(slug, counts[slug], done), "switch": f"volume:{slug}"}
             for slug, (_, name) in C411_CATEGORIES.items()
         ],
         "controls": controls,

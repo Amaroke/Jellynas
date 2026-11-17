@@ -432,11 +432,11 @@ def steps_of(steps):
 
 
 def open_categories(board):
-    return [c for c in (board or {}).get("categories", []) if c["count"] < c["target"]]
+    return [c for c in (board or {}).get("categories", []) if not c["complete"]]
 
 
 def category_side(c, switches, words, language):
-    if c["count"] >= c["target"]:
+    if c["complete"]:
         return f'<span class="tag complete">{escape(words["complete"])}</span>'
     return switch(c["switch"], switches.get(c["switch"], False), "", words, "2", language)
 

@@ -266,8 +266,8 @@ BOARD = {
          "description": "25 seeds pendant 7 jours", "current": 3, "target": 25, "switch": None},
     ],
     "categories": [
-        {"slug": "films-videos", "name": "Films & Vidéos", "count": 75, "target": 100, "switch": "volume:films-videos"},
-        {"slug": "ebook", "name": "Ebook", "count": 36, "target": 50, "switch": "volume:ebook"},
+        {"slug": "films-videos", "name": "Films & Vidéos", "count": 75, "target": 100, "switch": "volume:films-videos", "complete": False},
+        {"slug": "ebook", "name": "Ebook", "count": 36, "target": 50, "switch": "volume:ebook", "complete": False},
     ],
     "controls": {
         "switches": {
@@ -332,11 +332,17 @@ class PageTest(unittest.TestCase):
 
     def test_a_category_at_its_target_shows_completed_instead_of_its_switch(self):
         categories = BOARD["categories"] + [
-            {"slug": "audio", "name": "Audio", "count": 50, "target": 50, "switch": "volume:audio"},
+            {"slug": "audio", "name": "Audio", "count": 50, "target": 50, "switch": "volume:audio", "complete": True},
         ]
         page = board_page(dict(BOARD, categories=categories), "2", "fr")
         self.assertNotIn('value="volume:audio"', page)
         self.assertEqual(page.count('<span class="tag complete">complété</span>'), 1)
+
+    def test_a_category_at_its_target_with_levels_left_keeps_its_switch(self):
+        categories = [dict(BOARD["categories"][0], count=100)]
+        page = board_page(dict(BOARD, categories=categories), "2", "fr")
+        self.assertIn('value="volume:films-videos"', page)
+        self.assertNotIn('<span class="tag complete">', page)
 
     def test_one_switch_turns_every_open_category_on_or_off(self):
         page = board_page(BOARD, "2", "fr")
@@ -347,7 +353,7 @@ class PageTest(unittest.TestCase):
         self.assertIn('name="name" value="volume:all"><input type="hidden" name="value" value="off">', page)
 
     def test_no_switch_for_every_category_when_all_are_complete(self):
-        categories = [dict(c, count=c["target"]) for c in BOARD["categories"]]
+        categories = [dict(c, count=c["target"], complete=True) for c in BOARD["categories"]]
         page = board_page(dict(BOARD, categories=categories), "2", "fr")
         self.assertNotIn('value="volume:all"', page)
 
@@ -417,7 +423,7 @@ class ServerTest(unittest.TestCase):
 
     def test_the_switch_for_every_category_leaves_the_complete_ones_alone(self):
         categories = BOARD["categories"] + [
-            {"slug": "audio", "name": "Audio", "count": 50, "target": 50, "switch": "volume:audio"},
+            {"slug": "audio", "name": "Audio", "count": 50, "target": 50, "switch": "volume:audio", "complete": True},
         ]
         url = self.start(reader=lambda: dict(BOARD, categories=categories))
         answer = self.post(url, {"name": "volume:all", "value": "off", "part": "2", "lang": "fr"}, origin=url)
