@@ -137,15 +137,16 @@ sets out.
 19. [Indexarr](#indexarr)
 20. [Music bot](#music-bot)
 21. [Discord messages](#discord-messages)
-22. [Private tracker ratio](#private-tracker-ratio)
-23. [Observation](#observation)
-24. [Beszel](#beszel)
-25. [Uptime Kuma](#uptime-kuma)
-26. [Dozzle](#dozzle)
-27. [Homepage](#homepage)
-28. [Backup](#backup)
-29. [Verify the NAS](#verify-the-nas)
-30. [Contributing](#contributing)
+22. [PR radar](#pr-radar)
+23. [Private tracker ratio](#private-tracker-ratio)
+24. [Observation](#observation)
+25. [Beszel](#beszel)
+26. [Uptime Kuma](#uptime-kuma)
+27. [Dozzle](#dozzle)
+28. [Homepage](#homepage)
+29. [Backup](#backup)
+30. [Verify the NAS](#verify-the-nas)
+31. [Contributing](#contributing)
 
 ## Architecture
 
@@ -444,7 +445,7 @@ mkdir -p "$BACKUP_ROOT" \
   "$DATA_ROOT"/media/{movies,shows,anime,music,aurral,books,manga} \
   "$DATA_ROOT"/media/{movies,shows}/.recycle \
   "$APPDATA_ROOT"/{seerr,lldap,authelia,aurral,recyclarr,autobrr,cross-seed} \
-  "$APPDATA_ROOT"/{ratio,farm-board,discord-posts,slskd,suwayomi}
+  "$APPDATA_ROOT"/{ratio,farm-board,discord-posts,pr-radar,slskd,suwayomi}
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
@@ -1922,6 +1923,35 @@ news, add a new file, such as
 `discord-posts/2026-11-new-folder.md`, and publish it with `news` as the
 channel. Any channel works the same way once `.env` holds
 `DISCORD_<CHANNEL>_WEBHOOK_ID` and `DISCORD_<CHANNEL>_WEBHOOK_TOKEN`.
+
+## PR radar
+
+The `pr-radar` service follows the pull requests of every GitHub repo of the
+Admin, whoever opened them, Renovate and Dependabot included, and the pull
+requests the Admin opened elsewhere. Every 3 minutes,
+`services/pr-radar/radar.py` reads them through the GraphQL API of GitHub and
+posts to the PR channel of the Discord server dedicated to the NAS:
+
+- a new pull request, in green, with its author and the state of its CI,
+- a CI that turns red, in red, once per commit,
+- a merge, in purple, and a close without merge, in grey.
+
+The first run only remembers what is open, so it posts nothing. The state lives
+in `${APPDATA_ROOT}/pr-radar/state.json`. The PR radar tile of Homepage counts
+the open pull requests, those opened by a bot and those with a failed CI, from
+`http://pr-radar:8000/status`. Uptime Kuma watches `/health`, which fails after
+three polls in a row that could not reach GitHub or Discord.
+
+1. In GitHub, Settings > Developer settings > Fine-grained tokens, create a
+   token for All repositories, read-only, with the permissions Pull requests,
+   Commit statuses and Actions, and set it as `PR_RADAR_GITHUB_TOKEN` in `.env`.
+2. In Discord, in the settings of the PR channel, Integrations > Webhooks, create
+   a webhook and set both parts of its URL as `DISCORD_PR_WEBHOOK_ID` and
+   `DISCORD_PR_WEBHOOK_TOKEN` in `.env`.
+
+On the computer of the Admin, [gh-dash](https://github.com/dlvhdr/gh-dash) shows
+the same pull requests in the terminal, with `is:open user:<login>` as the
+filter of a section.
 
 ## Private tracker ratio
 

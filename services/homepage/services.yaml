@@ -271,6 +271,23 @@
         href:
           https://dozzle.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
         siteMonitor: http://dozzle:8080/healthcheck
+    - PR radar:
+        icon: mdi-source-pull-#00897b
+        description: Pull requests of every GitHub repo, on Discord
+        widget:
+          type: customapi
+          url: http://pr-radar:8000/status
+          refreshInterval: 60000
+          mappings:
+            - field: open
+              label: Open
+              format: number
+            - field: bots
+              label: Bots
+              format: number
+            - field: failing
+              label: Failing CI
+              format: number
     - Backup:
         icon: mdi-archive-arrow-down-#00897b
         description: Archive of the appdata, every night

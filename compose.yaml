@@ -28,6 +28,7 @@ include:
   - services/ratio/compose.yaml
   - services/farm-board/compose.yaml
   - services/discord-posts/compose.yaml
+  - services/pr-radar/compose.yaml
   - services/beszel/compose.yaml
   - services/uptime-kuma/compose.yaml
   - services/dozzle/compose.yaml
