@@ -438,7 +438,8 @@ class C411:
     def category(self, infohash):
         answer = self.json(f"/api/torrents/{infohash}", self.profile_key)
         item = answer.get("data", answer) if isinstance(answer, dict) else {}
-        return (item.get("category") or {}).get("slug", "")
+        category = item.get("category") or {}
+        return category.get("slug") or next((s for s, (i, _) in C411_CATEGORIES.items() if i == category.get("id")), "")
 
     def download(self, infohash):
         return self.get("/api", self.torznab_key, {"t": "get", "id": infohash, "apikey": self.torznab_key})

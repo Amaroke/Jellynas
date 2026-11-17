@@ -1492,7 +1492,7 @@ class FakeC411Server(http.server.BaseHTTPRequestHandler):
         elif self.path.startswith("/api?t=get&id=ab"):
             body = b"d4:infod6:lengthi1e4:name1:aee"
         elif self.path.startswith("/api/torrents/ab"):
-            body = json.dumps({"infoHash": "AB", "category": {"slug": "audio"}}).encode()
+            body = json.dumps({"data": {"infoHash": "AB", "category": {"id": 3, "name": "Audio"}}}).encode()
         elif self.path.startswith("/api/torrents"):
             body = json.dumps(CATALOG).encode()
         else:
