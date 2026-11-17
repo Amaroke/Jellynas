@@ -21,6 +21,10 @@ layout:
     icon: mdi-lightning-bolt
     style: row
     columns: 1
+  Pull requests:
+    icon: mdi-source-pull
+    style: row
+    columns: 1
   Watch:
     icon: mdi-television-play
     style: row

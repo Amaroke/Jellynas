@@ -10,10 +10,13 @@ from pathlib import Path
 from radar import (
     INTERVAL,
     Radar,
+    age,
     embed,
     events,
     poll,
+    pulls_page,
     queries,
+    readiness,
     serve,
     settings,
     stats,
@@ -51,10 +54,19 @@ class SummaryTest(unittest.TestCase):
             "author": {"login": "renovate"},
             "repository": {"nameWithOwner": "o/r"},
             "commits": {"nodes": [{"commit": {"statusCheckRollup": {"state": "FAILURE"}}}]},
+            "createdAt": "2026-11-17T20:00:00Z",
+            "additions": 3,
+            "deletions": 1,
+            "changedFiles": 2,
+            "mergeStateStatus": "BLOCKED",
+            "reviewDecision": "REVIEW_REQUIRED",
+            "labels": {"nodes": [{"name": "major"}]},
         }
         self.assertEqual(
             {"repo": "o/r", "number": 7, "title": "Fix", "url": "https://github.com/o/r/pull/7", "author": "renovate",
-             "state": "OPEN", "draft": True, "sha": "abc", "ci": "FAILURE"},
+             "state": "OPEN", "draft": True, "sha": "abc", "ci": "FAILURE", "created": "2026-11-17T20:00:00Z",
+             "additions": 3, "deletions": 1, "files": 2, "merge": "BLOCKED", "review": "REVIEW_REQUIRED",
+             "labels": ["major"]},
             summarize(node),
         )
 
@@ -166,6 +178,9 @@ class StatusTest(unittest.TestCase):
                     self.assertEqual(200, response.status)
                 with urllib.request.urlopen(f"{base}/status") as response:
                     self.assertEqual(1, json.load(response)["open"])
+                with urllib.request.urlopen(f"{base}/pulls") as response:
+                    self.assertIn("default-src 'none'", response.headers["Content-Security-Policy"])
+                    self.assertIn("1 ouverte(s)", response.read().decode())
             finally:
                 server.shutdown()
                 server.server_close()
@@ -174,6 +189,45 @@ class StatusTest(unittest.TestCase):
         radar = Radar(Path("unused"))
         radar.last_success = time.time() - 3 * INTERVAL - 1
         self.assertFalse(radar.healthy())
+
+
+class PageTest(unittest.TestCase):
+    now = datetime.datetime(2026, 11, 17, 21, 0, tzinfo=datetime.UTC)
+
+    def test_a_pull_is_ready_once_its_ci_is_green_and_github_allows_the_merge(self):
+        self.assertEqual("ok", readiness({**pull(1), "merge": "CLEAN"}))
+        self.assertEqual("ok", readiness({**pull(1), "merge": "UNSTABLE"}))
+        self.assertEqual("wait", readiness({**pull(1, ci="PENDING"), "merge": "BLOCKED"}))
+        self.assertEqual("wait", readiness({**pull(1), "merge": "BEHIND"}))
+        self.assertEqual("bad", readiness({**pull(1, ci="FAILURE"), "merge": "CLEAN"}))
+        self.assertEqual("bad", readiness({**pull(1), "merge": "DIRTY"}))
+        self.assertEqual("muted", readiness({**pull(1, draft=True), "merge": "DRAFT"}))
+
+    def test_the_age_reads_in_the_largest_unit(self):
+        self.assertEqual("2 j", age("2026-11-15T20:00:00Z", self.now))
+        self.assertEqual("3 h", age("2026-11-17T18:00:00Z", self.now))
+        self.assertEqual("5 min", age("2026-11-17T20:55:00Z", self.now))
+        self.assertEqual("", age("", self.now))
+
+    def test_the_page_lists_open_pulls_ready_ones_first_with_their_links(self):
+        pulls = keyed(
+            {**pull(1, ci="FAILURE"), "merge": "BLOCKED"},
+            {**pull(2), "merge": "CLEAN", "title": "<b>ready</b>", "labels": ["major"]},
+            pull(3, state="MERGED"),
+        )
+        page = pulls_page(pulls, self.now)
+        self.assertLess(page.index("#2</span>"), page.index("#1</span>"))
+        self.assertNotIn("#3</span>", page)
+        self.assertIn("&lt;b&gt;ready&lt;/b&gt;", page)
+        self.assertIn('href="https://github.com/Amaroke/Jellynas/pull/2/files"', page)
+        self.assertIn('href="https://github.com/Amaroke/Jellynas/pull/2/checks"', page)
+        self.assertIn("prête à merger", page)
+        self.assertIn("major", page)
+        self.assertIn("2 ouverte(s)", page)
+        self.assertIn("1 prête(s) · 0 en attente · 1 à corriger", page)
+
+    def test_an_empty_radar_says_so(self):
+        self.assertIn("Aucune pull request ouverte", pulls_page({}, self.now))
 
 
 class SettingsTest(unittest.TestCase):
