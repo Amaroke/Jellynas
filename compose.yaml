@@ -7,7 +7,7 @@ include:
   - services/lldap/compose.yaml
   - services/authelia/compose.yaml
   - services/aurral/compose.yaml
-  - services/music-bot/compose.yaml
+  # - services/music-bot/compose.yaml
   - services/caddy/compose.yaml
   - services/gluetun/compose.yaml
   - services/qbittorrent/compose.yaml
