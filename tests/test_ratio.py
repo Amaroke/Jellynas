@@ -782,6 +782,18 @@ class Quests(unittest.TestCase):
         )
         self.assertEqual(steps[2]["description"], "200 seeds")
 
+    def test_a_level_validated_by_c411_stays_complete_when_the_seeds_drop(self):
+        board, _ = run_board(FakeQBittorrent([torrent(f"s{i}", size_gb=0.01) for i in range(30)]))
+        by_key = {c["key"]: c for c in board["challenges"]}
+        steps = by_key["quantity_seed"]["steps"]
+        self.assertEqual(
+            [(s["level"], s["current"], s["target"], s["done"]) for s in steps[:3]],
+            [(1, 100, 100, True), (2, 150, 150, True), (3, 30, 200, False)],
+        )
+        diversity = by_key["category_diversity_seed"]
+        self.assertEqual((diversity["done"], diversity["current"], diversity["target"]), (True, 5, 5))
+        self.assertTrue(all(s["current"] >= s["target"] for s in diversity["steps"]))
+
 
 class Scales(unittest.TestCase):
     def test_the_rare_bonus_follows_the_size_and_seeder_buckets_of_the_class(self):
