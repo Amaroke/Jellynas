@@ -3,11 +3,15 @@
 A personal media server built on Jellyfin, shared with Friends over the
 internet.
 
-Every tool here is maintained open source software, they are the ones I use. None of them is an obligation, the repo is a base
-that runs as is and that you can adapt. Some picks, such as OVH and the French quality profiles, are setup like that because I'm french.
-Each section names equivalent tools and says in a few words why a pick was made,
-so you can tell when another fits you better.
-The entire repository is what I currently use. I’ve configured it specifically to ensure that no secrets are exposed. It is made public both for my own use and for those who are curious to explore the solutions I’ve implemented.
+Every tool here is maintained open source software, and they are the ones I
+use. None of them is an obligation: the repo is a base that runs as is and that
+you can adapt. Some picks, such as OVH and the French quality profiles, are set
+up that way because I am French. Each section names equivalent tools and says in
+a few words why a pick was made, so you can tell when another fits you better.
+
+The entire repository is what I currently use. I configured it so that no secret
+is ever exposed. It is public both for my own use and for those who are curious
+to explore the solutions I built.
 
 Follow the sections in order. Each one starts with the sections it requires.
 
@@ -306,18 +310,18 @@ left behind fails the next build of the image.
 to `main`, and by hand. Its jobs run in parallel and every tool version is
 pinned, so Renovate keeps them up to date:
 
-| Job      | Checks                                                             |
-| -------- | ------------------------------------------------------------------ |
-| Secrets  | gitleaks scans the whole git history for a committed secret        |
-| Compose  | both compose files parse with `.env.example`                       |
-| Images   | hadolint, every `build` image builds, Caddy validates its config   |
-| YAML     | yamllint passes in strict mode                                     |
-| JSON     | every tracked `.json` file parses                                  |
-| Python   | the `unittest` tests pass                                          |
-| Lint     | shellcheck passes on the shell scripts and ruff on the Python      |
-| Renovate | `renovate.json` is a valid Renovate config                         |
-| Markdown | markdownlint passes on every `.md` file                            |
-| Actions  | actionlint checks the workflows, then zizmor audits their security |
+| Job | Checks |
+| --- | --- |
+| Secrets | gitleaks scans the whole git history for a committed secret |
+| Compose | both compose files parse with `.env.example` |
+| Images | hadolint, every `build` image builds, Caddy validates its config |
+| YAML | yamllint passes in strict mode |
+| JSON | every tracked `.json` file parses |
+| Python | the `unittest` tests pass |
+| Lint | shellcheck passes on the shell scripts and ruff on the Python |
+| Renovate | `renovate.json` is a valid Renovate config |
+| Markdown | markdownlint passes on every `.md` file |
+| Actions | actionlint checks the workflows, then zizmor audits their security |
 
 === END OF TO BE REWORKED ===
 
@@ -821,23 +825,23 @@ and `LLDAP_ADMIN_PASSWORD`. Then:
    restart Jellyfin.
 2. In Dashboard > Plugins > LDAP Authentication, set:
 
-   | Setting                        | Value                                                 |
-   | ------------------------------ | ----------------------------------------------------- |
-   | LDAP Server                    | `lldap`                                               |
-   | LDAP Port                      | `3890`                                                |
-   | Secure LDAP, StartTLS          | unchecked, lldap stays in the zone of Jellyfin        |
-   | LDAP Bind User                 | `uid=jellyfin,ou=people,dc=jellynas`                  |
-   | LDAP Bind User Password        | the password of `jellyfin`                            |
-   | LDAP Base DN for searches      | `ou=people,dc=jellynas`                               |
-   | LDAP Search Filter             | `(memberof=cn=jellynas_users,ou=groups,dc=jellynas)`  |
-   | LDAP Search Attributes         | `uid, mail`                                           |
-   | LDAP Uid Attribute             | `uid`                                                 |
-   | LDAP Username Attribute        | `uid`                                                 |
-   | LDAP Admin Base DN             | `ou=people,dc=jellynas`                               |
-   | LDAP Admin Filter              | `(memberof=cn=jellynas_admins,ou=groups,dc=jellynas)` |
-   | Enable User Creation           | checked                                               |
-   | Enable access to all libraries | checked                                               |
-   | Allow Password Change          | unchecked                                             |
+   | Setting | Value |
+   | --- | --- |
+   | LDAP Server | `lldap` |
+   | LDAP Port | `3890` |
+   | Secure LDAP, StartTLS | unchecked, lldap stays in the zone of Jellyfin |
+   | LDAP Bind User | `uid=jellyfin,ou=people,dc=jellynas` |
+   | LDAP Bind User Password | the password of `jellyfin` |
+   | LDAP Base DN for searches | `ou=people,dc=jellynas` |
+   | LDAP Search Filter | `(memberof=cn=jellynas_users,ou=groups,dc=jellynas)` |
+   | LDAP Search Attributes | `uid, mail` |
+   | LDAP Uid Attribute | `uid` |
+   | LDAP Username Attribute | `uid` |
+   | LDAP Admin Base DN | `ou=people,dc=jellynas` |
+   | LDAP Admin Filter | `(memberof=cn=jellynas_admins,ou=groups,dc=jellynas)` |
+   | Enable User Creation | checked |
+   | Enable access to all libraries | checked |
+   | Allow Password Change | unchecked |
 
 3. Click "Save and Test LDAP Server Settings", then "Save and Test LDAP Filter
    Settings".
@@ -1712,11 +1716,11 @@ with French subtitles needs no download.
 In Settings > Providers, click "+" for each provider, fill in what it asks for,
 and save:
 
-| Provider          | Sign-up                                                                                         | Covers                                        |
-| ----------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Provider | Sign-up | Covers |
+| --- | --- | --- |
 | OpenSubtitles.com | Free account on [opensubtitles.com](https://www.opensubtitles.com), with a daily download limit | Movies and shows, the widest French catalogue |
-| Podnapisi         | None                                                                                            | Movies and shows                              |
-| Gestdown          | None                                                                                            | Shows, from the Addic7ed catalogue            |
+| Podnapisi | None | Movies and shows |
+| Gestdown | None | Shows, from the Addic7ed catalogue |
 
 ### Sonarr and Radarr
 
