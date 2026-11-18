@@ -113,6 +113,8 @@ NUMBERS = {
 }
 TWIN_ATTEMPTS = 3
 TORZNAB = "{http://torznab.com/schemas/2015/feed}attr"
+TORZNAB_XXX = 6000
+TORZNAB_PAGE = 100
 
 FAILURES = (OSError, ValueError, KeyError, TypeError, RuntimeError, http.client.HTTPException, ET.ParseError)
 
@@ -429,11 +431,18 @@ class C411:
         }
 
     def catalog(self, now, category=None, sort="createdAt", order="desc", page=1):
-        query = {"sortBy": sort, "sortOrder": order, "perPage": 50, "page": page}
+        if category == "xxx":
+            return self.torznab_catalog(now, category, page)
+        query ={"sortBy": sort, "sortOrder": order, "perPage": 50, "page": page}
         if category:
             query["category"] = C411_CATEGORIES[category][0]
         answer = self.json("/api/torrents", self.profile_key, query)
         return [release_of(item, now) for item in answer.get("data", [])], (answer.get("meta") or {}).get("totalPages", 0)
+
+    def torznab_catalog(self, now, category, page):
+        query = {"t": "search", "cat": TORZNAB_XXX, "limit": TORZNAB_PAGE, "offset": (page - 1) * TORZNAB_PAGE, "apikey": self.torznab_key}
+        releases = [{**r, "category": category} for r in parse_torznab(self.get("/api", self.torznab_key, query), now)]
+        return releases, page + 1 if len(releases) >= TORZNAB_PAGE else page
 
     def category(self, infohash):
         answer = self.json(f"/api/torrents/{infohash}", self.profile_key)
