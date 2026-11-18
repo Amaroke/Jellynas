@@ -1,120 +1,19 @@
 # Jellynas
 
-=== TO BE REWORK IGNORE THIS ATM ===
-
-## Root files
-
-- `README.md` is this guide, from the first install to the daily care of the
-  NAS.
-- `compose.yaml` is the stack of the NAS. It names the project, includes the
-  `compose.yaml` of each service and declares the networks.
-- `.doco-cd.yml` tells doco-cd what to deploy: `compose.yaml` with the `.env` of
-  the NAS, removing the containers of a service that left the stack.
-- `.env.example` lists and explains every setting. Copy it to `.env` to fill it.
-- `.env` holds the settings and the secrets of the NAS. It lives only in the
-  Clone and never in git.
-- `renovate.json` is the config of Renovate, as
-  [Dependency updates](#dependency-updates) sets out.
-- `.pre-commit-config.yaml` runs gitleaks before each commit, so a secret never
-  gets into git.
-- `.gitignore` keeps `.env` and the caches of Python and ruff out of git.
-- `.gitattributes` stores every text file with LF line endings, so a script
-  edited on Windows still runs on the NAS.
-- `CONTEXT.md` defines the words of the project, such as Friend, Library or
-  Farm.
-- `CLAUDE.md` holds the instructions for coding agents working in the repo.
-- `LICENSE` is the MIT license of the project.
-
-## Dependency updates
-
-[Renovate](https://docs.renovatebot.com) opens a pull request for every new
-version of what the repo pins. `renovate.json` holds its config.
-
-### What Renovate updates
-
-- The image of every service in the compose files and the `FROM` of the
-  Dockerfiles
-- The Caddy plugins, after `--with` in `services/caddy/Dockerfile`
-- The apk and apt packages of the Dockerfiles, through their `_VERSION`
-  arguments
-- The Python packages of `services/music-bot/requirements.txt`
-- The GitHub Actions and the pre-commit hook
-- The tools pinned in `.github/workflows/ci.yml`: gitleaks, hadolint,
-  actionlint,
-  yamllint, ruff, zizmor, markdownlint-cli2 and Renovate itself
-
-Renovate does not follow `ubuntu-latest`, the tools that runner ships such as
-shellcheck, the plugins installed by hand inside an app, or TrueNAS.
-
-### What merges by itself
-
-A minor, patch or digest update merges by itself once CI passes and the release
-is 3 days old. doco-cd then deploys it. A major update waits for a merge by
-hand. Two exceptions:
-
-- Gluetun, qBittorrent and doco-cd never merge by themselves
-- LazyLibrarian always merges by itself, since its tags have no real version
-
-An update whose source gives no release date stays pending on its
-`renovate/stability-days` check, so it needs a merge by hand even when it is
-minor. That is the case of the apk and apt packages and of some Docker images.
-Merge a package update quickly: Alpine and Debian drop old versions, so a pin
-left behind fails the next build of the image.
-
-### When to change the Renovate config
-
-- **The Alpine release of a `FROM` changes.** Renovate keeps the `alpine3.22`
-  suffix of the tag. Change the tag, `alpine_3_22` in each `# renovate:` comment
-  and the versions of the packages together.
-- **The Debian release of a `FROM` changes.** Same for the `slim-trixie` suffix
-  and `suite=trixie` in each `# renovate:` comment. Renovate reads only that
-  suite, so a fix that is only in `trixie-security` waits for the next point
-  release of Debian.
-- **A Dockerfile installs a new apk or apt package.** Pin it with an `ARG` whose
-  name ends in `_VERSION`, right under a `# renovate:` comment like the others,
-  or hadolint fails and Renovate does not see it.
-- **`ci.yml` pins a new tool.** Add it to the matching regex of
-  `customManagers`,
-  otherwise it stays at its version forever.
-- **A new image has tags that are not plain versions**, as the LinuxServer ones.
-  Add a `versioning` rule to `packageRules`.
-- **A service must only update by hand.** Add its image to the list with
-  `"automerge": false`.
-- **discord.py supports davey 0.2.0.** Remove the `allowedVersions` rule of
-  davey, which keeps the voice of the music bot working until then.
-
-## CI
-
-`.github/workflows/ci.yml` runs on every pull request to `main`, on every push
-to `main`, and by hand. Its jobs run in parallel and every tool version is
-pinned, so Renovate keeps them up to date:
-
-| Job | Checks |
-| --- | --- |
-| Secrets | gitleaks scans the whole git history for a committed secret |
-| Compose | both compose files parse with `.env.example` |
-| Images | hadolint, every `build` image builds, Caddy validates its config |
-| YAML | yamllint passes in strict mode |
-| JSON | every tracked `.json` file parses |
-| Python | the `unittest` tests pass |
-| Lint | shellcheck passes on the shell scripts and ruff on the Python |
-| Renovate | `renovate.json` is a valid Renovate config |
-| Markdown | markdownlint passes on every `.md` file |
-| Actions | actionlint checks the workflows, then zizmor audits their security |
-
 A personal media server built on Jellyfin, shared with Friends over the
 internet.
 
-Every tool here is maintained open source software, picked by the Admin, and the
-picks may change over time. None of them is an obligation: the repo is a base
-that runs as is and that you can adapt. Some picks, such as OVH, AirVPN, C411,
-Nyaa and the French quality profiles, only come from the Admin being French.
-Each section names equivalent tools and says in a few words why a pick was made,
-so you can tell when another fits you better.
+Every tool here is maintained open source software, and they are the ones I
+use. None of them is an obligation: the repo is a base that runs as is and that
+you can adapt. Some picks, such as OVH and the French quality profiles, are set
+up that way because I am French. Each section names equivalent tools and says in
+a few words why a pick was made, so you can tell when another fits you better.
+
+The entire repository is what I currently use. I configured it so that no secret
+is ever exposed. It is public both for my own use and for those who are curious
+to explore the solutions I built.
 
 Follow the sections in order. Each one starts with the sections it requires.
-Every command runs on TrueNAS, as root, from the Clone, as [TrueNAS](#truenas)
-sets out.
 
 1. [Architecture](#architecture)
 2. [Prerequisites](#prerequisites)
@@ -147,6 +46,8 @@ sets out.
 29. [Backup](#backup)
 30. [Verify the NAS](#verify-the-nas)
 31. [Contributing](#contributing)
+
+=== TO BE REWORKED: from Architecture to CI ===
 
 ## Architecture
 
@@ -322,17 +223,119 @@ flowchart LR
     style data fill:#eceff1,stroke:#78909c,stroke-width:2px,color:#1f2937
 ```
 
+## Root files
+
+- `README.md` is this guide, from the first install to the daily care of the
+  NAS.
+- `compose.yaml` is the stack of the NAS. It names the project, includes the
+  `compose.yaml` of each service and declares the networks.
+- `.doco-cd.yml` tells doco-cd what to deploy: `compose.yaml` with the `.env` of
+  the NAS, removing the containers of a service that left the stack.
+- `.env.example` lists and explains every setting. Copy it to `.env` to fill it.
+- `.env` holds the settings and the secrets of the NAS. It lives only in the
+  Clone and never in git.
+- `renovate.json` is the config of Renovate, as
+  [Dependency updates](#dependency-updates) sets out.
+- `.pre-commit-config.yaml` runs gitleaks before each commit, so a secret never
+  gets into git.
+- `.gitignore` keeps `.env` and the caches of Python and ruff out of git.
+- `.gitattributes` stores every text file with LF line endings, so a script
+  edited on Windows still runs on the NAS.
+- `CONTEXT.md` defines the words of the project, such as Friend, Library or
+  Farm.
+- `CLAUDE.md` holds the instructions for coding agents working in the repo.
+- `LICENSE` is the MIT license of the project.
+
+## Dependency updates
+
+[Renovate](https://docs.renovatebot.com) opens a pull request for every new
+version of what the repo pins. `renovate.json` holds its config.
+
+### What Renovate updates
+
+- The image of every service in the compose files and the `FROM` of the
+  Dockerfiles
+- The Caddy plugins, after `--with` in `services/caddy/Dockerfile`
+- The apk and apt packages of the Dockerfiles, through their `_VERSION`
+  arguments
+- The Python packages of `services/music-bot/requirements.txt`
+- The GitHub Actions and the pre-commit hook
+- The tools pinned in `.github/workflows/ci.yml`: gitleaks, hadolint,
+  actionlint,
+  yamllint, ruff, zizmor, markdownlint-cli2 and Renovate itself
+
+Renovate does not follow `ubuntu-latest`, the tools that runner ships such as
+shellcheck, the plugins installed by hand inside an app, or TrueNAS.
+
+### What merges by itself
+
+A minor, patch or digest update merges by itself once CI passes and the release
+is 3 days old. doco-cd then deploys it. A major update waits for a merge by
+hand. Two exceptions:
+
+- Gluetun, qBittorrent and doco-cd never merge by themselves
+- LazyLibrarian always merges by itself, since its tags have no real version
+
+An update whose source gives no release date stays pending on its
+`renovate/stability-days` check, so it needs a merge by hand even when it is
+minor. That is the case of the apk and apt packages and of some Docker images.
+Merge a package update quickly: Alpine and Debian drop old versions, so a pin
+left behind fails the next build of the image.
+
+### When to change the Renovate config
+
+- **The Alpine release of a `FROM` changes.** Renovate keeps the `alpine3.22`
+  suffix of the tag. Change the tag, `alpine_3_22` in each `# renovate:` comment
+  and the versions of the packages together.
+- **The Debian release of a `FROM` changes.** Same for the `slim-trixie` suffix
+  and `suite=trixie` in each `# renovate:` comment. Renovate reads only that
+  suite, so a fix that is only in `trixie-security` waits for the next point
+  release of Debian.
+- **A Dockerfile installs a new apk or apt package.** Pin it with an `ARG` whose
+  name ends in `_VERSION`, right under a `# renovate:` comment like the others,
+  or hadolint fails and Renovate does not see it.
+- **`ci.yml` pins a new tool.** Add it to the matching regex of
+  `customManagers`,
+  otherwise it stays at its version forever.
+- **A new image has tags that are not plain versions**, as the LinuxServer ones.
+  Add a `versioning` rule to `packageRules`.
+- **A service must only update by hand.** Add its image to the list with
+  `"automerge": false`.
+- **discord.py supports davey 0.2.0.** Remove the `allowedVersions` rule of
+  davey, which keeps the voice of the music bot working until then.
+
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request to `main`, on every push
+to `main`, and by hand. Its jobs run in parallel and every tool version is
+pinned, so Renovate keeps them up to date:
+
+| Job | Checks |
+| --- | --- |
+| Secrets | gitleaks scans the whole git history for a committed secret |
+| Compose | both compose files parse with `.env.example` |
+| Images | hadolint, every `build` image builds, Caddy validates its config |
+| YAML | yamllint passes in strict mode |
+| JSON | every tracked `.json` file parses |
+| Python | the `unittest` tests pass |
+| Lint | shellcheck passes on the shell scripts and ruff on the Python |
+| Renovate | `renovate.json` is a valid Renovate config |
+| Markdown | markdownlint passes on every `.md` file |
+| Actions | actionlint checks the workflows, then zizmor audits their security |
+
+=== END OF TO BE REWORKED ===
+
 ## Prerequisites
 
-- **Required**: [TrueNAS
-  SCALE](https://www.truenas.com/download-truenas-community-edition/) installed,
-  on a machine or a virtual machine, with a pool. Its Docker runs the NAS
-  directly, the data sits on ZFS with snapshots and replication to move the pool
-  to another machine, and the services stay in git rather than in the Custom
-  Apps of TrueNAS. Any Linux host with Docker Compose works too, with its own
-  paths and ids in `.env`.
-- **Recommended**: a VPN with port forwarding, here AirVPN. ProtonVPN, Mullvad
-  or any provider Gluetun supports work too. Without a VPN, a seedbox such as
+- **Required**: a Linux host with Docker Compose. This README runs on [TrueNAS
+  SCALE](https://www.truenas.com/download-truenas-community-edition/), on a
+  machine or a virtual machine, with a pool. Its Docker runs the NAS directly,
+  the data sits on ZFS with snapshots and replication to move the pool to
+  another machine, and the services stay in git rather than in the Custom Apps
+  of TrueNAS. Debian, Ubuntu, Unraid or OpenMediaVault work too: each step that
+  only applies to TrueNAS says what to do on another host.
+- **Optional**: a VPN with port forwarding, here AirVPN. ProtonVPN, Mullvad or
+  any provider Gluetun supports work too. Without a VPN, a seedbox such as
   Ultra.cc, Seedhost or Whatbox can download in place of the NAS, or the NAS
   downloads with the home IP, at your own risk.
 - **Optional**: a domain, here at OVH. Cloudflare, Gandi, Porkbun or any
@@ -367,14 +370,6 @@ includes.
 
 Requires [Prerequisites](#prerequisites).
 
-Every command of this README runs on TrueNAS, in System > Shell or over SSH, as
-root and from the Clone:
-
-```sh
-sudo -i
-cd /mnt/tank/jellynas
-```
-
 ### Datasets
 
 Open the TrueNAS web UI. The commands of this README name the pool `tank`.
@@ -386,19 +381,38 @@ Open the TrueNAS web UI. The commands of this README name the pool `tank`.
 2. In Apps, click "Configure", pick the pool, and save. TrueNAS starts its
    Docker.
 
+On another host, create the same four folders on one disk, owned by the user
+the services run as, and install Docker with the Compose plugin.
+
 Once [Domain](#domain) is done, TrueNAS also answers at
 `https://truenas.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`.
 
 ### Clone
 
-In System > Shell, clone the repo into its dataset. Git refuses a clone that
-root does not own until it is marked as safe:
+The Clone is the copy of this repo on the NAS, in the `jellynas` dataset. It
+holds the `.env` of the NAS, which never goes to git, and it is where the
+commands of this README run. doco-cd does not deploy from the Clone: it pulls
+`main` from GitHub, as [Deploy](#deploy) sets out. So the Clone only needs a
+`git pull` before running a script of the repo.
+
+In System > Shell, or over SSH, clone the repo into its dataset. Git refuses a
+clone that root does not own until it is marked as safe:
 
 ```sh
 sudo -i
 git clone https://github.com/Amaroke/Jellynas.git /mnt/tank/jellynas
 git config --global --add safe.directory /mnt/tank/jellynas
 ```
+
+Every command of this README then runs as root, from the Clone:
+
+```sh
+sudo -i
+cd /mnt/tank/jellynas
+```
+
+On another host, clone the repo anywhere and run the commands from there, with
+the paths of the host.
 
 ## Settings
 
@@ -415,11 +429,19 @@ space. `.env` is ignored by git and must never be committed.
 Both roots live outside the repo, at the paths set in `DATA_ROOT` and
 `APPDATA_ROOT`, and so do the archives of the appdata, at `BACKUP_ROOT`. The
 data root holds a single tree, so that one folder holds every download and the
-whole Library:
+whole Library. Radarr, Sonarr, Lidarr and LazyLibrarian download into the
+qBittorrent categories `movies`, `shows`, `music` and `books`, and ratio into
+`farm`. qBittorrent creates the folder of a category the first time a torrent
+lands in it. cross-seed hardlinks its matches into `cross-seed`, and slskd
+downloads into `soulseek`:
 
 ```text
 <DATA_ROOT>
 ├── torrents
+│   ├── movies
+│   ├── shows
+│   ├── music
+│   ├── books
 │   ├── farm
 │   ├── cross-seed
 │   └── soulseek
@@ -448,6 +470,8 @@ mkdir -p "$BACKUP_ROOT" \
   "$APPDATA_ROOT"/{ratio,farm-board,discord-posts,pr-radar,slskd,suwayomi}
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
+
+=== TO BE REWORKED: everything below ===
 
 ## Domain
 
