@@ -1446,8 +1446,13 @@ def account_board(account, state, settings):
     }
 
 
-def step_of(q, seeds, counts, scales, done):
+def shown_progress(q, seeds, counts, scales, done):
     current, target = progress_of(q, seeds, counts, scales, done)
+    return (max(current, target), target) if q["id"] in done else (current, target)
+
+
+def step_of(q, seeds, counts, scales, done):
+    current, target = shown_progress(q, seeds, counts, scales, done)
     return {"level": q["level"], "description": q["description"], "current": current, "target": target, "done": q["id"] in done}
 
 
@@ -1460,7 +1465,7 @@ def board_of(state, settings, controls, torrents, seeds, account, now):
         level = next_level(challenge, done)
         levels = levels_of(challenge)
         shown_level = level or levels[-1]
-        current, target = progress_of(shown_level, seeds, counts, scales, done)
+        current, target = shown_progress(shown_level, seeds, counts, scales, done)
         challenges.append({
             "key": challenge,
             "voie": shown_level["voie"],

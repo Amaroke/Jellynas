@@ -477,9 +477,10 @@ def challenge_card(c, board, switches, words, language):
         hint += f', <span class="wait">{escape(words["reached"])}</span>'
     steps = steps_of(c["steps"]) if c.get("steps") else progress_bar(c["current"], c["target"], c["done"])
     cats = category_rows(board, switches, words, language) if c["key"] == "category_volume_seed" else ""
+    count = "" if c["done"] else f'<span class="count">{c["current"]} / {c["target"]}</span>'
     return (
         f'<figure class="challenge"><div class="head"><div class="title">{escape(words["names"].get(c["key"], c["key"]))}</div>'
-        f'<div class="side"><span class="count">{c["current"]} / {c["target"]}</span>{side}</div>'
+        f'<div class="side">{count}{side}</div>'
         f'<div class="hint">{hint}</div></div>{steps}{cats}</figure>'
     )
 

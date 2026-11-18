@@ -330,6 +330,12 @@ class PageTest(unittest.TestCase):
         self.assertNotIn('value="quantity_seed"', page)
         self.assertIn("completed", board_page(board, "2", "en"))
 
+    def test_a_completed_challenge_shows_no_count(self):
+        challenge = dict(BOARD["challenges"][0], done=True, level=5, current=305, target=300)
+        page = board_page(dict(BOARD, challenges=[challenge], categories=[]), "2", "fr")
+        self.assertNotIn("305 / 300", page)
+        self.assertNotIn('class="count"', page)
+
     def test_a_category_at_its_target_shows_completed_instead_of_its_switch(self):
         categories = BOARD["categories"] + [
             {"slug": "audio", "name": "Audio", "count": 50, "target": 50, "switch": "volume:audio", "complete": True},
