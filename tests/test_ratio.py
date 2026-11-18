@@ -1500,6 +1500,8 @@ class FakeC411Server(http.server.BaseHTTPRequestHandler):
         FakeC411Server.calls.append((self.path, self.headers.get("Authorization")))
         if self.path.startswith("/api/user/profile"):
             body = json.dumps(PROFILE).encode()
+        elif self.path.startswith("/api?t=search"):
+            body = FEED
         elif self.path.startswith("/api?t=get&id=ab"):
             body = b"d4:infod6:lengthi1e4:name1:aee"
         elif self.path.startswith("/api/torrents/ab"):
@@ -1539,6 +1541,13 @@ class RealC411(unittest.TestCase):
         self.assertEqual(([r["infohash"] for r in releases], pages), (["ab"], 7))
         self.assertEqual(
             FakeC411Server.calls[0][0], "/api/torrents?sortBy=size&sortOrder=asc&perPage=50&page=3&category=2",
+        )
+
+    def test_the_xxx_catalog_comes_from_torznab_since_the_json_api_hides_it(self):
+        releases, pages = self.c411.catalog(NOW, "xxx", "size", "asc", 3)
+        self.assertEqual(([(r["infohash"], r["category"]) for r in releases], pages), ([("abc", "xxx")], 3))
+        self.assertEqual(
+            FakeC411Server.calls[0], ("/api?t=search&cat=6000&limit=100&offset=200&apikey=torznab", "Bearer torznab"),
         )
 
     def test_a_torrent_tells_its_category_and_downloads_with_the_torznab_key(self):
