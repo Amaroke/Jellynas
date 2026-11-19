@@ -313,6 +313,129 @@ docker compose logs -f caddy
 The line `certificate obtained successfully` shows up once for `*.<DOMAIN>` and
 once for `*.lan.<DOMAIN>`.
 
+## Deploy
+
+Requires [Settings](#settings) and [Domain](#domain).
+
+The NAS follows the `main` branch of GitHub: a change merged into `main` reaches
+the NAS within 10 minutes, and nothing else changes it. The Clone holds `.env`,
+outside git, and starts doco-cd, but the NAS never runs from it. Edit the repo
+in another folder and go through a pull request. Pull the Clone before running a
+script of the repo:
+
+```sh
+git pull --ff-only
+```
+
+Never start the NAS with `docker compose up` from the Clone: it would recreate
+the services from the Clone, and doco-cd would recreate them again at its next
+poll. `docker compose logs`, `exec`, `stop`, `start` and `restart` are safe.
+
+The settings made in the web UIs of the services live in the appdata root, not
+in git, so the deploy never touches them. Back up the appdata root to keep them.
+
+### doco-cd
+
+[doco-cd](https://doco.cd) is a container, outside the NAS project, that polls
+`main` every 10 minutes and deploys `compose.yaml` with `.env`, as set in
+`.doco-cd.yml`. Komodo or Portainer can do the same with a web UI and a database
+the NAS does not need. doco-cd pulls, so nothing opens on the router, and no
+workflow of a public pull request can run on the NAS. Start doco-cd once from
+the Clone, its first poll starts the whole NAS:
+
+```sh
+docker compose -f services/doco-cd/compose.yaml up -d
+```
+
+Each deploy runs from a copy of the merged revision, kept in the data volume of
+doco-cd. It recreates the services whose compose definition or image changed,
+and those that mount a file of the repo that changed, such as
+`services/ratio/ratio.py`. It rebuilds Caddy from its Dockerfile, and removes
+the services commented out in `compose.yaml`. A failed deploy is retried at the
+next poll.
+
+doco-cd reaches Docker through its socket, which gives it full control of the
+machine, like any tool that runs Compose. Its logs name each deploy, and the
+reason of each failed one:
+
+```sh
+docker logs doco-cd
+```
+
+A change of `.env` is no new revision. To apply it, or to deploy without
+waiting, restart doco-cd, it polls as soon as it starts:
+
+```sh
+docker restart doco-cd
+```
+
+doco-cd never redeploys itself, since it runs outside the NAS project. When
+Renovate merges an update of doco-cd, pull the Clone and recreate it:
+
+```sh
+git pull --ff-only
+docker compose -f services/doco-cd/compose.yaml up -d
+```
+
+### Renovate
+
+[Renovate](https://github.com/apps/renovate) opens a pull request for every new
+version of what the repo pins, where Dependabot could not compare most
+linuxserver tags. Install the app on this repo only, then merge the onboarding
+pull request it opens if it still opens one. `renovate.json` holds its config,
+and the Dependency Dashboard issue lists every pending update.
+
+#### What Renovate updates
+
+- The image of every service in the compose files and the `FROM` of the
+  Dockerfiles
+- The Caddy plugins, after `--with` in `services/caddy/Dockerfile`
+- The apk and apt packages of the Dockerfiles, through their `_VERSION`
+  arguments
+- The Python packages of `services/music-bot/requirements.txt`
+- The GitHub Actions and the pre-commit hook
+- The tools pinned in `.github/workflows/ci.yml`: gitleaks, hadolint,
+  actionlint,
+  yamllint, ruff, zizmor, markdownlint-cli2 and Renovate itself
+
+Renovate does not follow `ubuntu-latest`, the tools that runner ships such as
+shellcheck, the plugins installed by hand inside an app, or TrueNAS.
+
+#### What merges by itself
+
+Every update, major ones included, merges by itself once CI passes and the
+release is 3 days old, and doco-cd deploys it at its next poll. Read the release
+notes of a major update during those 3 days, and close its pull request to hold
+it back. doco-cd is the one update that merges without being deployed, as
+[doco-cd](#doco-cd) sets out.
+
+An update whose source gives no release date stays pending on its
+`renovate/stability-days` check, so it needs a merge by hand. That is the case
+of the apk and apt packages and of some Docker images. Merge a package update
+quickly: Alpine and Debian drop old versions, so a pin left behind fails the
+next build of the image.
+
+#### When to change the Renovate config
+
+- **The Alpine release of a `FROM` changes.** Renovate keeps the `alpine3.22`
+  suffix of the tag. Change the tag, `alpine_3_22` in each `# renovate:` comment
+  and the versions of the packages together.
+- **The Debian release of a `FROM` changes.** Same for the `slim-trixie` suffix
+  and `suite=trixie` in each `# renovate:` comment. Renovate reads only that
+  suite, so a fix that is only in `trixie-security` waits for the next point
+  release of Debian.
+- **A Dockerfile installs a new apk or apt package.** Pin it with an `ARG` whose
+  name ends in `_VERSION`, right under a `# renovate:` comment like the others,
+  or hadolint fails and Renovate does not see it.
+- **`ci.yml` pins a new tool.** Add it to the matching regex of
+  `customManagers`, otherwise it stays at its version forever.
+- **A new image has tags that are not plain versions**, as the LinuxServer ones.
+  Add a `versioning` rule to `packageRules`.
+- **A service must only update by hand.** Add a rule to `packageRules` that
+  matches its image with `"automerge": false`.
+- **discord.py supports davey 0.2.0.** Remove the `allowedVersions` rule of
+  davey, which keeps the voice of the music bot working until then.
+
 === TO BE REWORKED: everything below ===
 
 ## Architecture
@@ -500,8 +623,7 @@ flowchart LR
 - `.env.example` lists and explains every setting. Copy it to `.env` to fill it.
 - `.env` holds the settings and the secrets of the NAS. It lives only in the
   Clone and never in git.
-- `renovate.json` is the config of Renovate, as
-  [Dependency updates](#dependency-updates) sets out.
+- `renovate.json` is the config of Renovate, as [Renovate](#renovate) sets out.
 - `.pre-commit-config.yaml` runs gitleaks before each commit, so a secret never
   gets into git.
 - `.gitignore` keeps `.env` and the caches of Python and ruff out of git.
@@ -511,64 +633,6 @@ flowchart LR
   Farm.
 - `CLAUDE.md` holds the instructions for coding agents working in the repo.
 - `LICENSE` is the MIT license of the project.
-
-## Dependency updates
-
-[Renovate](https://docs.renovatebot.com) opens a pull request for every new
-version of what the repo pins. `renovate.json` holds its config.
-
-### What Renovate updates
-
-- The image of every service in the compose files and the `FROM` of the
-  Dockerfiles
-- The Caddy plugins, after `--with` in `services/caddy/Dockerfile`
-- The apk and apt packages of the Dockerfiles, through their `_VERSION`
-  arguments
-- The Python packages of `services/music-bot/requirements.txt`
-- The GitHub Actions and the pre-commit hook
-- The tools pinned in `.github/workflows/ci.yml`: gitleaks, hadolint,
-  actionlint,
-  yamllint, ruff, zizmor, markdownlint-cli2 and Renovate itself
-
-Renovate does not follow `ubuntu-latest`, the tools that runner ships such as
-shellcheck, the plugins installed by hand inside an app, or TrueNAS.
-
-### What merges by itself
-
-A minor, patch or digest update merges by itself once CI passes and the release
-is 3 days old. doco-cd then deploys it. A major update waits for a merge by
-hand. Two exceptions:
-
-- Gluetun, qBittorrent and doco-cd never merge by themselves
-- LazyLibrarian always merges by itself, since its tags have no real version
-
-An update whose source gives no release date stays pending on its
-`renovate/stability-days` check, so it needs a merge by hand even when it is
-minor. That is the case of the apk and apt packages and of some Docker images.
-Merge a package update quickly: Alpine and Debian drop old versions, so a pin
-left behind fails the next build of the image.
-
-### When to change the Renovate config
-
-- **The Alpine release of a `FROM` changes.** Renovate keeps the `alpine3.22`
-  suffix of the tag. Change the tag, `alpine_3_22` in each `# renovate:` comment
-  and the versions of the packages together.
-- **The Debian release of a `FROM` changes.** Same for the `slim-trixie` suffix
-  and `suite=trixie` in each `# renovate:` comment. Renovate reads only that
-  suite, so a fix that is only in `trixie-security` waits for the next point
-  release of Debian.
-- **A Dockerfile installs a new apk or apt package.** Pin it with an `ARG` whose
-  name ends in `_VERSION`, right under a `# renovate:` comment like the others,
-  or hadolint fails and Renovate does not see it.
-- **`ci.yml` pins a new tool.** Add it to the matching regex of
-  `customManagers`,
-  otherwise it stays at its version forever.
-- **A new image has tags that are not plain versions**, as the LinuxServer ones.
-  Add a `versioning` rule to `packageRules`.
-- **A service must only update by hand.** Add its image to the list with
-  `"automerge": false`.
-- **discord.py supports davey 0.2.0.** Remove the `allowedVersions` rule of
-  davey, which keeps the voice of the music bot working until then.
 
 ## CI
 
@@ -588,86 +652,6 @@ pinned, so Renovate keeps them up to date:
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
 | Actions | actionlint checks the workflows, then zizmor audits their security |
-
-## Deploy
-
-Requires [Settings](#settings) and [Domain](#domain).
-
-The NAS follows the `main` branch of GitHub: a change merged into `main` reaches
-the NAS within minutes, and nothing else changes it. The Clone holds `.env`,
-outside git, and starts doco-cd, but the NAS never runs from it. Edit the repo
-in another folder and go through a pull request. Pull the Clone before running a
-script of the repo:
-
-```sh
-git pull --ff-only
-```
-
-Never start the NAS with `docker compose up` from the Clone: it would recreate
-the services from the Clone, and doco-cd would recreate them again at its next
-poll. `docker compose logs`, `exec`, `stop`, `start` and `restart` are safe.
-
-The settings made in the web UIs of the services live in the appdata root, not
-in git, so the deploy never touches them. Back up the appdata root to keep them.
-
-### doco-cd
-
-[doco-cd](https://doco.cd) is a container, outside the NAS project, that polls
-`main` every 3 minutes and deploys `compose.yaml` with `.env`, as set in
-`.doco-cd.yml`. Komodo or Portainer can do the same with a web UI and a database
-the NAS does not need. doco-cd pulls, so nothing opens on the router, and no
-workflow of a public pull request can run on the NAS. Start doco-cd once from
-the Clone, its first poll starts the whole NAS:
-
-```sh
-docker compose -f services/doco-cd/compose.yaml up -d
-```
-
-Each deploy runs from a copy of the merged revision, kept in the data volume of
-doco-cd. It recreates the services whose compose definition or image changed,
-and those that mount a file of the repo that changed, such as
-`services/ratio/ratio.py`. It rebuilds Caddy from its Dockerfile, and removes
-the services commented out in `compose.yaml`. A failed deploy is retried at the
-next poll.
-
-doco-cd reaches Docker through its socket, which gives it full control of the
-machine, like any tool that runs Compose. Its logs name each deploy, and the
-reason of each failed one:
-
-```sh
-docker logs doco-cd
-```
-
-A change of `.env` is no new revision. To apply it, or to deploy without
-waiting, restart doco-cd, it polls as soon as it starts:
-
-```sh
-docker restart doco-cd
-```
-
-Renovate opens the updates of doco-cd itself and never merges them. Once one is
-merged, pull the Clone and recreate doco-cd:
-
-```sh
-git pull --ff-only
-docker compose -f services/doco-cd/compose.yaml up -d
-```
-
-### Renovate
-
-[Renovate](https://github.com/apps/renovate) keeps the images, the GitHub
-Actions and the CI tools up to date, where Dependabot could not compare most
-linuxserver tags. Install the app on the repo only, then merge the onboarding
-pull request it opens if it still opens one. Its settings are in
-`renovate.json`:
-
-- It opens its pull requests as soon as a release is published, and merges an
-  update only once its release is 3 days old.
-- It merges a minor or patch update by itself once the CI passes, and the NAS
-  deploys it.
-- A major update, and any update of Gluetun, qBittorrent or doco-cd, waits for
-  the Admin to read its release notes and merge it.
-- The Dependency Dashboard issue lists every pending update.
 
 ## Jellyfin
 
