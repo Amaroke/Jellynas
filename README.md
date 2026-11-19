@@ -842,6 +842,58 @@ qBittorrent then runs with no limit at all. Seeding can take the whole upload of
 the internet line, which can slow Jellyfin for the Friends. If it does, set a
 global upload limit in Speed, about 60% of the upload speed of the line.
 
+## Prowlarr
+
+Requires [qBittorrent](#qbittorrent).
+
+Prowlarr holds the indexers once and pushes them to Radarr, Sonarr, Lidarr and
+the other tools. FlareSolverr opens indexers protected by Cloudflare for it.
+Neither sees any media file. Jackett can replace Prowlarr, without the push.
+
+### Login of Prowlarr
+
+1. Open `https://prowlarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the
+   local network.
+2. Prowlarr asks for an authentication method at the first visit. Pick "Forms
+   (Login Page)", set "Authentication Required" to "Enabled", never "Disabled
+   for Local Addresses", and enter a username and a strong password, distinct
+   from the other tools, stored in your password manager.
+
+Copy the API key from Settings > General > Security into `PROWLARR_API_KEY` in
+`.env`. In Settings > General, untick "Send Anonymous Usage Data", and in
+Settings > General > Logging, set the "Log Level" to "Info".
+
+### FlareSolverr
+
+In Settings > Indexers, click "+" and pick FlareSolverr. Enter `flaresolverr` as
+the tag and `http://flaresolverr:8191/` as the host, then save. Without the
+tag, no indexer uses it. FlareSolverr has no web UI and is reachable by the
+other containers only.
+
+### VPN of the indexers
+
+In Settings > Indexers, click "+" and pick Http. Enter `vpn` as the tag,
+`gluetun` as the host and `8888` as the port, then save. Gluetun serves that
+proxy, and its requests leave through the VPN only.
+
+### Indexers
+
+In Indexers, click "Add Indexer", pick a tracker and fill in what it asks for,
+an account for a private one. For an indexer behind Cloudflare, add the
+`flaresolverr` tag so its requests go through FlareSolverr. Add the `vpn` tag to
+every tracker, so its searches and torrent files go through the VPN. Click
+"Test", then "Save".
+
+### Seeding goals of private trackers
+
+A private tracker bans an account for a hit and run. For each private indexer,
+in Indexers, edit it, click "Show Advanced", and set "Seed Ratio" and "Seed
+Time" in minutes to the minimums of its rules page. Prowlarr syncs them to
+Radarr, Sonarr and Lidarr, which hand them to qBittorrent with each torrent, so
+"Remove Completed" never removes a private torrent before the tracker allows it.
+Leave no private indexer empty: with the global seeding limits of qBittorrent
+off, its torrent would seed forever unless ratio moves it into the Farm.
+
 === TO BE REWORKED: everything below ===
 
 ## Architecture
@@ -1065,56 +1117,6 @@ pinned, so Renovate keeps them up to date:
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
 | Actions | actionlint checks the workflows, then zizmor audits their security |
-
-## Prowlarr
-
-Requires [qBittorrent](#qbittorrent).
-
-Prowlarr holds the indexers once and pushes them to Radarr, Sonarr, Lidarr and
-the other tools. FlareSolverr opens indexers protected by Cloudflare for it.
-Neither sees any media file. Jackett can replace Prowlarr, without the push.
-
-### Login of Prowlarr
-
-1. Open `https://prowlarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the
-   local network.
-2. Prowlarr asks for an authentication method at the first visit. Pick "Forms
-   (Login Page)", set "Authentication Required" to "Enabled", never "Disabled
-   for Local Addresses", and enter a username and a strong password, distinct
-   from the other tools, stored in your password manager.
-
-Copy the API key from Settings > General > Security into `PROWLARR_API_KEY` in
-`.env`.
-
-### FlareSolverr
-
-In Settings > Indexers, click "+" and pick FlareSolverr. Enter `flaresolverr` as
-the tag and `http://flaresolverr:8191/` as the host, then save. FlareSolverr has
-no web UI and is reachable by the other containers only.
-
-### VPN of the indexers
-
-In Settings > Indexers, click "+" and pick Http. Enter `vpn` as the tag,
-`gluetun` as the host and `8888` as the port, then save. Gluetun serves that
-proxy, and its requests leave through the VPN only.
-
-### Indexers
-
-In Indexers, click "Add Indexer", pick a tracker and fill in what it asks for,
-an account for a private one. For an indexer behind Cloudflare, add the
-`flaresolverr` tag so its requests go through FlareSolverr. Add the `vpn` tag to
-every tracker, so its searches and torrent files go through the VPN. Click
-"Test", then "Save".
-
-### Seeding goals of private trackers
-
-A private tracker bans an account for a hit and run. For each private indexer,
-in Indexers, edit it, click "Show Advanced", and set "Seed Ratio" and "Seed
-Time" in minutes to the minimums of its rules page. Prowlarr syncs them to
-Radarr, Sonarr and Lidarr, which hand them to qBittorrent with each torrent, so
-"Remove Completed" never removes a private torrent before the tracker allows it.
-Leave no private indexer empty: with the global seeding limits of qBittorrent
-off, its torrent would seed forever unless ratio moves it into the Farm.
 
 ## Radarr
 
