@@ -31,7 +31,8 @@ services:
       - ./configuration.yml:/config/configuration.yml:ro
       - ${APPDATA_ROOT}/authelia:/var/lib/authelia
     depends_on:
-      - lldap
+      lldap:
+        condition: service_healthy
     healthcheck:
       test:
         - "CMD"
