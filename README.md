@@ -64,6 +64,14 @@ guide is written so that an AI agent can follow it as well as a person.
   registrar with an API that [caddy-dns](https://github.com/caddy-dns) supports
   work too. Without a domain, a free dynamic DNS subdomain from DuckDNS, deSEC
   or dynv6 does the same job, or the NAS stays on the local network only.
+- **Optional**: a Discord server, where the NAS posts through webhooks: the
+  alerts of Beszel, Uptime Kuma and the backup, the Requests of Seerr, the news
+  and links for the Friends, the Farm board and the pull requests of the repo.
+  The Music bot plays in its voice channels. ntfy, Gotify, Telegram or Matrix
+  can carry the alerts and the Requests instead, since Seerr, Uptime Kuma,
+  Beszel and the backup speak them too. The news and links, the Farm board, the
+  PR radar and the Music bot, which the repo writes itself, only exist on
+  Discord. Without any of them, the NAS runs the same, silently.
 
 ## TrueNAS
 
