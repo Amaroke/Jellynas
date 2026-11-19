@@ -1,0 +1,13 @@
+{
+  "files.autoSave": "onFocusChange",
+  "markdown.extension.tableFormatter.enabled": false,
+  "[markdown]": {
+    "editor.formatOnSave": false,
+    "editor.rulers": [80],
+    "editor.codeActionsOnSave": {
+      "source.fixAll.markdownlint": "explicit"
+    },
+    "rewrap.wrappingColumn": 80,
+    "rewrap.autoWrap.enabled": true
+  }
+}
