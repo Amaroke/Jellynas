@@ -12,7 +12,7 @@ services:
       POLL_CONFIG: |
         - url: https://github.com/Amaroke/Jellynas.git
           reference: main
-          interval: 3m
+          interval: 10m
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../../.env:/jellynas/.env:ro

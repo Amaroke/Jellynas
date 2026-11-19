@@ -5,6 +5,7 @@
   "commitMessagePrefix": "deps:",
   "minimumReleaseAge": "3 days",
   "internalChecksFilter": "none",
+  "automerge": true,
   "automergeStrategy": "squash",
   "pre-commit": {
     "enabled": true
@@ -47,18 +48,6 @@
       "groupName": "gitleaks"
     },
     {
-      "matchUpdateTypes": ["minor", "patch", "digest"],
-      "automerge": true
-    },
-    {
-      "matchPackageNames": [
-        "ghcr.io/qdm12/gluetun",
-        "lscr.io/linuxserver/qbittorrent",
-        "ghcr.io/kimdre/doco-cd"
-      ],
-      "automerge": false
-    },
-    {
       "matchManagers": ["github-actions"],
       "groupName": "GitHub Actions"
     },
@@ -80,8 +69,7 @@
     {
       "matchDatasources": ["docker"],
       "matchPackageNames": ["lscr.io/linuxserver/lazylibrarian"],
-      "versioning": "regex:^[0-9a-f]+-ls(?<major>\\d+)$",
-      "automerge": true
+      "versioning": "regex:^[0-9a-f]+-ls(?<major>\\d+)$"
     },
     {
       "matchDatasources": ["docker"],
