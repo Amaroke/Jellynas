@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug the current test file",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "args": ["${relativeFile}"],
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true
+    },
+    {
+      "name": "Debug the current Python file",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true
+    }
+  ]
+}
