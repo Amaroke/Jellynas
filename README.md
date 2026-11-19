@@ -914,8 +914,7 @@ from Settings > General > Security into `RADARR_API_KEY` in `.env`, untick
 In Settings > Media Management, click "Show Advanced" at the top, then:
 
 1. Under Root Folders, add `/data/media/movies`.
-2. Check "Rename Movies", set "Standard Movie Format" to
-   `{Movie Title} ({Release Year}) [tmdbid-{TmdbId}] {Quality Full}` and "Movie
+2. Check "Rename Movies", and set both "Standard Movie Format" and "Movie
    Folder Format" to `{Movie Title} ({Release Year}) [tmdbid-{TmdbId}]`, so
    Jellyfin always matches the right movie, even a remake with the same title.
 3. Under Importing, uncheck "Use Hardlinks instead of Copy". Each import is a
@@ -976,13 +975,19 @@ not start on its own: Wanted > Missing > "Search All" fetches it.
 4. Check each guess. For a wrong one, click it and search by title and year, or
    by `tmdb:550` with the id of the movie on TMDB.
 5. Pick the quality profile, leave "Start search for missing movie" unticked,
-   then click "Import".
+   then click "Import". With the downloads paused, that search would find
+   releases but grab none of them, and would not run again on its own.
 6. Rename what was imported: Radarr names only its own downloads by itself. In
    Movies, click "Select Movies", "Select All", then "Organize": a preview lists
    every file before and after, click "Organize" to apply. For the folders, in
    the same selection click "Edit", pick the same root folder, and answer "Yes"
    to move the files: each folder takes the "Movie Folder Format".
 7. Resume the downloads.
+8. Pick what to fetch. Radarr only searches a movie that is monitored: in
+   Movies, click the bookmark of a movie to unmonitor it, and Radarr ignores it
+   for good, even when a better release shows up. Then Wanted > Missing >
+   "Search All" fetches the movies without a file, and Wanted > Cutoff Unmet >
+   "Search All" replaces the files below the quality profile.
 
 Jellyfin sees the renamed files as new items: a movie already watched loses its
 watched state. Seerr shows each movie as available after its next scan of
@@ -1063,6 +1068,10 @@ The steps are the same as in Radarr, with these differences:
   `tvdb:` and the id of the show on TheTVDB, set "Series Type" to "Anime" for an
   anime, choose what to monitor, and leave "Start search for missing episodes"
   unticked.
+- Once the downloads resume, ignore what you do not want before searching: in a
+  show, click the bookmark of a season or of an episode to unmonitor it. Then
+  Wanted > Missing > "Search All" fetches every monitored episode without a
+  file.
 - Rename with "Select Series", "Select All", then "Organize", and the folders
   with "Edit" and the same root folder.
 - An episode that stays unmatched is often an anime in absolute numbering with
