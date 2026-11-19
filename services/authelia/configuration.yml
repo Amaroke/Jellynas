@@ -26,6 +26,9 @@ authentication_backend:
 
 access_control:
   default_policy: one_factor
+  rules:
+    - domain: '*.{{ env "DOMAIN" }}'
+      policy: one_factor
 
 session:
   cookies:

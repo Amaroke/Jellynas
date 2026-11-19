@@ -519,6 +519,111 @@ whenever Caddy is recreated:
 docker compose restart jellyfin
 ```
 
+## Accounts
+
+Requires [Jellyfin](#jellyfin).
+
+Each Friend and the Admin has a single Account, kept in
+[lldap](https://github.com/lldap/lldap), a small LDAP directory with a web UI.
+Jellyfin checks every password against lldap through its LDAP plugin, which
+works in every app, TV and phone included, and Seerr signs in through Jellyfin.
+[Authelia](https://www.authelia.com) reads the same Accounts and signs the
+Friends in to Aurral with OpenID Connect, on `auth.<DOMAIN>`. Authentik or
+Keycloak can replace both, with more services to run. Neither Seerr nor the
+Jellyfin apps speak OpenID Connect, which is why Jellyfin reads lldap directly.
+
+Only the Admin creates an Account, in lldap, from the local network. Each
+Friend changes their own password in Jellyfin, in Profile > Password, which
+needs the current one, and the new password then works in Aurral too. The lldap
+web UI stays on the local network, and Authelia has no email to send, so its
+password change and reset stay off. A Friend who forgets their password asks the
+Admin, who sets a new one in lldap. After 5
+wrong passwords in 10 minutes, Authelia refuses the Account for an hour. To lift
+the ban sooner, for example once the password is right:
+
+```sh
+docker exec authelia authelia storage bans user revoke <username>
+```
+
+### Keys of Authelia
+
+Fill the Accounts block of `.env`, then create the signing key of Authelia and
+the digest of the secret of Aurral in the appdata of Authelia. Authelia restarts
+in a loop until both files are there:
+
+```bash
+. <(grep -E '^(APPDATA_ROOT|AURRAL_OIDC_CLIENT_SECRET|PUID|PGID)=' .env)
+image="$(docker inspect -f '{{.Config.Image}}' authelia)"
+docker run --rm -u "$PUID:$PGID" -v "$APPDATA_ROOT/authelia:/keys" "$image" \
+  authelia crypto pair rsa generate --directory /keys
+docker run --rm "$image" \
+  authelia crypto hash generate pbkdf2 --variant sha512 \
+  --password "$AURRAL_OIDC_CLIENT_SECRET" |
+  sed -n 's/^Digest: //p' > "$APPDATA_ROOT/authelia/aurral.digest"
+chown "$PUID:$PGID" "$APPDATA_ROOT/authelia/aurral.digest"
+docker restart authelia
+```
+
+After a change of `AURRAL_OIDC_CLIENT_SECRET`, run these lines again without the
+key line.
+
+### lldap
+
+Open `https://lldap.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `admin`
+and `LLDAP_ADMIN_PASSWORD`. Then:
+
+1. In Groups, create `jellynas_users` and `jellynas_admins`.
+2. In Users, create `authelia` with `LLDAP_AUTHELIA_PASSWORD`, and add it to
+   `lldap_strict_readonly`.
+3. Create `jellyfin` with a long random password, and add it to
+   `lldap_password_manager`, so that Jellyfin can write the new password of a
+   Friend. That group changes the password of any Account outside
+   `lldap_admin`, the Admin included, so a flaw in Jellyfin could too. Keep the
+   password for the next step, nothing else uses it.
+4. Create one user per Friend and one for the Admin, with the same username as
+   their Jellyfin user if they already have one, and add each to
+   `jellynas_users`, without which Jellyfin refuses the Account. Add the Admin
+   to `jellynas_admins` too. lldap keeps the username in lowercase and the
+   display name as typed. It asks for an email: nothing sends mail, so a
+   placeholder such as `<username>@jellynas.invalid` works for a Friend who
+   gives none. `.invalid` is a reserved domain that never receives mail.
+5. Give each Friend a long random password, and send it to them over a private
+   channel. They change it in Jellyfin at their first sign-in.
+
+### Jellyfin with lldap
+
+1. In Jellyfin, Dashboard > Plugins > Catalog, install "LDAP Authentication" and
+   restart Jellyfin.
+2. In Dashboard > Plugins > LDAP Authentication, set:
+
+   | Setting | Value |
+   | --- | --- |
+   | LDAP Server | `lldap` |
+   | LDAP Port | `3890` |
+   | Secure LDAP, StartTLS | unchecked, lldap stays in the zone of Jellyfin |
+   | LDAP Bind User | `uid=jellyfin,ou=people,dc=jellynas` |
+   | LDAP Bind User Password | the password of `jellyfin` |
+   | LDAP Base DN for searches | `ou=people,dc=jellynas` |
+   | LDAP Search Filter | `(memberof=cn=jellynas_users,ou=groups,dc=jellynas)` |
+   | LDAP Search Attributes | `uid, mail` |
+   | LDAP Uid Attribute | `uid` |
+   | LDAP Username Attribute | `uid` |
+   | LDAP Admin Base DN | `ou=people,dc=jellynas` |
+   | LDAP Admin Filter | `(memberof=cn=jellynas_admins,ou=groups,dc=jellynas)` |
+   | Enable User Creation | checked |
+   | Enable access to all libraries | checked |
+   | Allow Password Change | checked |
+   | LDAP Password Attribute | `userPassword` |
+
+3. Click "Save and Test LDAP Server Settings", then "Save and Test LDAP Filter
+   Settings".
+4. For each Jellyfin user that existed before lldap, open it in Dashboard >
+   Users and set "Authentication Provider" to "LDAP-Authentication". Their watch
+   history stays, and they sign in with their password of lldap from now on.
+   The Admin user goes through lldap too, with no local account left in
+   Jellyfin: while lldap is down, nobody signs in to Jellyfin, and a session
+   already open keeps working.
+
 === TO BE REWORKED: everything below ===
 
 ## Architecture
@@ -742,95 +847,6 @@ pinned, so Renovate keeps them up to date:
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
 | Actions | actionlint checks the workflows, then zizmor audits their security |
-
-## Accounts
-
-Requires [Jellyfin](#jellyfin).
-
-Each Friend and the Admin has a single Account, kept in
-[lldap](https://github.com/lldap/lldap), a small LDAP directory with a web UI.
-Jellyfin checks every password against lldap through its LDAP plugin, which
-works in every app, TV and phone included, and Seerr signs in through Jellyfin.
-[Authelia](https://www.authelia.com) reads the same Accounts and signs the
-Friends in to Aurral with OpenID Connect, on `auth.<DOMAIN>`. Authentik or
-Keycloak can replace both, with more services to run. Neither Seerr nor the
-Jellyfin apps speak OpenID Connect, which is why Jellyfin reads lldap directly.
-
-Only the Admin creates an Account or changes a password, in lldap, from the
-local network. Authelia has no email to send, so it offers no password reset,
-and after 5 wrong passwords in 10 minutes it refuses the Account for an hour. To
-lift the ban sooner, for example once the password is right:
-
-```sh
-docker exec authelia authelia storage bans user revoke <username>
-```
-
-### Keys of Authelia
-
-Fill the Accounts block of `.env`, then create the signing key of Authelia and
-the digest of the secret of Aurral in the appdata of Authelia. Authelia restarts
-in a loop until both files are there:
-
-```bash
-. <(grep -E '^(APPDATA_ROOT|AURRAL_OIDC_CLIENT_SECRET|PUID|PGID)=' .env)
-image="$(docker inspect -f '{{.Config.Image}}' authelia)"
-docker run --rm -u "$PUID:$PGID" -v "$APPDATA_ROOT/authelia:/keys" "$image" \
-  authelia crypto pair rsa generate --directory /keys
-docker run --rm "$image" \
-  authelia crypto hash generate pbkdf2 --variant sha512 \
-  --password "$AURRAL_OIDC_CLIENT_SECRET" |
-  sed -n 's/^Digest: //p' > "$APPDATA_ROOT/authelia/aurral.digest"
-chown "$PUID:$PGID" "$APPDATA_ROOT/authelia/aurral.digest"
-docker restart authelia
-```
-
-After a change of `AURRAL_OIDC_CLIENT_SECRET`, run these lines again without the
-key line.
-
-### lldap
-
-Open `https://lldap.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with `admin`
-and `LLDAP_ADMIN_PASSWORD`. Then:
-
-1. In Groups, create `jellynas_users` and `jellynas_admins`.
-2. In Users, create `authelia` with `LLDAP_AUTHELIA_PASSWORD`, and add it to
-   `lldap_strict_readonly`.
-3. Create `jellyfin` with a long random password, and add it to
-   `lldap_strict_readonly`. Keep the password for the next step, nothing else
-   uses it.
-4. Create one user per Friend and one for the Admin, with the same username as
-   their Jellyfin user if they already have one, and add each to
-   `jellynas_users`. Add the Admin to `jellynas_admins` too.
-
-### Jellyfin with lldap
-
-1. In Jellyfin, Dashboard > Plugins > Catalog, install "LDAP Authentication" and
-   restart Jellyfin.
-2. In Dashboard > Plugins > LDAP Authentication, set:
-
-   | Setting | Value |
-   | --- | --- |
-   | LDAP Server | `lldap` |
-   | LDAP Port | `3890` |
-   | Secure LDAP, StartTLS | unchecked, lldap stays in the zone of Jellyfin |
-   | LDAP Bind User | `uid=jellyfin,ou=people,dc=jellynas` |
-   | LDAP Bind User Password | the password of `jellyfin` |
-   | LDAP Base DN for searches | `ou=people,dc=jellynas` |
-   | LDAP Search Filter | `(memberof=cn=jellynas_users,ou=groups,dc=jellynas)` |
-   | LDAP Search Attributes | `uid, mail` |
-   | LDAP Uid Attribute | `uid` |
-   | LDAP Username Attribute | `uid` |
-   | LDAP Admin Base DN | `ou=people,dc=jellynas` |
-   | LDAP Admin Filter | `(memberof=cn=jellynas_admins,ou=groups,dc=jellynas)` |
-   | Enable User Creation | checked |
-   | Enable access to all libraries | checked |
-   | Allow Password Change | unchecked |
-
-3. Click "Save and Test LDAP Server Settings", then "Save and Test LDAP Filter
-   Settings".
-4. For each Jellyfin user that existed before lldap, open it in Dashboard >
-   Users and set "Authentication Provider" to "LDAP-Authentication". Their watch
-   history stays, and they sign in with their password of lldap from now on.
 
 ## Seerr
 
