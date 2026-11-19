@@ -892,6 +892,183 @@ ever stops, so Radarr, Sonarr and Lidarr never remove one: a torrent of C411
 seeds forever, and ratio removes a public one after two weeks, or once the same
 files seed on C411.
 
+## Radarr
+
+Requires [Prowlarr](#prowlarr).
+
+Radarr fulfils movie Requests: it searches the indexers, sends the torrent to
+qBittorrent, then copies the finished movie into the Library. No other
+maintained open source tool covers movies as well. It sees only the movies
+folder, under `/data/media/movies`, and the torrents tree, under
+`/data/torrents`.
+
+### Login of Radarr
+
+Open `https://radarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication
+the same way as Prowlarr, with its own username and password. Copy the API key
+from Settings > General > Security into `RADARR_API_KEY` in `.env`, untick
+"Send Anonymous Usage Data" and set the "Log Level" to "Info", as in Prowlarr.
+
+### Media management
+
+In Settings > Media Management, click "Show Advanced" at the top, then:
+
+1. Under Root Folders, add `/data/media/movies`.
+2. Check "Rename Movies", set "Standard Movie Format" to
+   `{Movie Title} ({Release Year}) [tmdbid-{TmdbId}] {Quality Full}` and "Movie
+   Folder Format" to `{Movie Title} ({Release Year}) [tmdbid-{TmdbId}]`, so
+   Jellyfin always matches the right movie, even a remake with the same title.
+3. Under Importing, uncheck "Use Hardlinks instead of Copy". Each import is a
+   copy, so the torrent keeps seeding from the torrents tree while Tdarr
+   normalises the Library file.
+4. Under File Management, set "Recycling Bin" to `/data/media/movies/.recycle`
+   and "Recycling Bin Cleanup" to `30` days. A deleted movie stays there for 30
+   days and can be moved back. Jellyfin and Radarr skip hidden folders, so it
+   never shows up as a movie.
+
+### Download client
+
+1. In qBittorrent, right-click "Categories" in the left panel, pick "Add
+   category", and enter `movies` as the category and `/data/torrents/movies` as
+   the save path. ratio creates it by itself once it runs.
+2. In Radarr, Settings > Download Clients, click "+" and pick qBittorrent.
+3. Enter `gluetun` as the host, since qBittorrent shares its network, `8080` as
+   the port, and the qBittorrent login.
+4. Set "Category" to `movies`.
+5. Check "Remove Completed". No indexer sets a seeding goal, so qBittorrent never
+   stops a torrent and Radarr never removes one: a torrent of C411 seeds
+   forever, and ratio removes a public one.
+6. Click "Test", then "Save".
+
+### Indexers from Prowlarr
+
+1. In Prowlarr, not Radarr, open Settings > Apps, click "+" and pick Radarr.
+2. Leave "Sync Level" on "Full Sync".
+3. Set "Prowlarr Server" to `http://prowlarr:9696` and "Radarr Server" to
+   `http://radarr:7878`.
+4. Paste the Radarr API key, click "Test", then "Save".
+
+Every indexer then shows up in Radarr, Settings > Indexers, and follows any
+change made in Prowlarr.
+
+### Pause the downloads
+
+Turn the downloads off before any large change, such as importing a library, so
+Radarr sends nothing to qBittorrent meanwhile: in Settings > Download Clients,
+edit qBittorrent, untick "Enable", then "Save". Radarr still searches and keeps
+the Requests of Seerr, but grabs nothing, and shows a health warning until the
+client is back. Tick "Enable" again to resume. What was missed in between does
+not start on its own: Wanted > Missing > "Search All" fetches it.
+
+### Import an existing library
+
+1. Pause the downloads, as above.
+2. Copy the movies under `$DATA_ROOT/media/movies`, one folder per movie, such
+   as `Fight Club (1999)/Fight Club.mkv`. Radarr skips a file left loose at the
+   root of the folder. Give them to the Apps user:
+
+   ```sh
+   sudo chown -R 568:568 "$DATA_ROOT/media/movies"
+   ```
+
+3. In Movies > Library Import, pick `/data/media/movies`. Radarr lists every
+   folder it does not manage yet, each with the movie it guessed.
+4. Check each guess. For a wrong one, click it and search by title and year, or
+   by `tmdb:550` with the id of the movie on TMDB.
+5. Pick the quality profile, leave "Start search for missing movie" unticked,
+   then click "Import".
+6. Rename what was imported: Radarr names only its own downloads by itself. In
+   Movies, click "Select Movies", "Select All", then "Organize": a preview lists
+   every file before and after, click "Organize" to apply. For the folders, in
+   the same selection click "Edit", pick the same root folder, and answer "Yes"
+   to move the files: each folder takes the "Movie Folder Format".
+7. Resume the downloads.
+
+Jellyfin sees the renamed files as new items: a movie already watched loses its
+watched state. Seerr shows each movie as available after its next scan of
+Jellyfin.
+
+If an import goes wrong:
+
+- A folder is missing from the list: it is not under `/data/media/movies`, is
+  already managed by Radarr, or belongs to another user. Fix the owner with the
+  `chown` above.
+- A movie was matched to the wrong title: delete it from Radarr with "Delete
+  Movie Folder" unticked, then import its folder again with the right match.
+- A file shows as missing after the import: open the movie, then "Manage
+  Files", and check its quality and language. A sample or a bonus is never
+  imported as the movie.
+- "Organize" changes nothing: "Rename Movies" is unticked in Settings > Media
+  Management.
+
+## Sonarr
+
+Requires [Prowlarr](#prowlarr).
+
+Sonarr fulfils show Requests and fetches new episodes on its own: it searches
+the indexers, sends the torrent to qBittorrent, then copies each finished
+episode into the Library. It sees only the shows and anime folders, under
+`/data/media/shows` and `/data/media/anime`, and the torrents tree, under
+`/data/torrents`. Medusa or SickChill can replace it.
+
+### Login of Sonarr
+
+Open `https://sonarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication
+the same way as Prowlarr, with its own username and password. Copy the API key
+from Settings > General > Security into `SONARR_API_KEY` in `.env`, untick
+"Send Anonymous Usage Data" and set the "Log Level" to "Info", as in Prowlarr.
+
+### Media management of Sonarr
+
+In Settings > Media Management, click "Show Advanced" at the top, then:
+
+1. Under Root Folders, add `/data/media/shows` and `/data/media/anime`.
+2. Check "Rename Episodes" and set "Series Folder Format" to
+   `{Series TitleYear} [tvdbid-{TvdbId}]`, for the same reason as Radarr.
+3. Under Importing, uncheck "Use Hardlinks instead of Copy", for the same reason
+   as Radarr.
+4. Under File Management, set "Recycling Bin" to `/data/media/shows/.recycle`
+   and "Recycling Bin Cleanup" to `30` days. Deleted episodes of both shows and
+   anime stay there for 30 days and can be moved back.
+
+### Download client of Sonarr
+
+1. In qBittorrent, add a category `shows` with `/data/torrents/shows` as the
+   save path.
+2. In Sonarr, Settings > Download Clients, click "+" and pick qBittorrent.
+3. Enter `gluetun` as the host, `8080` as the port, and the qBittorrent login.
+4. Set "Category" to `shows`.
+5. Check "Remove Completed", for the same reason as Radarr.
+6. Click "Test", then "Save".
+
+### Indexers of Sonarr from Prowlarr
+
+In Prowlarr, Settings > Apps, click "+" and pick Sonarr. Set "Prowlarr Server"
+to `http://prowlarr:9696` and "Sonarr Server" to `http://sonarr:8989`, paste the
+Sonarr API key, click "Test", then "Save". Every indexer with TV categories then
+shows up in Sonarr, Settings > Indexers. An indexer without TV categories, such
+as Internet Archive, is never synced to Sonarr.
+
+### Import an existing library into Sonarr
+
+The steps are the same as in Radarr, with these differences:
+
+- Pause the downloads of Sonarr the same way, in its Settings > Download
+  Clients.
+- Copy one folder per show under `$DATA_ROOT/media/shows`, or
+  `$DATA_ROOT/media/anime` for an anime, with the episodes in it or in one
+  folder per season. Sonarr reads the season and the episode from names such as
+  `S01E02`.
+- Use Series > Library Import, pick the root folder, search a wrong guess by
+  `tvdb:` and the id of the show on TheTVDB, set "Series Type" to "Anime" for an
+  anime, choose what to monitor, and leave "Start search for missing episodes"
+  unticked.
+- Rename with "Select Series", "Select All", then "Organize", and the folders
+  with "Edit" and the same root folder.
+- An episode that stays unmatched is often an anime in absolute numbering with
+  the type "Standard": switch its "Series Type" to "Anime" in "Edit", then
+  "Refresh & Scan".
+
 === TO BE REWORKED: everything below ===
 
 ## Architecture
@@ -1115,109 +1292,6 @@ pinned, so Renovate keeps them up to date:
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
 | Actions | actionlint checks the workflows, then zizmor audits their security |
-
-## Radarr
-
-Requires [Prowlarr](#prowlarr).
-
-Radarr fulfils movie Requests: it searches the indexers, sends the torrent to
-qBittorrent, then copies the finished movie into the Library. No other
-maintained open source tool covers movies as well. It sees only the movies
-folder, under `/data/media/movies`, and the torrents tree, under
-`/data/torrents`.
-
-### Login of Radarr
-
-Open `https://radarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication
-the same way as Prowlarr, with its own username and password. Copy the API key
-from Settings > General > Security into `RADARR_API_KEY` in `.env`.
-
-### Media management
-
-In Settings > Media Management, click "Show Advanced" at the top, then:
-
-1. Under Root Folders, add `/data/media/movies`.
-2. Check "Rename Movies".
-3. Under Importing, uncheck "Use Hardlinks instead of Copy". Each import is a
-   copy, so the torrent keeps seeding from the torrents tree while Tdarr
-   normalises the Library file.
-4. Under File Management, set "Recycling Bin" to `/data/media/movies/.recycle`
-   and "Recycling Bin Cleanup" to `30` days. A deleted movie stays there for 30
-   days and can be moved back. Jellyfin and Radarr skip hidden folders, so it
-   never shows up as a movie.
-
-### Download client
-
-1. In qBittorrent, right-click "Categories" in the left panel, pick "Add
-   category", and enter `movies` as the category and `/data/torrents/movies` as
-   the save path. ratio creates it by itself once it runs.
-2. In Radarr, Settings > Download Clients, click "+" and pick qBittorrent.
-3. Enter `gluetun` as the host, since qBittorrent shares its network, `8080` as
-   the port, and the qBittorrent login.
-4. Set "Category" to `movies`.
-5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding
-   goal, Radarr removes it and its files from the torrents tree, and the movie
-   stays in the Library.
-6. Click "Test", then "Save".
-
-### Indexers from Prowlarr
-
-1. In Prowlarr, not Radarr, open Settings > Apps, click "+" and pick Radarr.
-2. Leave "Sync Level" on "Full Sync".
-3. Set "Prowlarr Server" to `http://prowlarr:9696` and "Radarr Server" to
-   `http://radarr:7878`.
-4. Paste the Radarr API key, click "Test", then "Save".
-
-Every indexer then shows up in Radarr, Settings > Indexers, and follows any
-change made in Prowlarr.
-
-## Sonarr
-
-Requires [Prowlarr](#prowlarr).
-
-Sonarr fulfils show Requests and fetches new episodes on its own: it searches
-the indexers, sends the torrent to qBittorrent, then copies each finished
-episode into the Library. It sees only the shows and anime folders, under
-`/data/media/shows` and `/data/media/anime`, and the torrents tree, under
-`/data/torrents`. Medusa or SickChill can replace it.
-
-### Login of Sonarr
-
-Open `https://sonarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication
-the same way as Prowlarr, with its own username and password. Copy the API key
-from Settings > General > Security into `SONARR_API_KEY` in `.env`.
-
-### Media management of Sonarr
-
-In Settings > Media Management, click "Show Advanced" at the top, then:
-
-1. Under Root Folders, add `/data/media/shows` and `/data/media/anime`.
-2. Check "Rename Episodes".
-3. Under Importing, uncheck "Use Hardlinks instead of Copy", for the same reason
-   as Radarr.
-4. Under File Management, set "Recycling Bin" to `/data/media/shows/.recycle`
-   and "Recycling Bin Cleanup" to `30` days. Deleted episodes of both shows and
-   anime stay there for 30 days and can be moved back.
-
-### Download client of Sonarr
-
-1. In qBittorrent, add a category `shows` with `/data/torrents/shows` as the
-   save path.
-2. In Sonarr, Settings > Download Clients, click "+" and pick qBittorrent.
-3. Enter `gluetun` as the host, `8080` as the port, and the qBittorrent login.
-4. Set "Category" to `shows`.
-5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding
-   goal, Sonarr removes it and its files from the torrents tree, and the
-   episodes stay in the Library.
-6. Click "Test", then "Save".
-
-### Indexers of Sonarr from Prowlarr
-
-In Prowlarr, Settings > Apps, click "+" and pick Sonarr. Set "Prowlarr Server"
-to `http://prowlarr:9696` and "Sonarr Server" to `http://sonarr:8989`, paste the
-Sonarr API key, click "Test", then "Save". Every indexer with TV categories then
-shows up in Sonarr, Settings > Indexers. An indexer without TV categories, such
-as Internet Archive, is never synced to Sonarr.
 
 ## slskd
 
