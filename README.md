@@ -684,6 +684,156 @@ and each issue a Friend reports.
 A Friend who adds their Discord user id in their Seerr profile, Settings >
 Notifications, is mentioned in the messages about their own Requests.
 
+## qBittorrent
+
+Requires [Deploy](#deploy).
+
+qBittorrent downloads torrents into the torrents tree, the only folder it sees,
+mounted under `/data/torrents`. Transmission or Deluge can replace it, though
+cross-seed and ratio speak to qBittorrent. It shares the network of Gluetun,
+whose firewall only lets traffic out through the VPN. When the VPN is down or
+not configured yet, qBittorrent has no connectivity at all, so your real IP
+never leaks.
+
+### VPN
+
+Until you choose a provider, leave every VPN value of `.env` empty. Gluetun then
+starts with a tunnel that leads nowhere and shows as unhealthy, which is
+expected.
+
+Once you have a provider:
+
+1. Find your provider on the [Gluetun providers
+   page](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers) and
+   note the values it asks for.
+2. In `.env`, set `VPN_SERVICE_PROVIDER` to the provider name and `VPN_TYPE` to
+   `wireguard` or `openvpn`.
+3. For WireGuard, download a WireGuard config file from the provider and copy
+   its `PrivateKey` into `WIREGUARD_PRIVATE_KEY` and its `Address` into
+   `WIREGUARD_ADDRESSES`. For OpenVPN, set `OPENVPN_USER` and `OPENVPN_PASSWORD`
+   to the manual setup credentials of the provider.
+4. Optionally set `SERVER_COUNTRIES` to the countries you want to exit from.
+5. Recreate Gluetun and qBittorrent:
+
+   ```sh
+   docker restart doco-cd
+   ```
+
+The line `Public IP address is` in `docker compose logs gluetun` shows the VPN
+address, never your home address. Gluetun then turns healthy.
+
+Gluetun also serves an HTTP proxy at `gluetun:8888`, on the Compose network
+only. ratio and the indexers of Prowlarr send their requests to the trackers
+through it, see [VPN of the indexers](#vpn-of-the-indexers).
+
+### Example: AirVPN
+
+1. Sign in on the [AirVPN Client Area](https://airvpn.org/client/) and open the
+   [Config Generator](https://airvpn.org/generator/).
+2. Pick Linux as the system, WireGuard as the protocol, and the country you want
+   to exit from, then generate and download the config file.
+3. In `.env`, set `VPN_SERVICE_PROVIDER` to `airvpn`, `VPN_TYPE` to `wireguard`,
+   and either `SERVER_COUNTRIES` to a country such as `Netherlands` or
+   `SERVER_REGIONS` to `Europe` to let Gluetun pick among every European server.
+   The keys work with any server.
+4. From the config file, copy `PrivateKey` into `WIREGUARD_PRIVATE_KEY`,
+   `PresharedKey` into `WIREGUARD_PRESHARED_KEY`, and only the IPv4 part of
+   `Address` into `WIREGUARD_ADDRESSES`, for example `10.128.0.2/32`. Then
+   delete the file, it holds your keys.
+5. On the [ports page](https://airvpn.org/ports/), reserve a port, leave its
+   local port empty, and set `VPN_FORWARDED_PORT` to it. [slskd](#slskd)
+   reserves a second one later.
+6. Recreate Gluetun and qBittorrent with `docker restart doco-cd`.
+
+In qBittorrent, Tools > Options > Connection, set "Port used for incoming
+connections" to the first port of `VPN_FORWARDED_PORT` and uncheck "Use UPnP /
+NAT-PMP port forwarding from my router". Back on the ports page, the test button
+of the port then shows it as open while a torrent runs.
+
+### Login
+
+1. Read the temporary password qBittorrent printed at its first start:
+
+   ```sh
+   docker compose logs qbittorrent
+   ```
+
+2. qBittorrent refuses its web UI behind Caddy until it trusts it as a reverse
+   proxy, so turn on its reverse proxy support for the Docker networks,
+   `172.16.0.0/12` on TrueNAS, while it is stopped. qBittorrent 5 keeps these
+   settings in the `[WebUI]` section of its config file, which its first start
+   creates:
+
+   ```sh
+   . <(grep '^APPDATA_ROOT=' .env)
+   docker compose stop qbittorrent
+   conf="$APPDATA_ROOT"/qbittorrent/qBittorrent/qBittorrent.conf
+   proxy='ReverseProxySupportEnabled=true'
+   trusted='TrustedReverseProxiesList=172.16.0.0/12'
+   sed -i "/^\[WebUI\]/a $proxy\n$trusted" "$conf"
+   docker compose start qbittorrent
+   ```
+
+   Caddy sends qBittorrent its own address as the host and the lan name in
+   `X-Forwarded-Host`, which qBittorrent then checks against the origin of each
+   request, so its CSRF protection stays on.
+
+3. Open `https://qbittorrent.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on
+   the local network and sign in with `admin` and that password.
+4. In Tools > Options > WebUI > Authentication, set a new username and a strong
+   password stored in your password manager. Leave both "Bypass authentication"
+   options unchecked.
+
+### Save paths
+
+In Tools > Options > Downloads, set "Default Save Path" to `/data/torrents`,
+uncheck "Keep incomplete torrents in", and save. Any other path would land
+inside the container and be lost.
+
+### Downloads and seeding
+
+Each finished torrent keeps seeding from the torrents tree for a while, to give
+back to other peers. A private torrent stops at its seeding goal, then the tool
+that sent it removes it, unless ratio moved it into the Farm. ratio removes a
+public torrent after two weeks. Each import is a copy, so a downloaded file sits
+twice on the disk until then: keep enough free space for every torrent still
+seeding. In Tools > Options, set:
+
+- Downloads > Default Torrent Management Mode: Automatic, so each category picks
+  its own save path
+- Downloads > Append .!qB extension to incomplete files: Checked, so no tool
+  imports a file that is still downloading
+- BitTorrent > Privacy: DHT and PeX checked, Local Peer Discovery unchecked
+  since the container has no local peers
+- Connection > Connections Limits: every box unchecked, so neither the
+  connections nor the upload slots have a limit, in all or per torrent, and no
+  swarm waits for a free slot
+- BitTorrent > Torrent Queueing: Unchecked. A queued torrent never announces, so
+  it uploads nothing and C411 pays it no Zen. ratio unchecks it itself. Each
+  tool already limits its own downloads, ratio to 2 at a time for the Farm
+- BitTorrent > Seeding Limits: All unchecked. ratio unchecks them itself, since
+  it removes the public torrents and keeps the Farm seeding
+- Advanced > Network interface: `tun0`, so qBittorrent only ever uses the VPN,
+  on top of the Gluetun kill switch
+- Advanced > Upload slots behavior: Upload rate based, so qBittorrent opens
+  slots while upload bandwidth is left
+- Advanced > Upload choking algorithm: Fastest upload, so the peers that take
+  the most are served first
+- Advanced > Outgoing connections per second: `100`, so a fresh torrent reaches
+  its leechers within seconds
+- Advanced > Send buffer watermark, low watermark, factor: `5120` KiB, `1024`
+  KiB, `150` %, so upload stays steady at high speed
+- Advanced > Socket backlog size: `100`
+- Advanced > Max active checking torrents: `1`, so the disks check one torrent
+  at a time
+- Speed: every limit at `0`, the alternative limits too, the scheduler off, and
+  "Apply rate limit to µTP protocol" and "Apply rate limit to peers on LAN"
+  unchecked
+
+qBittorrent then runs with no limit at all. Seeding can take the whole upload of
+the internet line, which can slow Jellyfin for the Friends. If it does, set a
+global upload limit in Speed, about 60% of the upload speed of the line.
+
 === TO BE REWORKED: everything below ===
 
 ## Architecture
@@ -907,148 +1057,6 @@ pinned, so Renovate keeps them up to date:
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
 | Actions | actionlint checks the workflows, then zizmor audits their security |
-
-## qBittorrent
-
-Requires [Deploy](#deploy).
-
-qBittorrent downloads torrents into the torrents tree, the only folder it sees,
-mounted under `/data/torrents`. Transmission or Deluge can replace it, though
-cross-seed and ratio speak to qBittorrent. It shares the network of Gluetun,
-whose firewall only lets traffic out through the VPN. When the VPN is down or
-not configured yet, qBittorrent has no connectivity at all, so your real IP
-never leaks.
-
-### VPN
-
-Until you choose a provider, leave every VPN value of `.env` empty. Gluetun then
-starts with a tunnel that leads nowhere and shows as unhealthy, which is
-expected.
-
-Once you have a provider:
-
-1. Find your provider on the [Gluetun providers
-   page](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers) and
-   note the values it asks for.
-2. In `.env`, set `VPN_SERVICE_PROVIDER` to the provider name and `VPN_TYPE` to
-   `wireguard` or `openvpn`.
-3. For WireGuard, download a WireGuard config file from the provider and copy
-   its `PrivateKey` into `WIREGUARD_PRIVATE_KEY` and its `Address` into
-   `WIREGUARD_ADDRESSES`. For OpenVPN, set `OPENVPN_USER` and `OPENVPN_PASSWORD`
-   to the manual setup credentials of the provider.
-4. Optionally set `SERVER_COUNTRIES` to the countries you want to exit from.
-5. Recreate Gluetun and qBittorrent:
-
-   ```sh
-   docker restart doco-cd
-   ```
-
-The line `Public IP address is` in `docker compose logs gluetun` shows the VPN
-address, never your home address. Gluetun then turns healthy.
-
-Gluetun also serves an HTTP proxy at `gluetun:8888`, on the Compose network
-only. ratio and the indexers of Prowlarr send their requests to the trackers
-through it, see [VPN of the indexers](#vpn-of-the-indexers).
-
-### Example: AirVPN
-
-1. Sign in on the [AirVPN Client Area](https://airvpn.org/client/) and open the
-   [Config Generator](https://airvpn.org/generator/).
-2. Pick Linux as the system, WireGuard as the protocol, and the country you want
-   to exit from, then generate and download the config file.
-3. In `.env`, set `VPN_SERVICE_PROVIDER` to `airvpn`, `VPN_TYPE` to `wireguard`,
-   and either `SERVER_COUNTRIES` to a country such as `Netherlands` or
-   `SERVER_REGIONS` to `Europe` to let Gluetun pick among every European server.
-   The keys work with any server.
-4. From the config file, copy `PrivateKey` into `WIREGUARD_PRIVATE_KEY`,
-   `PresharedKey` into `WIREGUARD_PRESHARED_KEY`, and only the IPv4 part of
-   `Address` into `WIREGUARD_ADDRESSES`, for example `10.128.0.2/32`. Then
-   delete the file, it holds your keys.
-5. On the [ports page](https://airvpn.org/ports/), reserve a port, leave its
-   local port empty, and set `VPN_FORWARDED_PORT` to it. [slskd](#slskd)
-   reserves a second one later.
-6. Recreate Gluetun and qBittorrent with `docker restart doco-cd`.
-
-In qBittorrent, Tools > Options > Connection, set "Port used for incoming
-connections" to the first port of `VPN_FORWARDED_PORT` and uncheck "Use UPnP /
-NAT-PMP port forwarding from my router". Back on the ports page, the test button
-of the port then shows it as open while a torrent runs.
-
-### Login
-
-1. Read the temporary password qBittorrent printed at its first start:
-
-   ```sh
-   docker compose logs qbittorrent
-   ```
-
-2. qBittorrent refuses its web UI behind Caddy until it trusts it as a reverse
-   proxy, so turn on its reverse proxy support for the Docker networks,
-   `172.16.0.0/12` on TrueNAS, while it is stopped:
-
-   ```sh
-   . <(grep '^APPDATA_ROOT=' .env)
-   docker compose stop qbittorrent
-   conf="$APPDATA_ROOT"/qbittorrent/qBittorrent/qBittorrent.conf
-   proxy='WebUI\\ReverseProxySupportEnabled=true'
-   trusted='WebUI\\TrustedReverseProxiesList=172.16.0.0/12'
-   sed -i "/^\[Preferences\]/a $proxy\n$trusted" "$conf"
-   docker compose start qbittorrent
-   ```
-
-   Caddy sends qBittorrent its own address as the host and the lan name in
-   `X-Forwarded-Host`, which qBittorrent then checks against the origin of each
-   request, so its CSRF protection stays on.
-
-3. Open `https://qbittorrent.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on
-   the local network and sign in with `admin` and that password.
-4. In Tools > Options > WebUI > Authentication, set a new username and a strong
-   password stored in your password manager. Leave both "Bypass authentication"
-   options unchecked.
-
-### Save paths
-
-In Tools > Options > Downloads, set "Default Save Path" to `/data/torrents`,
-uncheck "Keep incomplete torrents in", and save. Any other path would land
-inside the container and be lost.
-
-### Downloads and seeding
-
-Each finished torrent keeps seeding from the torrents tree for a while, to give
-back to other peers. A private torrent stops at its seeding goal, then the tool
-that sent it removes it, unless ratio moved it into the Farm. ratio removes a
-public torrent after two weeks. Each import is a copy, so a downloaded file sits
-twice on the disk until then: keep enough free space for every torrent still
-seeding. In Tools > Options, set:
-
-- Downloads > Default Torrent Management Mode: Automatic, so each category picks
-  its own save path
-- Downloads > Append .!qB extension to incomplete files: Checked, so no tool
-  imports a file that is still downloading
-- BitTorrent > Privacy: DHT and PeX checked, Local Peer Discovery unchecked
-  since the container has no local peers
-- Connection > Connections Limits: 1000 connections in all and 200 per torrent,
-  upload slots unchecked in all and per torrent, so no swarm waits for a free
-  slot
-- BitTorrent > Torrent Queueing: Unchecked. A queued torrent never announces, so
-  it uploads nothing and C411 pays it no Zen. ratio unchecks it itself. Each
-  tool already limits its own downloads, ratio to 2 at a time for the Farm
-- BitTorrent > Seeding Limits: All unchecked. ratio unchecks them itself, since
-  it removes the public torrents and keeps the Farm seeding
-- Advanced > Network interface: `tun0`, so qBittorrent only ever uses the VPN,
-  on top of the Gluetun kill switch
-- Advanced > Upload slots behavior: Upload rate based, so qBittorrent opens
-  slots while upload bandwidth is left
-- Advanced > Upload choking algorithm: Fastest upload, so the peers that take
-  the most are served first
-- Advanced > Outgoing connections per second: `100`, so a fresh torrent reaches
-  its leechers within seconds
-- Advanced > Send buffer watermark, low watermark, factor: `5120` KiB, `1024`
-  KiB, `150` %, so upload stays steady at high speed
-- Advanced > Socket backlog size: `100`
-
-Optionally, in Speed, set a global upload limit to about 60% of your internet
-upload speed, so seeding never slows Jellyfin streams to Friends.
 
 ## Prowlarr
 
