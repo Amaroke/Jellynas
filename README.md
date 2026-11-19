@@ -13,7 +13,8 @@ The entire repository is what I currently use. I configured it so that no secret
 is ever exposed. It is public both for my own use and for those who are curious
 to explore the solutions I built.
 
-Follow the sections in order. Each one starts with the sections it requires.
+Follow the sections in order. Each one starts with the sections it requires. The
+guide is written so that an AI agent can follow it as well as a person.
 
 1. [Architecture](#architecture)
 2. [Prerequisites](#prerequisites)
@@ -47,7 +48,272 @@ Follow the sections in order. Each one starts with the sections it requires.
 30. [Verify the NAS](#verify-the-nas)
 31. [Contributing](#contributing)
 
-=== TO BE REWORKED: from Architecture to CI ===
+## Prerequisites
+
+- **Required**: a Linux host with Docker Compose. This README runs on [TrueNAS
+  SCALE](https://www.truenas.com/download-truenas-community-edition/), on a
+  machine or a virtual machine, with a pool. Its Docker runs the NAS directly,
+  the data sits on ZFS with snapshots and replication to move the pool to
+  another machine, and the services stay in git rather than in the Custom Apps
+  of TrueNAS. Debian, Ubuntu, Unraid or OpenMediaVault work too.
+- **Optional**: a VPN with port forwarding, here AirVPN. ProtonVPN, Mullvad or
+  any provider Gluetun supports work too. Without a VPN, a seedbox such as
+  Ultra.cc, Seedhost or Whatbox can download in place of the NAS, or the NAS
+  downloads with the home IP, at your own risk.
+- **Optional**: a domain, here at OVH. Cloudflare, Gandi, Porkbun or any
+  registrar with an API that [caddy-dns](https://github.com/caddy-dns) supports
+  work too. Without a domain, a free dynamic DNS subdomain from DuckDNS, deSEC
+  or dynv6 does the same job, or the NAS stays on the local network only.
+
+## TrueNAS
+
+Requires [Prerequisites](#prerequisites).
+
+### Datasets
+
+Open the TrueNAS web UI. The commands of this README name the pool `tank`.
+
+1. In Datasets, add four datasets to the pool with the "Apps" preset, so the
+   `apps` user, owns them: `data`, `appdata`, `backup` and `jellynas`.
+   Never add a child dataset under `data`: `torrents` and `media` are plain
+   folders, so that the hardlinks of cross-seed stay on one file system.
+2. In Apps, click "Configure", pick the pool, and save. TrueNAS starts its
+   Docker.
+
+On another host, create the same four folders on one disk, owned by the user
+the services run as, and install Docker with the Compose plugin.
+
+Once [Domain](#domain) is done, TrueNAS also answers at
+`https://truenas.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`.
+
+### Clone
+
+The Clone is the copy of this repo on the NAS, in the `jellynas` dataset. It
+holds the `.env` of the NAS, which never goes to git, and it is where the
+commands of this README run. doco-cd does not deploy from the Clone: it pulls
+`main` from GitHub, as [Deploy](#deploy) sets out. So the Clone only needs a
+`git pull` before running a script of the repo.
+
+In System > Shell, or over SSH, clone the repo into its dataset. Git refuses a
+clone that root does not own until it is marked as safe:
+
+```sh
+sudo -i
+git clone https://github.com/Amaroke/Jellynas.git /mnt/tank/jellynas
+git config --global --add safe.directory /mnt/tank/jellynas
+```
+
+Every command of this README then runs as root, from the Clone:
+
+```sh
+sudo -i
+cd /mnt/tank/jellynas
+```
+
+On another host, clone the repo anywhere and run the commands from there, with
+the paths of the host.
+
+## Settings
+
+Requires [TrueNAS](#truenas).
+
+```sh
+cp .env.example .env
+```
+
+Open `.env` and fill in every value of the modules you keep. Each variable is
+explained in `.env.example`. Wrap a value in double quotes if it contains a
+space. `.env` is ignored by git and must never be committed.
+
+Both roots live outside the repo, at the paths set in `DATA_ROOT` and
+`APPDATA_ROOT`, and so do the archives of the appdata, at `BACKUP_ROOT`. The
+data root holds a single tree, so that one folder holds every download and the
+whole Library. Radarr, Sonarr, Lidarr and LazyLibrarian download into the
+qBittorrent categories `movies`, `shows`, `music` and `books`, and ratio into
+`farm`. qBittorrent creates the folder of a category the first time a torrent
+lands in it. cross-seed hardlinks its matches into `cross-seed`, and slskd
+downloads into `soulseek`:
+
+```text
+<DATA_ROOT>
+├── torrents
+│   ├── movies
+│   ├── shows
+│   ├── music
+│   ├── books
+│   ├── farm
+│   ├── cross-seed
+│   └── soulseek
+└── media
+    ├── movies
+    ├── shows
+    ├── anime
+    ├── music
+    ├── aurral
+    ├── books
+    └── manga
+```
+
+Create both roots, the folder of the archives, the recycle bins of Radarr and
+Sonarr, and the appdata folders of the services that run as `PUID` from their
+first start:
+
+```bash
+. <(grep -E '^(DATA_ROOT|APPDATA_ROOT|BACKUP_ROOT|PUID|PGID)=' .env)
+mkdir -p "$BACKUP_ROOT" \
+  "$DATA_ROOT"/torrents/{farm,cross-seed} \
+  "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} \
+  "$DATA_ROOT"/media/{movies,shows,anime,music,aurral,books,manga} \
+  "$DATA_ROOT"/media/{movies,shows}/.recycle \
+  "$APPDATA_ROOT"/{seerr,lldap,authelia,aurral,recyclarr,autobrr,cross-seed} \
+  "$APPDATA_ROOT"/{ratio,farm-board,discord-posts,pr-radar,slskd,suwayomi}
+chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
+```
+
+## Domain
+
+Requires [Settings](#settings).
+
+Caddy is the only service the NAS publishes, on `CADDY_HTTPS_PORT`. Friends
+reach `jellyfin.<DOMAIN>`, `seerr.<DOMAIN>`, `aurral.<DOMAIN>` and
+`auth.<DOMAIN>` from the internet. The Admin reaches every tool at
+`<tool>.lan.<DOMAIN>`, from the local network only: Caddy refuses a lan name to
+any address outside `LAN_SUBNET`, and refuses any name it does not know. Through
+the API of the DNS provider, Caddy obtains a wildcard certificate for
+`*.<DOMAIN>` and one for `*.lan.<DOMAIN>`, so no port opens for the certificates
+and the certificate logs never list the tools, and it keeps `jellyfin`, `seerr`,
+`auth` and `aurral` on the public IP of the home. Wildcards keep the tools out
+of the certificate logs, a single port keeps what the NAS publishes small, and
+public certificates avoid installing a local root certificate on every device.
+
+Caddy also listens on `CADDY_HTTPS_PORT` inside its container and sends HSTS on
+every name, so a browser never tries plain HTTP. Inside the NAS, Caddy answers
+the public names itself, so a service reaches Jellyfin, Seerr, Aurral or
+Authelia at the same address a Friend uses.
+
+### Network zones
+
+Jellyfin, Seerr, Aurral and Authelia face the internet, so a flaw in one of them
+must not land next to the rest of the NAS. The services sit in five Docker
+networks:
+
+| Zone            | Services                                                   |
+| --------------- | ---------------------------------------------------------- |
+| `jellyfin-zone` | Caddy, Jellyfin, lldap                                     |
+| `seerr-zone`    | Caddy, Seerr, Radarr, Sonarr                               |
+| `aurral-zone`   | Caddy, Aurral, Lidarr                                      |
+| `identity-zone` | Caddy, Authelia, lldap                                     |
+| `internal-zone` | every other service, plus Caddy, Radarr, Sonarr and Lidarr |
+
+qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal
+zone, and the Beszel agent the network of the Host. A service that needs
+Jellyfin, Seerr, Aurral or Authelia from another zone, such as Homepage, Uptime
+Kuma, the Music bot, or Aurral signing in with Authelia, reaches it through
+Caddy at its public name, so the zones only open towards the public services,
+never from them. lldap speaks LDAP, which Caddy cannot carry, so it sits in the
+zones of Jellyfin and of Authelia, the only two services that read the Accounts,
+and has no public name. The zones hand out IPv6 addresses too, and Jellyfin
+tries them first, so lldap listens on `::`. `python3 -m unittest` checks the
+members of each zone.
+
+Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS
+provider, swap the `caddy-dns/ovh` module in `services/caddy/Dockerfile` for its
+own, and its settings in the `acme_dns` and `dynamic_dns` blocks of
+`services/caddy/Caddyfile` and in `.env`.
+
+### DNS zone
+
+In the [OVH Control Panel](https://www.ovh.com/manager/), open Web Cloud >
+Domain names > `<DOMAIN>` > DNS zone, click "Add an entry", pick `A`, enter
+`*.lan` as the subdomain and the fixed local IP of the NAS as the target. Leave
+every other entry as it is, such as the ones of the OVH email. Caddy creates the
+`jellyfin`, `seerr`, `auth` and `aurral` entries itself at its first start.
+
+### API keys
+
+1. Open [eu.api.ovh.com/createToken](https://eu.api.ovh.com/createToken/) and
+   sign in with the OVH account that holds the domain.
+2. Enter `Jellynas Caddy` as the name and description, and pick "Unlimited" as
+   the validity.
+3. Add these rights, with `<DOMAIN>` written out, so the keys can only change
+   the records of the zone:
+
+   | Method | Path                             |
+   | ------ | -------------------------------- |
+   | GET    | `/domain/zone/<DOMAIN>/record`   |
+   | POST   | `/domain/zone/<DOMAIN>/record`   |
+   | GET    | `/domain/zone/<DOMAIN>/record/*` |
+   | PUT    | `/domain/zone/<DOMAIN>/record/*` |
+   | DELETE | `/domain/zone/<DOMAIN>/record/*` |
+   | GET    | `/domain/zone/<DOMAIN>/soa`      |
+   | POST   | `/domain/zone/<DOMAIN>/refresh`  |
+
+4. Create the keys, then copy the application key, the application secret and
+   the consumer key into `OVH_APPLICATION_KEY`, `OVH_APPLICATION_SECRET` and
+   `OVH_CONSUMER_KEY` in `.env`.
+5. In `.env`, set `DOMAIN` to the domain and `LAN_SUBNET` to the local network,
+   for example `192.168.1.0/24` when the router is `192.168.1.254`.
+
+### Router port forward
+
+Pick the HTTPS port and set it in `CADDY_HTTPS_PORT`, or leave it empty for 443.
+A high port that no service uses by default, such as a random five-digit number,
+draws fewer automated scans. Friends then add it to the address, for example
+`https://jellyfin.<DOMAIN>:<port>`, which the Jellyfin apps accept.
+
+On your router, forward that single TCP port to the local IP of the NAS, and
+nothing else. Set both the external and the internal port of the rule to
+`CADDY_HTTPS_PORT`, never the internal port to 443: Caddy listens on
+`CADDY_HTTPS_PORT` on the NAS.
+
+### Addresses
+
+Once [Deploy](#deploy) is done, each tool answers at its own address, with
+`:<CADDY_HTTPS_PORT>` after the name unless it is 443:
+
+| Service       | Address                                | Reached from  |
+| ------------- | -------------------------------------- | ------------- |
+| Jellyfin      | `https://jellyfin.<DOMAIN>`            | Anywhere      |
+| Seerr         | `https://seerr.<DOMAIN>`               | Anywhere      |
+| Aurral        | `https://aurral.<DOMAIN>`              | Anywhere      |
+| Authelia      | `https://auth.<DOMAIN>`                | Anywhere      |
+| TrueNAS       | `https://truenas.lan.<DOMAIN>`         | Local network |
+| Jellyfin      | `https://jellyfin.lan.<DOMAIN>`        | Local network |
+| Seerr         | `https://seerr.lan.<DOMAIN>`           | Local network |
+| Aurral        | `https://aurral.lan.<DOMAIN>`          | Local network |
+| lldap         | `https://lldap.lan.<DOMAIN>`           | Local network |
+| qBittorrent   | `https://qbittorrent.lan.<DOMAIN>`     | Local network |
+| Prowlarr      | `https://prowlarr.lan.<DOMAIN>`        | Local network |
+| Radarr        | `https://radarr.lan.<DOMAIN>`          | Local network |
+| Sonarr        | `https://sonarr.lan.<DOMAIN>`          | Local network |
+| Lidarr        | `https://lidarr.lan.<DOMAIN>`          | Local network |
+| slskd         | `https://slskd.lan.<DOMAIN>`           | Local network |
+| LazyLibrarian | `https://lazylibrarian.lan.<DOMAIN>`   | Local network |
+| Suwayomi      | `https://suwayomi.lan.<DOMAIN>`        | Local network |
+| Bazarr        | `https://bazarr.lan.<DOMAIN>`          | Local network |
+| Tdarr         | `https://tdarr.lan.<DOMAIN>`           | Local network |
+| Indexarr      | `https://indexarr.lan.<DOMAIN>`        | Local network |
+| autobrr       | `https://autobrr.lan.<DOMAIN>`         | Local network |
+| ratio         | `https://ratio.lan.<DOMAIN>/graphs`    | Local network |
+| Actions       | `https://actions.lan.<DOMAIN>/actions` | Local network |
+| PR radar      | `https://prs.lan.<DOMAIN>/pulls`       | Local network |
+| Beszel        | `https://beszel.lan.<DOMAIN>`          | Local network |
+| Uptime Kuma   | `https://uptime-kuma.lan.<DOMAIN>`     | Local network |
+| Dozzle        | `https://dozzle.lan.<DOMAIN>`          | Local network |
+| Homepage      | `https://homepage.lan.<DOMAIN>`        | Local network |
+
+cross-seed has an API only, which the other containers reach at
+`http://cross-seed:2468`. The first certificates take a few minutes, follow them
+with:
+
+```sh
+docker compose logs -f caddy
+```
+
+The line `certificate obtained successfully` shows up once for `*.<DOMAIN>` and
+once for `*.lan.<DOMAIN>`.
+
+=== TO BE REWORKED: everything below ===
 
 ## Architecture
 
@@ -322,298 +588,6 @@ pinned, so Renovate keeps them up to date:
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
 | Actions | actionlint checks the workflows, then zizmor audits their security |
-
-=== END OF TO BE REWORKED ===
-
-## Prerequisites
-
-- **Required**: a Linux host with Docker Compose. This README runs on [TrueNAS
-  SCALE](https://www.truenas.com/download-truenas-community-edition/), on a
-  machine or a virtual machine, with a pool. Its Docker runs the NAS directly,
-  the data sits on ZFS with snapshots and replication to move the pool to
-  another machine, and the services stay in git rather than in the Custom Apps
-  of TrueNAS. Debian, Ubuntu, Unraid or OpenMediaVault work too: each step that
-  only applies to TrueNAS says what to do on another host.
-- **Optional**: a VPN with port forwarding, here AirVPN. ProtonVPN, Mullvad or
-  any provider Gluetun supports work too. Without a VPN, a seedbox such as
-  Ultra.cc, Seedhost or Whatbox can download in place of the NAS, or the NAS
-  downloads with the home IP, at your own risk.
-- **Optional**: a domain, here at OVH. Cloudflare, Gandi, Porkbun or any
-  registrar with an API that [caddy-dns](https://github.com/caddy-dns) supports
-  work too. Without a domain, a free dynamic DNS subdomain from DuckDNS, deSEC
-  or dynv6 does the same job, or the NAS stays on the local network only.
-- **Optional**: an account on a private tracker, here C411. Any private tracker
-  works, minus the Zen, which only C411 pays.
-
-Each optional part is a set of services in `compose.yaml`. To leave one out,
-comment its lines in a pull request, and doco-cd removes them once merged:
-
-- Without a private tracker, comment `autobrr`, `cross-seed`, `ratio` and
-  `farm-board`.
-- Without a VPN, comment `gluetun`, `slskd` and `suwayomi`, remove
-  `network_mode` and `depends_on` from `services/qbittorrent/compose.yaml`, and
-  replace `gluetun:8080` with `qbittorrent:8080` in `services/caddy/Caddyfile`,
-  `services/cross-seed/config.js`, `services/ratio/ratio.py` and
-  `services/homepage/services.yaml`. Soulseek shows the IP of each user to the
-  others, so slskd never runs without the VPN, and Suwayomi never fetches a
-  manga site from the home IP.
-- Without a domain, comment `caddy` and publish the port of each web UI in its
-  own `compose.yaml`, reachable over plain HTTP on the local network only.
-
-Remove the tiles of the services left out from `services/homepage/services.yaml`
-too.
-
-`./scripts/verify.sh` only checks the services that `compose.yaml` still
-includes.
-
-## TrueNAS
-
-Requires [Prerequisites](#prerequisites).
-
-### Datasets
-
-Open the TrueNAS web UI. The commands of this README name the pool `tank`.
-
-1. In Datasets, add four datasets to the pool with the "Apps" preset, so the
-   `apps` user, 568, owns them: `data`, `appdata`, `backup` and `jellynas`.
-   Never add a child dataset under `data`: `torrents` and `media` are plain
-   folders, so that the hardlinks of cross-seed stay on one file system.
-2. In Apps, click "Configure", pick the pool, and save. TrueNAS starts its
-   Docker.
-
-On another host, create the same four folders on one disk, owned by the user
-the services run as, and install Docker with the Compose plugin.
-
-Once [Domain](#domain) is done, TrueNAS also answers at
-`https://truenas.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`.
-
-### Clone
-
-The Clone is the copy of this repo on the NAS, in the `jellynas` dataset. It
-holds the `.env` of the NAS, which never goes to git, and it is where the
-commands of this README run. doco-cd does not deploy from the Clone: it pulls
-`main` from GitHub, as [Deploy](#deploy) sets out. So the Clone only needs a
-`git pull` before running a script of the repo.
-
-In System > Shell, or over SSH, clone the repo into its dataset. Git refuses a
-clone that root does not own until it is marked as safe:
-
-```sh
-sudo -i
-git clone https://github.com/Amaroke/Jellynas.git /mnt/tank/jellynas
-git config --global --add safe.directory /mnt/tank/jellynas
-```
-
-Every command of this README then runs as root, from the Clone:
-
-```sh
-sudo -i
-cd /mnt/tank/jellynas
-```
-
-On another host, clone the repo anywhere and run the commands from there, with
-the paths of the host.
-
-## Settings
-
-Requires [TrueNAS](#truenas).
-
-```sh
-cp .env.example .env
-```
-
-Open `.env` and fill in every value of the modules you keep. Each variable is
-explained in `.env.example`. Wrap a value in double quotes if it contains a
-space. `.env` is ignored by git and must never be committed.
-
-Both roots live outside the repo, at the paths set in `DATA_ROOT` and
-`APPDATA_ROOT`, and so do the archives of the appdata, at `BACKUP_ROOT`. The
-data root holds a single tree, so that one folder holds every download and the
-whole Library. Radarr, Sonarr, Lidarr and LazyLibrarian download into the
-qBittorrent categories `movies`, `shows`, `music` and `books`, and ratio into
-`farm`. qBittorrent creates the folder of a category the first time a torrent
-lands in it. cross-seed hardlinks its matches into `cross-seed`, and slskd
-downloads into `soulseek`:
-
-```text
-<DATA_ROOT>
-├── torrents
-│   ├── movies
-│   ├── shows
-│   ├── music
-│   ├── books
-│   ├── farm
-│   ├── cross-seed
-│   └── soulseek
-└── media
-    ├── movies
-    ├── shows
-    ├── anime
-    ├── music
-    ├── aurral
-    ├── books
-    └── manga
-```
-
-Create both roots, the folder of the archives, the recycle bins of Radarr and
-Sonarr, and the appdata folders of the services that run as `PUID` from their
-first start:
-
-```bash
-. <(grep -E '^(DATA_ROOT|APPDATA_ROOT|BACKUP_ROOT|PUID|PGID)=' .env)
-mkdir -p "$BACKUP_ROOT" \
-  "$DATA_ROOT"/torrents/{farm,cross-seed} \
-  "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} \
-  "$DATA_ROOT"/media/{movies,shows,anime,music,aurral,books,manga} \
-  "$DATA_ROOT"/media/{movies,shows}/.recycle \
-  "$APPDATA_ROOT"/{seerr,lldap,authelia,aurral,recyclarr,autobrr,cross-seed} \
-  "$APPDATA_ROOT"/{ratio,farm-board,discord-posts,pr-radar,slskd,suwayomi}
-chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
-```
-
-=== TO BE REWORKED: everything below ===
-
-## Domain
-
-Requires [Settings](#settings).
-
-Caddy is the only service the NAS publishes, on `CADDY_HTTPS_PORT`. Friends
-reach `jellyfin.<DOMAIN>`, `seerr.<DOMAIN>`, `aurral.<DOMAIN>` and
-`auth.<DOMAIN>` from the internet. The Admin reaches every tool at
-`<tool>.lan.<DOMAIN>`, from the local network only: Caddy refuses a lan name to
-any address outside `LAN_SUBNET`, and refuses any name it does not know. Through
-the API of the DNS provider, Caddy obtains a wildcard certificate for
-`*.<DOMAIN>` and one for `*.lan.<DOMAIN>`, so no port opens for the certificates
-and the certificate logs never list the tools, and it keeps `jellyfin`, `seerr`,
-`auth` and `aurral` on the public IP of the home. Wildcards keep the tools out
-of the certificate logs, a single port keeps what the NAS publishes small, and
-public certificates avoid installing a local root certificate on every device.
-
-Caddy also listens on `CADDY_HTTPS_PORT` inside its container and sends HSTS on
-every name, so a browser never tries plain HTTP. Inside the NAS, Caddy answers
-the public names itself, so a service reaches Jellyfin, Seerr, Aurral or
-Authelia at the same address a Friend uses, without going through the router.
-[Network zones](#network-zones) says why.
-
-### Network zones
-
-Jellyfin, Seerr, Aurral and Authelia face the internet, so a flaw in one of them
-must not land next to the rest of the NAS. The services sit in five Docker
-networks:
-
-| Zone            | Services                                                   |
-| --------------- | ---------------------------------------------------------- |
-| `jellyfin-zone` | Caddy, Jellyfin, lldap                                     |
-| `seerr-zone`    | Caddy, Seerr, Radarr, Sonarr                               |
-| `aurral-zone`   | Caddy, Aurral, Lidarr                                      |
-| `identity-zone` | Caddy, Authelia, lldap                                     |
-| `internal-zone` | every other service, plus Caddy, Radarr, Sonarr and Lidarr |
-
-qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal
-zone, and the Beszel agent the network of the Host. A service that needs
-Jellyfin, Seerr, Aurral or Authelia from another zone, such as Homepage, Uptime
-Kuma, the Music bot, or Aurral signing in with Authelia, reaches it through
-Caddy at its public name, so the zones only open towards the public services,
-never from them. lldap speaks LDAP, which Caddy cannot carry, so it sits in the
-zones of Jellyfin and of Authelia, the only two services that read the Accounts,
-and has no public name. The zones hand out IPv6 addresses too, and Jellyfin
-tries them first, so lldap listens on `::`. `python3 -m unittest` checks the
-members of each zone.
-
-Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS
-provider, swap the `caddy-dns/ovh` module in `services/caddy/Dockerfile` for its
-own, and its settings in the `acme_dns` and `dynamic_dns` blocks of
-`services/caddy/Caddyfile` and in `.env`.
-
-### DNS zone
-
-In the [OVH Control Panel](https://www.ovh.com/manager/), open Web Cloud >
-Domain names > `<DOMAIN>` > DNS zone, click "Add an entry", pick `A`, enter
-`*.lan` as the subdomain and the fixed local IP of the NAS as the target. Leave
-every other entry as it is, such as the ones of the OVH email. Caddy creates the
-`jellyfin`, `seerr`, `auth` and `aurral` entries itself at its first start.
-
-### API keys
-
-1. Open [eu.api.ovh.com/createToken](https://eu.api.ovh.com/createToken/) and
-   sign in with the OVH account that holds the domain.
-2. Enter `Jellynas Caddy` as the name and description, and pick "Unlimited" as
-   the validity.
-3. Add these rights, with `<DOMAIN>` written out, so the keys can only change
-   the records of the zone:
-
-   | Method | Path                             |
-   | ------ | -------------------------------- |
-   | GET    | `/domain/zone/<DOMAIN>/record`   |
-   | POST   | `/domain/zone/<DOMAIN>/record`   |
-   | GET    | `/domain/zone/<DOMAIN>/record/*` |
-   | PUT    | `/domain/zone/<DOMAIN>/record/*` |
-   | DELETE | `/domain/zone/<DOMAIN>/record/*` |
-   | GET    | `/domain/zone/<DOMAIN>/soa`      |
-   | POST   | `/domain/zone/<DOMAIN>/refresh`  |
-
-4. Create the keys, then copy the application key, the application secret and
-   the consumer key into `OVH_APPLICATION_KEY`, `OVH_APPLICATION_SECRET` and
-   `OVH_CONSUMER_KEY` in `.env`.
-5. In `.env`, set `DOMAIN` to the domain and `LAN_SUBNET` to the local network,
-   for example `192.168.1.0/24` when the router is `192.168.1.254`.
-
-### Router port forward
-
-Pick the HTTPS port and set it in `CADDY_HTTPS_PORT`, or leave it empty for 443.
-A high port that no service uses by default, such as a random five-digit number,
-draws fewer automated scans. Friends then add it to the address, for example
-`https://jellyfin.<DOMAIN>:<port>`, which the Jellyfin apps accept.
-
-On your router, forward that single TCP port to the local IP of the NAS, and
-nothing else. Set both the external and the internal port of the rule to
-`CADDY_HTTPS_PORT`, never the internal port to 443: Caddy listens on
-`CADDY_HTTPS_PORT` on the NAS.
-
-### Addresses
-
-Once [Deploy](#deploy) is done, each tool answers at its own address, with
-`:<CADDY_HTTPS_PORT>` after the name unless it is 443:
-
-| Service     | Address                                | Reached from  |
-| ----------- | -------------------------------------- | ------------- |
-| Jellyfin    | `https://jellyfin.<DOMAIN>`            | Anywhere      |
-| Seerr       | `https://seerr.<DOMAIN>`               | Anywhere      |
-| Aurral      | `https://aurral.<DOMAIN>`              | Anywhere      |
-| Authelia    | `https://auth.<DOMAIN>`                | Anywhere      |
-| TrueNAS     | `https://truenas.lan.<DOMAIN>`         | Local network |
-| Jellyfin    | `https://jellyfin.lan.<DOMAIN>`        | Local network |
-| Seerr       | `https://seerr.lan.<DOMAIN>`           | Local network |
-| Aurral      | `https://aurral.lan.<DOMAIN>`          | Local network |
-| lldap       | `https://lldap.lan.<DOMAIN>`           | Local network |
-| qBittorrent | `https://qbittorrent.lan.<DOMAIN>`     | Local network |
-| Prowlarr    | `https://prowlarr.lan.<DOMAIN>`        | Local network |
-| Radarr      | `https://radarr.lan.<DOMAIN>`          | Local network |
-| Sonarr      | `https://sonarr.lan.<DOMAIN>`          | Local network |
-| Lidarr      | `https://lidarr.lan.<DOMAIN>`          | Local network |
-| slskd       | `https://slskd.lan.<DOMAIN>`           | Local network |
-| Bazarr      | `https://bazarr.lan.<DOMAIN>`          | Local network |
-| Tdarr       | `https://tdarr.lan.<DOMAIN>`           | Local network |
-| Indexarr    | `https://indexarr.lan.<DOMAIN>`        | Local network |
-| autobrr     | `https://autobrr.lan.<DOMAIN>`         | Local network |
-| ratio       | `https://ratio.lan.<DOMAIN>/graphs`    | Local network |
-| Actions     | `https://actions.lan.<DOMAIN>/actions` | Local network |
-| PR radar    | `https://prs.lan.<DOMAIN>/pulls`       | Local network |
-| Beszel      | `https://beszel.lan.<DOMAIN>`          | Local network |
-| Uptime Kuma | `https://uptime-kuma.lan.<DOMAIN>`     | Local network |
-| Dozzle      | `https://dozzle.lan.<DOMAIN>`          | Local network |
-| Homepage    | `https://homepage.lan.<DOMAIN>`        | Local network |
-
-cross-seed has an API only, which the other containers reach at
-`http://cross-seed:2468`. The first certificates take a few minutes, follow them
-with:
-
-```sh
-docker compose logs -f caddy
-```
-
-The line `certificate obtained successfully` shows up once for `*.<DOMAIN>` and
-once for `*.lan.<DOMAIN>`.
 
 ## Deploy
 
