@@ -1,0 +1,16 @@
+{
+  "recommendations": [
+    "davidanson.vscode-markdownlint",
+    "dnut.rewrap-revived",
+    "bierner.markdown-mermaid",
+    "ms-python.python",
+    "charliermarsh.ruff",
+    "redhat.vscode-yaml",
+    "ms-azuretools.vscode-containers",
+    "exiasr.hadolint",
+    "timonwong.shellcheck",
+    "github.vscode-github-actions",
+    "matthewpi.caddyfile-support"
+  ],
+  "unwantedRecommendations": ["ms-python.black-formatter"]
+}

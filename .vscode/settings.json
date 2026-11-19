@@ -1,0 +1,36 @@
+{
+  "files.autoSave": "onFocusChange",
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "markdown.extension.tableFormatter.enabled": false,
+  "[markdown]": {
+    "editor.formatOnSave": false,
+    "editor.rulers": [
+      80
+    ],
+    "editor.codeActionsOnSave": {
+      "source.fixAll.markdownlint": "explicit"
+    },
+    "rewrap.wrappingColumn": 80,
+    "rewrap.autoWrap.enabled": true
+  },
+  "[python]": {
+    "editor.formatOnSave": false,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit"
+    }
+  },
+  "[yaml]": {
+    "editor.formatOnSave": false
+  },
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json": [
+      "compose.yaml",
+      "services/*/compose.yaml"
+    ]
+  },
+  "[dockercompose]": {
+    "editor.formatOnSave": false
+  }
+}

@@ -707,8 +707,10 @@ flowchart LR
 - `.env` holds the settings and the secrets of the NAS. It lives only in the
   Clone and never in git.
 - `renovate.json` is the config of Renovate, as [Renovate](#renovate) sets out.
-- `.pre-commit-config.yaml` runs gitleaks before each commit, so a secret never
-  gets into git.
+- `.pre-commit-config.yaml` runs gitleaks and markdownlint before each commit,
+  so a secret or a Markdown error never gets into git.
+- `.vscode` saves each file when the editor loses focus, fixes the Markdown on
+  save, and wraps the lines at 80 characters, with Alt+Q on a paragraph.
 - `.gitignore` keeps `.env` and the caches of Python and ruff out of git.
 - `.gitattributes` stores every text file with LF line endings, so a script
   edited on Windows still runs on the NAS.
