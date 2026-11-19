@@ -505,8 +505,8 @@ into the container and pick "Intel QuickSync" or "VAAPI" there.
 ### Login lockout
 
 In Dashboard > Users, keep "Maximum number of failed login attempts before user
-is locked out" at a value (3 for example) on every Account, never `-1`, so no Account can be
-brute forced from the internet.
+is locked out" at a value (3 for example) on every Account, never `-1`, so no
+Account can be brute forced from the internet.
 
 ### Jellyfin behind Caddy
 
@@ -723,18 +723,18 @@ flowchart LR
 to `main`, and by hand. Its jobs run in parallel and every tool version is
 pinned, so Renovate keeps them up to date:
 
-| Job      | Checks                                                             |
-| -------- | ------------------------------------------------------------------ |
-| Secrets  | gitleaks scans the whole git history for a committed secret        |
-| Compose  | both compose files parse with `.env.example`                       |
-| Images   | hadolint, every `build` image builds, Caddy validates its config   |
-| YAML     | yamllint passes in strict mode                                     |
-| JSON     | every tracked `.json` file parses                                  |
-| Python   | the `unittest` tests pass                                          |
-| Lint     | shellcheck passes on the shell scripts and ruff on the Python      |
-| Renovate | `renovate.json` is a valid Renovate config                         |
-| Markdown | markdownlint passes on every `.md` file                            |
-| Actions  | actionlint checks the workflows, then zizmor audits their security |
+| Job | Checks |
+| --- | --- |
+| Secrets | gitleaks scans the whole git history for a committed secret |
+| Compose | both compose files parse with `.env.example` |
+| Images | hadolint, every `build` image builds, Caddy validates its config |
+| YAML | yamllint passes in strict mode |
+| JSON | every tracked `.json` file parses |
+| Python | the `unittest` tests pass |
+| Lint | shellcheck passes on the shell scripts and ruff on the Python |
+| Renovate | `renovate.json` is a valid Renovate config |
+| Markdown | markdownlint passes on every `.md` file |
+| Actions | actionlint checks the workflows, then zizmor audits their security |
 
 ## Accounts
 
@@ -801,23 +801,23 @@ and `LLDAP_ADMIN_PASSWORD`. Then:
    restart Jellyfin.
 2. In Dashboard > Plugins > LDAP Authentication, set:
 
-   | Setting                        | Value                                                 |
-   | ------------------------------ | ----------------------------------------------------- |
-   | LDAP Server                    | `lldap`                                               |
-   | LDAP Port                      | `3890`                                                |
-   | Secure LDAP, StartTLS          | unchecked, lldap stays in the zone of Jellyfin        |
-   | LDAP Bind User                 | `uid=jellyfin,ou=people,dc=jellynas`                  |
-   | LDAP Bind User Password        | the password of `jellyfin`                            |
-   | LDAP Base DN for searches      | `ou=people,dc=jellynas`                               |
-   | LDAP Search Filter             | `(memberof=cn=jellynas_users,ou=groups,dc=jellynas)`  |
-   | LDAP Search Attributes         | `uid, mail`                                           |
-   | LDAP Uid Attribute             | `uid`                                                 |
-   | LDAP Username Attribute        | `uid`                                                 |
-   | LDAP Admin Base DN             | `ou=people,dc=jellynas`                               |
-   | LDAP Admin Filter              | `(memberof=cn=jellynas_admins,ou=groups,dc=jellynas)` |
-   | Enable User Creation           | checked                                               |
-   | Enable access to all libraries | checked                                               |
-   | Allow Password Change          | unchecked                                             |
+   | Setting | Value |
+   | --- | --- |
+   | LDAP Server | `lldap` |
+   | LDAP Port | `3890` |
+   | Secure LDAP, StartTLS | unchecked, lldap stays in the zone of Jellyfin |
+   | LDAP Bind User | `uid=jellyfin,ou=people,dc=jellynas` |
+   | LDAP Bind User Password | the password of `jellyfin` |
+   | LDAP Base DN for searches | `ou=people,dc=jellynas` |
+   | LDAP Search Filter | `(memberof=cn=jellynas_users,ou=groups,dc=jellynas)` |
+   | LDAP Search Attributes | `uid, mail` |
+   | LDAP Uid Attribute | `uid` |
+   | LDAP Username Attribute | `uid` |
+   | LDAP Admin Base DN | `ou=people,dc=jellynas` |
+   | LDAP Admin Filter | `(memberof=cn=jellynas_admins,ou=groups,dc=jellynas)` |
+   | Enable User Creation | checked |
+   | Enable access to all libraries | checked |
+   | Allow Password Change | unchecked |
 
 3. Click "Save and Test LDAP Server Settings", then "Save and Test LDAP Filter
    Settings".
@@ -1692,11 +1692,11 @@ with French subtitles needs no download.
 In Settings > Providers, click "+" for each provider, fill in what it asks for,
 and save:
 
-| Provider          | Sign-up                                                                                         | Covers                                        |
-| ----------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Provider | Sign-up | Covers |
+| --- | --- | --- |
 | OpenSubtitles.com | Free account on [opensubtitles.com](https://www.opensubtitles.com), with a daily download limit | Movies and shows, the widest French catalogue |
-| Podnapisi         | None                                                                                            | Movies and shows                              |
-| Gestdown          | None                                                                                            | Shows, from the Addic7ed catalogue            |
+| Podnapisi | None | Movies and shows |
+| Gestdown | None | Shows, from the Addic7ed catalogue |
 
 ### Sonarr and Radarr
 
