@@ -317,7 +317,7 @@ once for `*.lan.<DOMAIN>`.
 
 Requires [Settings](#settings) and [Domain](#domain).
 
-The NAS follows the `main` branch of GitHub: a change merged into `main` reaches
+The NAS follows the `main` branch of GitHub, a change merged into `main` reaches
 the NAS within 10 minutes, and nothing else changes it. The Clone holds `.env`,
 outside git, and starts doco-cd, but the NAS never runs from it. Edit the repo
 in another folder and go through a pull request. Pull the Clone before running a
@@ -338,8 +338,8 @@ in git, so the deploy never touches them. Back up the appdata root to keep them.
 
 [doco-cd](https://doco.cd) is a container, outside the NAS project, that polls
 `main` every 10 minutes and deploys `compose.yaml` with `.env`, as set in
-`.doco-cd.yml`. Komodo or Portainer can do the same with a web UI and a database
-the NAS does not need. doco-cd pulls, so nothing opens on the router, and no
+`.doco-cd.yml`. Komodo or Portainer can do the same with a web UI and a
+database. doco-cd pulls, so nothing opens on the router, and no
 workflow of a public pull request can run on the NAS. Start doco-cd once from
 the Clone, its first poll starts the whole NAS:
 
@@ -435,6 +435,89 @@ next build of the image.
   matches its image with `"automerge": false`.
 - **discord.py supports davey 0.2.0.** Remove the `allowedVersions` rule of
   davey, which keeps the voice of the music bot working until then.
+
+## Jellyfin
+
+Requires [Deploy](#deploy).
+
+Jellyfin streams the Library. Emby or Plex can
+replace it, but neither is fully open source.
+
+### First-run wizard
+
+1. Open `https://jellyfin.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the
+   local network.
+2. Pick the display language and create the Admin Account with a strong password
+   stored in your password manager.
+3. Skip the library step, [Libraries](#libraries) does it.
+4. Pick the metadata language and country, here French and France.
+5. Leave "Allow remote connections to this server" checked, Friends will reach
+   Jellyfin from the internet through [Domain](#domain).
+
+### Libraries
+
+The media tree is mounted read-only under `/data/media`, so Jellyfin can never
+delete or change a file. In Dashboard > Libraries, add one library per row. Name
+them as you like, Friends see these names, and the NAS names them in French:
+
+| Library | Content type | Folders                                      |
+| ------- | ------------ | -------------------------------------------- |
+| Movies  | Movies       | `/data/media/movies`                         |
+| Shows   | Shows        | `/data/media/shows`                          |
+| Anime   | Shows        | `/data/media/anime`                          |
+| Music   | Music        | `/data/media/music` and `/data/media/aurral` |
+| Books   | Books        | `/data/media/books`                          |
+| Manga   | Books        | `/data/media/manga`                          |
+
+For each library, set the preferred metadata language and country, here French
+and France, so titles and summaries come in that language. Leave "Save artwork
+into media folders" and every "Metadata savers" option unchecked: Jellyfin
+cannot write into the Library and keeps its metadata in its appdata folder
+instead.
+
+Jellyfin adds a Collections library of its own once a movie belongs to a
+collection. Leave it as it is.
+
+### Friend Accounts
+
+Each Friend gets their own Account, so their watch history and progress are
+theirs. The Accounts live in lldap, as [Accounts](#accounts) sets out, and
+Jellyfin creates its user at the first sign-in of a Friend. Then, in Dashboard >
+Users, open the user and:
+
+1. Grant access to all libraries.
+2. Leave "Allow this user to manage the server" unchecked.
+3. Check "Allow media downloading" so the Friend can download videos, books and
+   manga to their phone.
+
+Quick Connect stays on in Dashboard > General: a Friend signs in on a TV by
+typing the code it shows into Jellyfin on their phone, without typing their
+password on the TV.
+
+### Transcoding
+
+The NAS has no GPU, so Jellyfin transcodes on the CPU, which holds only a few
+streams at a time. Keep hardware acceleration at "None" in Dashboard >
+Playback > Transcoding. A client that plays the file as it is needs no
+transcoding at all. With an Intel or AMD GPU passed to the NAS, map `/dev/dri`
+into the container and pick "Intel QuickSync" or "VAAPI" there.
+
+### Login lockout
+
+In Dashboard > Users, keep "Maximum number of failed login attempts before user
+is locked out" at a value (3 for example) on every Account, never `-1`, so no Account can be
+brute forced from the internet.
+
+### Jellyfin behind Caddy
+
+In Dashboard > Networking, add `caddy` to "Known proxies" and save. Jellyfin
+then sees the real address of each Friend instead of the address of Caddy.
+Jellyfin looks up the address of Caddy when it starts, so restart it now and
+whenever Caddy is recreated:
+
+```sh
+docker compose restart jellyfin
+```
 
 === TO BE REWORKED: everything below ===
 
@@ -640,83 +723,18 @@ flowchart LR
 to `main`, and by hand. Its jobs run in parallel and every tool version is
 pinned, so Renovate keeps them up to date:
 
-| Job | Checks |
-| --- | --- |
-| Secrets | gitleaks scans the whole git history for a committed secret |
-| Compose | both compose files parse with `.env.example` |
-| Images | hadolint, every `build` image builds, Caddy validates its config |
-| YAML | yamllint passes in strict mode |
-| JSON | every tracked `.json` file parses |
-| Python | the `unittest` tests pass |
-| Lint | shellcheck passes on the shell scripts and ruff on the Python |
-| Renovate | `renovate.json` is a valid Renovate config |
-| Markdown | markdownlint passes on every `.md` file |
-| Actions | actionlint checks the workflows, then zizmor audits their security |
-
-## Jellyfin
-
-Requires [Deploy](#deploy).
-
-Jellyfin streams the Library to the Admin and the Friends. Emby or Plex can
-replace it, but neither is fully open source.
-
-### First-run wizard
-
-1. Open `https://jellyfin.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the
-   local network.
-2. Pick the display language and create the Admin Account with a strong password
-   stored in your password manager.
-3. Skip the library step, [Libraries](#libraries) does it.
-4. Keep the metadata language and country you prefer.
-5. Leave "Allow remote connections to this server" checked, Friends will reach
-   Jellyfin from the internet through [Domain](#domain).
-
-### Libraries
-
-The media tree is mounted read-only under `/data/media`, so Jellyfin can never
-delete or change a file. In Dashboard > Libraries, add one library per row:
-
-| Library | Content type | Folders                                      |
-| ------- | ------------ | -------------------------------------------- |
-| Movies  | Movies       | `/data/media/movies`                         |
-| Shows   | Shows        | `/data/media/shows`                          |
-| Anime   | Shows        | `/data/media/anime`                          |
-| Music   | Music        | `/data/media/music` and `/data/media/aurral` |
-| Books   | Books        | `/data/media/books`                          |
-| Manga   | Books        | `/data/media/manga`                          |
-
-For each library, leave "Save artwork into media folders" and every "Metadata
-savers" option unchecked: Jellyfin cannot write into the Library and keeps its
-metadata in its appdata folder instead.
-
-### Friend Accounts
-
-Each Friend gets their own Account, so their watch history and progress are
-theirs. The Accounts live in lldap, as [Accounts](#accounts) sets out, and
-Jellyfin creates its user at the first sign-in of a Friend. Then, in Dashboard >
-Users, open the user and:
-
-1. Grant access to all libraries.
-2. Leave "Allow this user to manage the server" unchecked.
-3. Check "Allow media downloading" so the Friend can download videos, books and
-   manga to their phone.
-
-### Login lockout
-
-In Dashboard > Users, keep "Maximum number of failed login attempts before user
-is locked out" at its default on every Account, never `-1`, so no Account can be
-brute forced from the internet.
-
-### Jellyfin behind Caddy
-
-In Dashboard > Networking, add `caddy` to "Known proxies" and save. Jellyfin
-then sees the real address of each Friend instead of the address of Caddy.
-Jellyfin looks up the address of Caddy when it starts, so restart it now and
-whenever Caddy is recreated:
-
-```sh
-docker compose restart jellyfin
-```
+| Job      | Checks                                                             |
+| -------- | ------------------------------------------------------------------ |
+| Secrets  | gitleaks scans the whole git history for a committed secret        |
+| Compose  | both compose files parse with `.env.example`                       |
+| Images   | hadolint, every `build` image builds, Caddy validates its config   |
+| YAML     | yamllint passes in strict mode                                     |
+| JSON     | every tracked `.json` file parses                                  |
+| Python   | the `unittest` tests pass                                          |
+| Lint     | shellcheck passes on the shell scripts and ruff on the Python      |
+| Renovate | `renovate.json` is a valid Renovate config                         |
+| Markdown | markdownlint passes on every `.md` file                            |
+| Actions  | actionlint checks the workflows, then zizmor audits their security |
 
 ## Accounts
 
@@ -783,23 +801,23 @@ and `LLDAP_ADMIN_PASSWORD`. Then:
    restart Jellyfin.
 2. In Dashboard > Plugins > LDAP Authentication, set:
 
-   | Setting | Value |
-   | --- | --- |
-   | LDAP Server | `lldap` |
-   | LDAP Port | `3890` |
-   | Secure LDAP, StartTLS | unchecked, lldap stays in the zone of Jellyfin |
-   | LDAP Bind User | `uid=jellyfin,ou=people,dc=jellynas` |
-   | LDAP Bind User Password | the password of `jellyfin` |
-   | LDAP Base DN for searches | `ou=people,dc=jellynas` |
-   | LDAP Search Filter | `(memberof=cn=jellynas_users,ou=groups,dc=jellynas)` |
-   | LDAP Search Attributes | `uid, mail` |
-   | LDAP Uid Attribute | `uid` |
-   | LDAP Username Attribute | `uid` |
-   | LDAP Admin Base DN | `ou=people,dc=jellynas` |
-   | LDAP Admin Filter | `(memberof=cn=jellynas_admins,ou=groups,dc=jellynas)` |
-   | Enable User Creation | checked |
-   | Enable access to all libraries | checked |
-   | Allow Password Change | unchecked |
+   | Setting                        | Value                                                 |
+   | ------------------------------ | ----------------------------------------------------- |
+   | LDAP Server                    | `lldap`                                               |
+   | LDAP Port                      | `3890`                                                |
+   | Secure LDAP, StartTLS          | unchecked, lldap stays in the zone of Jellyfin        |
+   | LDAP Bind User                 | `uid=jellyfin,ou=people,dc=jellynas`                  |
+   | LDAP Bind User Password        | the password of `jellyfin`                            |
+   | LDAP Base DN for searches      | `ou=people,dc=jellynas`                               |
+   | LDAP Search Filter             | `(memberof=cn=jellynas_users,ou=groups,dc=jellynas)`  |
+   | LDAP Search Attributes         | `uid, mail`                                           |
+   | LDAP Uid Attribute             | `uid`                                                 |
+   | LDAP Username Attribute        | `uid`                                                 |
+   | LDAP Admin Base DN             | `ou=people,dc=jellynas`                               |
+   | LDAP Admin Filter              | `(memberof=cn=jellynas_admins,ou=groups,dc=jellynas)` |
+   | Enable User Creation           | checked                                               |
+   | Enable access to all libraries | checked                                               |
+   | Allow Password Change          | unchecked                                             |
 
 3. Click "Save and Test LDAP Server Settings", then "Save and Test LDAP Filter
    Settings".
@@ -1674,11 +1692,11 @@ with French subtitles needs no download.
 In Settings > Providers, click "+" for each provider, fill in what it asks for,
 and save:
 
-| Provider | Sign-up | Covers |
-| --- | --- | --- |
+| Provider          | Sign-up                                                                                         | Covers                                        |
+| ----------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | OpenSubtitles.com | Free account on [opensubtitles.com](https://www.opensubtitles.com), with a daily download limit | Movies and shows, the widest French catalogue |
-| Podnapisi | None | Movies and shows |
-| Gestdown | None | Shows, from the Addic7ed catalogue |
+| Podnapisi         | None                                                                                            | Movies and shows                              |
+| Gestdown          | None                                                                                            | Shows, from the Addic7ed catalogue            |
 
 ### Sonarr and Radarr
 
