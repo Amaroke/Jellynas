@@ -710,7 +710,12 @@ flowchart LR
 - `.pre-commit-config.yaml` runs gitleaks and markdownlint before each commit,
   so a secret or a Markdown error never gets into git.
 - `.vscode` saves each file when the editor loses focus, fixes the Markdown on
-  save, and wraps the lines at 80 characters, with Alt+Q on a paragraph.
+  save, and wraps the lines at 80 characters, with Alt+Q on a paragraph. It
+  recommends the extensions of the repo, shows the tests in the Testing view,
+  and holds tasks to test, lint, verify the NAS, deploy now and follow the logs
+  of a service. The NAS tasks read two environment variables of the computer:
+  `JELLYNAS_SSH`, the SSH login of the NAS such as `truenas_admin@<ip>`, and
+  `JELLYNAS_CLONE`, the path of the Clone such as `/mnt/tank/jellynas`.
 - `.gitignore` keeps `.env` and the caches of Python and ruff out of git.
 - `.gitattributes` stores every text file with LF line endings, so a script
   edited on Windows still runs on the NAS.
