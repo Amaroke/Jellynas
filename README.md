@@ -800,12 +800,12 @@ inside the container and be lost.
 
 ### Downloads and seeding
 
-Each finished torrent keeps seeding from the torrents tree for a while, to give
-back to other peers. A private torrent stops at its seeding goal, then the tool
-that sent it removes it, unless ratio moved it into the Farm. ratio removes a
-public torrent after two weeks. Each import is a copy, so a downloaded file sits
-twice on the disk until then: keep enough free space for every torrent still
-seeding. In Tools > Options, set:
+Each finished torrent keeps seeding from the torrents tree, to give back to
+other peers. A torrent of C411 never stops and nothing removes it. ratio removes
+a public torrent after two weeks, or sooner once the same files seed on C411.
+Each import is a copy, so a downloaded file sits twice on the disk while its
+torrent seeds, forever for C411: keep enough free space for it. In Tools >
+Options, set:
 
 - Downloads > Default Torrent Management Mode: Automatic, so each category picks
   its own save path
@@ -884,15 +884,13 @@ an account for a private one. For an indexer behind Cloudflare, add the
 every tracker, so its searches and torrent files go through the VPN. Click
 "Test", then "Save".
 
-### Seeding goals of private trackers
+### Seeding of the indexers
 
-A private tracker bans an account for a hit and run. For each private indexer,
-in Indexers, edit it, click "Show Advanced", and set "Seed Ratio" and "Seed
-Time" in minutes to the minimums of its rules page. Prowlarr syncs them to
-Radarr, Sonarr and Lidarr, which hand them to qBittorrent with each torrent, so
-"Remove Completed" never removes a private torrent before the tracker allows it.
-Leave no private indexer empty: with the global seeding limits of qBittorrent
-off, its torrent would seed forever unless ratio moves it into the Farm.
+Leave "Seed Ratio" and "Seed Time" empty on every indexer, in Indexers, edit it,
+"Show Advanced". With the global seeding limits of qBittorrent off, no torrent
+ever stops, so Radarr, Sonarr and Lidarr never remove one: a torrent of C411
+seeds forever, and ratio removes a public one after two weeks, or once the same
+files seed on C411.
 
 === TO BE REWORKED: everything below ===
 
