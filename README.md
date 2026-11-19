@@ -624,6 +624,66 @@ and `LLDAP_ADMIN_PASSWORD`. Then:
    Jellyfin: while lldap is down, nobody signs in to Jellyfin, and a session
    already open keeps working.
 
+## Seerr
+
+Requires [Accounts](#accounts).
+
+Friends make Requests in Seerr, on its own public name, and log in with their
+Jellyfin Account. Seerr has no access to the Library files. Ombi can replace it.
+
+### Setup wizard
+
+1. Open `https://seerr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the
+   local network.
+2. Choose Jellyfin as the media server.
+3. Enter `jellyfin.<DOMAIN>` as the hostname, `CADDY_HTTPS_PORT` as the port,
+   turn SSL on and leave the URL base empty. Seerr sits in another network zone
+   than Jellyfin and reaches it through Caddy, as [Network
+   zones](#network-zones) sets out.
+4. Enter an email address and the username and password of the Jellyfin Admin
+   Account. This Account becomes the Seerr Admin.
+5. Sync the libraries and enable Movies, Shows and Anime.
+6. Skip the Radarr and Sonarr step, [Requests](#requests) adds them.
+
+### Settings of Seerr
+
+1. In Settings > General, set "Application URL" to
+   `https://seerr.<DOMAIN>:<CADDY_HTTPS_PORT>`, without the port if it is 443,
+   and set the display language, the discover region and the streaming region,
+   here French and France.
+2. In Settings > Network, check "Enable Proxy Support" so Seerr sees the real
+   address of each Friend.
+3. In Settings > Jellyfin, set "External URL" to
+   `https://jellyfin.<DOMAIN>:<CADDY_HTTPS_PORT>` so links to a movie open the
+   public Jellyfin.
+4. In Settings > Users, check "Enable Jellyfin Sign-In" and "Enable New Jellyfin
+   Sign-In", uncheck "Enable Local Sign-In", and leave the default permissions
+   on "Request" alone, without any "Auto-Approve": the Admin approves each
+   Request. Leave the quotas unlimited and the "Forgot password" URL empty, a
+   Friend changes their password in Jellyfin, as [Accounts](#accounts) sets out.
+
+A Friend then opens the Seerr address, picks "Sign in with Jellyfin" and enters
+their Account, with no second login to create. Seerr creates their user at that
+first sign-in.
+
+### Notifications of Seerr
+
+Seerr posts to a channel of the Discord server of the Friends each Request that
+waits for approval, then when it is approved, declined, available or failed,
+and each issue a Friend reports.
+
+1. In Discord, create a text channel for the Requests, then in its settings,
+   Integrations > Webhooks, create a webhook, name it and give it an avatar, and
+   copy its URL.
+2. In Seerr, Settings > Notifications > Discord, check "Enable Agent", paste the
+   URL into "Webhook URL", leave the bot username and avatar empty so the ones
+   of the webhook show, and check "Enable Mentions".
+3. Check every notification type except "Request Automatically Submitted",
+   save, and click "Test".
+
+A Friend who adds their Discord user id in their Seerr profile, Settings >
+Notifications, is mentioned in the messages about their own Requests.
+
 === TO BE REWORKED: everything below ===
 
 ## Architecture
@@ -847,43 +907,6 @@ pinned, so Renovate keeps them up to date:
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
 | Actions | actionlint checks the workflows, then zizmor audits their security |
-
-## Seerr
-
-Requires [Accounts](#accounts).
-
-Friends make Requests in Seerr, on its own public name, and log in with their
-Jellyfin Account. Seerr has no access to the Library files. Ombi can replace it.
-
-### Setup wizard
-
-1. Open `https://seerr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the
-   local network.
-2. Choose Jellyfin as the media server.
-3. Enter `jellyfin.<DOMAIN>` as the hostname, `CADDY_HTTPS_PORT` as the port,
-   turn SSL on and leave the URL base empty. Seerr sits in another network zone
-   than Jellyfin and reaches it through Caddy, as [Network
-   zones](#network-zones) sets out.
-4. Enter an email address and the username and password of the Jellyfin Admin
-   Account. This Account becomes the Seerr Admin.
-5. Sync the libraries and enable Movies, Shows and Anime.
-6. Skip the Radarr and Sonarr step, [Requests](#requests) adds them.
-
-### Settings of Seerr
-
-1. In Settings > General, set "Application URL" to
-   `https://seerr.<DOMAIN>:<CADDY_HTTPS_PORT>`, without the port if it is 443.
-2. In Settings > Network, check "Enable Proxy Support" so Seerr sees the real
-   address of each Friend.
-3. In Settings > Jellyfin, set "External URL" to
-   `https://jellyfin.<DOMAIN>:<CADDY_HTTPS_PORT>` so links to a movie open the
-   public Jellyfin.
-4. In Settings > Users, check "Enable Jellyfin Sign-In" and "Enable New Jellyfin
-   Sign-In", uncheck "Enable Local Sign-In", and leave the default permissions
-   on "Request".
-
-A Friend then opens the Seerr address, picks "Sign in with Jellyfin" and enters
-their Account, with no second login to create.
 
 ## qBittorrent
 
