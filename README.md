@@ -1295,10 +1295,142 @@ the user token of their ListenBrainz settings. Aurral then sends what they play
 in the browser and in the apps, and recommends from it. ListenBrainz can carry
 it on to Last.fm, which Aurral no longer reaches itself.
 
+## LazyLibrarian
+
+Requires [Prowlarr](#prowlarr).
+
+LazyLibrarian follows authors and books: a wanted book arrives in the Library on
+its own, from the indexers through qBittorrent. It sees only the books folder,
+under `/data/media/books`, and the torrents tree, under `/data/torrents`.
+Readarr is retired, and no other maintained open source tool finds and files
+books this way.
+
+### Login of LazyLibrarian
+
+Open `https://lazylibrarian.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. In Config >
+Interface:
+
+1. Under WebServer Options, set "User" and "Pass" to a username and a strong
+   password, distinct from the other tools.
+2. Under API, check "Enable API" and generate the "API Full Access key", which
+   Prowlarr and policy use.
+3. Click "Save changes" and restart LazyLibrarian from its menu.
+
+In `.env`, set `LAZYLIBRARIAN_API_KEY` to the API Full Access key, then restart
+doco-cd to apply `.env`:
+
+```sh
+docker restart doco-cd
+```
+
+`./scripts/verify.sh` checks that the web UI then asks for the login.
+
+### Download client of LazyLibrarian
+
+1. In qBittorrent, add a category `books` with `/data/torrents/books` as the
+   save path.
+2. In LazyLibrarian, Config > Downloaders, under Torrents, enter the qBittorrent
+   login, click "Test qBitTorrent", then "Save changes". policy sets the rest.
+
+### Settings of LazyLibrarian kept by policy
+
+[policy](#policy) puts these back every night:
+
+| Setting                        | Value                           |
+| ------------------------------ | ------------------------------- |
+| Authentication type            | Basic (Browser Popup)           |
+| Enable user accounts           | off                             |
+| Telemetry                      | off                             |
+| eBook Library Folder           | `/data/media/books`             |
+| Keep original files            | on                              |
+| qBitTorrent                    | on, host `gluetun`, port `8080` |
+| qBitTorrent Label/Category     | `books`                         |
+| Download directory             | `/data/torrents/books`          |
+| Keep seeding after processing  | on                              |
+| Do not delete if still seeding | on                              |
+
+Each import is a copy, so the torrent keeps seeding from the torrents tree, and
+LazyLibrarian never removes a torrent before qBittorrent stops it at its seeding
+goal. LazyLibrarian sees the download directory at the same path as
+qBittorrent. A change of the authentication type applies once LazyLibrarian
+restarts.
+
+### Indexers of LazyLibrarian
+
+In Prowlarr, Settings > Apps, click "+" and pick LazyLibrarian. Set "Prowlarr
+Server" to `http://prowlarr:9696` and "LazyLibrarian Server" to
+`http://lazylibrarian:5299`, paste the API Full Access key, click "Test", then
+"Save". Every indexer with book categories then shows up in LazyLibrarian,
+Config > Providers.
+
+### Want a book
+
+In Authors, search a book or an author, add it and mark the book as Wanted.
+LazyLibrarian searches the indexers, sends the book to qBittorrent, then copies
+it into the books folder, where the Books library of Jellyfin picks it up. A
+Friend reads it in the Jellyfin app or downloads it to their phone.
+
+## Suwayomi
+
+Requires [qBittorrent](#qbittorrent).
+
+Suwayomi follows manga: it runs the Mihon extensions, which read manga sites,
+and downloads each new chapter of a manga in the library as a CBZ file into the
+manga folder of the Library, where Jellyfin reads it. It shares the network of
+Gluetun, like qBittorrent: manga sites see the IP of the VPN, and when the VPN
+is down, it has no connectivity at all. It sees only the manga folder, mounted
+as its downloads folder, and its appdata folder. Kaizoku is archived and points
+to Suwayomi, and LazyLibrarian handles manga poorly. Suwayomi passes the
+Cloudflare challenge of a site with its own built-in browser. A site that
+refuses the IPs of the VPN stays out of reach.
+
+### Login of Suwayomi
+
+In `.env`, set `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD` to the login of its
+web UI, letters and digits only and distinct from the other tools, then restart
+doco-cd to apply `.env`:
+
+```sh
+docker restart doco-cd
+```
+
+Suwayomi asks for this login at every visit. Homepage uses it to read its
+figures, and policy to keep its settings. `./scripts/verify.sh` checks that the
+web UI asks for it.
+
+### Extensions
+
+Open `https://suwayomi.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. In
+Settings > Browse, add the URL of a Mihon extension repository, then in Browse >
+Extensions, install the extension of each manga site you read.
+
+### Settings of Suwayomi kept by policy
+
+[policy](#policy) puts these back every night:
+
+| Setting                         | Value    |
+| ------------------------------- | -------- |
+| Download new chapters           | on       |
+| Skip manga with unread chapters | off      |
+| Save as CBZ                     | on       |
+| Automatic update interval       | 12 hours |
+
+Suwayomi checks the sites for new chapters every 12 hours and downloads each new
+one on its own. Friends read in Jellyfin, so Suwayomi sees every chapter as
+unread, and would skip every manga if it left out those with unread chapters.
+CBZ is also set from compose, at each start.
+
+### Want a manga
+
+In Browse, pick a source, search a manga and add it to the library. Open it,
+select the chapters to keep and click "Download". Suwayomi files them under
+`mangas/<source>/<manga>` in the manga folder, where the Manga library of
+Jellyfin picks them up. New chapters follow on their own.
+
 ## Policy
 
-Requires [Jellyfin](#jellyfin), [Radarr](#radarr), [Sonarr](#sonarr) and
-[Aurral](#aurral).
+Requires [Jellyfin](#jellyfin), [Radarr](#radarr), [Sonarr](#sonarr),
+[Aurral](#aurral), [LazyLibrarian](#lazylibrarian) and [Suwayomi](#suwayomi).
 
 policy keeps the settings of the apps the way this README sets them. At its
 start, then every day at 4:30 in the time zone of `TZ`, it reads them through
@@ -1308,15 +1440,22 @@ once:
 
 ```sh
 docker restart policy
-``` It keeps the settings listed in
+```
+
+It keeps the settings listed in
 [Rules of the server and the Accounts](#rules-of-the-server-and-the-accounts),
 [Settings kept by policy](#settings-kept-by-policy),
-[Settings of Sonarr kept by policy](#settings-of-sonarr-kept-by-policy) and
-[Settings of Aurral kept by policy](#settings-of-aurral-kept-by-policy).
+[Settings of Sonarr kept by policy](#settings-of-sonarr-kept-by-policy),
+[Settings of Aurral kept by policy](#settings-of-aurral-kept-by-policy),
+[Settings of LazyLibrarian kept by policy](#settings-of-lazylibrarian-kept-by-policy)
+and
+[Settings of Suwayomi kept by policy](#settings-of-suwayomi-kept-by-policy).
 
 It keeps an app once its API key is in `.env`: `JELLYFIN_API_KEY`,
-`RADARR_API_KEY`, `SONARR_API_KEY` or `AURRAL_API_KEY`. It reaches Radarr and
-Sonarr in the internal zone, and Jellyfin and Aurral through Caddy. Aurral takes
+`RADARR_API_KEY`, `SONARR_API_KEY`, `AURRAL_API_KEY` or `LAZYLIBRARIAN_API_KEY`,
+and Suwayomi once `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD` are. It reaches
+Radarr, Sonarr and LazyLibrarian in the internal zone, Suwayomi through Gluetun,
+and Jellyfin and Aurral through Caddy. Aurral takes
 `AURRAL_API_KEY` as its own API key in place of the one it generates. Its logs
 name each setting it puts back:
 
@@ -1550,114 +1689,6 @@ pinned, so Renovate keeps them up to date:
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
 | Actions | actionlint checks the workflows, then zizmor audits their security |
-
-## LazyLibrarian
-
-Requires [Prowlarr](#prowlarr).
-
-LazyLibrarian follows authors and books: a wanted book arrives in the Library on
-its own, from the indexers through qBittorrent. It sees only the books folder,
-under `/data/media/books`, and the torrents tree, under `/data/torrents`.
-Readarr is retired, and no other maintained open source tool finds and files
-books this way.
-
-### Login of LazyLibrarian
-
-Open `https://lazylibrarian.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. In Config >
-Interface:
-
-1. Under WebServer Options, set "User" and "Pass" to a username and a strong
-   password, distinct from the other tools.
-2. Leave "Enable user accounts" unchecked and set the authentication type to
-   "Basic (Browser Popup)".
-3. Under API, check "Enable API" and generate the "API Full Access key", which
-   Prowlarr uses.
-4. Click "Save changes" and restart LazyLibrarian from its menu.
-
-`./scripts/verify.sh` checks that the web UI then asks for the login.
-
-### Folders
-
-In Config > Processing, set "eBook Library Folder" to `/data/media/books` and
-check "Keep original files". Each import is then a copy, so the torrent keeps
-seeding from the torrents tree. Click "Save changes".
-
-### Download client of LazyLibrarian
-
-1. In qBittorrent, add a category `books` with `/data/torrents/books` as the
-   save path.
-2. In LazyLibrarian, Config > Downloaders, under Torrents, check qBitTorrent.
-3. Enter `gluetun` as "qBitTorrent Host", `8080` as "qBitTorrent Port", and the
-   qBittorrent login.
-4. Set "qBitTorrent Label/Category" to `books` and "Download directory" to
-   `/data/torrents/books`, which LazyLibrarian sees at the same path.
-5. Check "Keep seeding after processing" and "Do not delete if still seeding",
-   so LazyLibrarian never removes a torrent before qBittorrent stops it at its
-   seeding goal.
-6. Click "Test qBitTorrent", then "Save changes".
-
-### Indexers of LazyLibrarian
-
-In Prowlarr, Settings > Apps, click "+" and pick LazyLibrarian. Set "Prowlarr
-Server" to `http://prowlarr:9696` and "LazyLibrarian Server" to
-`http://lazylibrarian:5299`, paste the API Full Access key, click "Test", then
-"Save". Every indexer with book categories then shows up in LazyLibrarian,
-Config > Providers.
-
-### Want a book
-
-In Authors, search a book or an author, add it and mark the book as Wanted.
-LazyLibrarian searches the indexers, sends the book to qBittorrent, then copies
-it into the books folder, where the Books library of Jellyfin picks it up. A
-Friend reads it in the Jellyfin app or downloads it to their phone.
-
-## Suwayomi
-
-Requires [qBittorrent](#qbittorrent).
-
-Suwayomi follows manga: it runs the Mihon extensions, which read manga sites,
-and downloads each new chapter of a manga in the library as a CBZ file into the
-manga folder of the Library, where Jellyfin reads it. It shares the network of
-Gluetun, like qBittorrent: manga sites see the IP of the VPN, and when the VPN
-is down, it has no connectivity at all. It sees only the manga folder, mounted
-as its downloads folder, and its appdata folder. Kaizoku is archived and points
-to Suwayomi, and LazyLibrarian handles manga poorly. Suwayomi passes the
-Cloudflare challenge of a site with its own built-in browser. A site that
-refuses the IPs of the VPN stays out of reach.
-
-### Login of Suwayomi
-
-In `.env`, set `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD` to the login of its
-web UI, letters and digits only and distinct from the other tools, then restart
-doco-cd to apply `.env`:
-
-```sh
-docker restart doco-cd
-```
-
-Suwayomi asks for this login at every visit, and Homepage uses it to read its
-figures. `./scripts/verify.sh` checks that the web UI asks for it.
-
-### Extensions
-
-Open `https://suwayomi.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. In
-Settings > Browse, add the URL of a Mihon extension repository, then in Browse >
-Extensions, install the extension of each manga site you read.
-
-### Settings of Suwayomi
-
-1. In Settings > Downloads, turn on the automatic download of new chapters, so
-   each new chapter of a manga in the library is downloaded on its own. CBZ is
-   already set from compose.
-2. In Settings > Library, set the automatic update interval, for example 12
-   hours, so Suwayomi checks the sites for new chapters.
-
-### Want a manga
-
-In Browse, pick a source, search a manga and add it to the library. Open it,
-select the chapters to keep and click "Download". Suwayomi files them under
-`mangas/<source>/<manga>` in the manga folder, where the Manga library of
-Jellyfin picks them up. New chapters follow on their own.
 
 ## Requests
 

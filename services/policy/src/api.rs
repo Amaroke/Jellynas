@@ -4,12 +4,13 @@ use std::time::Duration;
 pub trait Api {
     fn get(&self, path: &str) -> Result<Value, String>;
     fn send(&self, method: &str, path: &str, body: &Value) -> Result<(), String>;
+    fn text(&self, path: &str) -> Result<String, String>;
+    fn post(&self, path: &str, body: &Value) -> Result<Value, String>;
 }
 
 pub struct Http {
     pub base: String,
-    pub header: &'static str,
-    pub secret: String,
+    pub header: Option<(&'static str, String)>,
 }
 
 impl Http {
@@ -20,36 +21,78 @@ impl Http {
             .into()
     }
 
-    fn url(&self, path: &str) -> String {
-        format!("{}{path}", self.base)
+    fn request(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&Value>,
+    ) -> Result<ureq::http::Response<ureq::Body>, String> {
+        let mut builder = ureq::http::Request::builder()
+            .method(method)
+            .uri(format!("{}{path}", self.base));
+        if let Some((name, value)) = &self.header {
+            builder = builder.header(*name, value);
+        }
+        let sent = match body {
+            Some(body) => builder
+                .header("content-type", "application/json")
+                .body(body.to_string())
+                .map(|request| Self::agent().run(request)),
+            None => builder.body(()).map(|request| Self::agent().run(request)),
+        };
+        let response = sent.map_err(|error| error.to_string())?;
+        response.map_err(|error| error.to_string())
     }
 }
 
 impl Api for Http {
     fn get(&self, path: &str) -> Result<Value, String> {
-        Self::agent()
-            .get(&self.url(path))
-            .header(self.header, &self.secret)
-            .call()
-            .map_err(|error| error.to_string())?
+        let mut response = self.request("GET", path, None)?;
+        response
             .body_mut()
             .read_json()
             .map_err(|error| error.to_string())
     }
 
     fn send(&self, method: &str, path: &str, body: &Value) -> Result<(), String> {
-        let request = ureq::http::Request::builder()
-            .method(method)
-            .uri(self.url(path))
-            .header(self.header, &self.secret)
-            .header("content-type", "application/json")
-            .body(body.to_string())
-            .map_err(|error| error.to_string())?;
-        Self::agent()
-            .run(request)
-            .map(|_| ())
+        self.request(method, path, Some(body)).map(|_| ())
+    }
+
+    fn text(&self, path: &str) -> Result<String, String> {
+        let mut response = self.request("GET", path, None)?;
+        response
+            .body_mut()
+            .read_to_string()
             .map_err(|error| error.to_string())
     }
+
+    fn post(&self, path: &str, body: &Value) -> Result<Value, String> {
+        let mut response = self.request("POST", path, Some(body))?;
+        response
+            .body_mut()
+            .read_json()
+            .map_err(|error| error.to_string())
+    }
+}
+
+pub fn basic(username: &str, password: &str) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut encoded = String::from("Basic ");
+    for chunk in format!("{username}:{password}").as_bytes().chunks(3) {
+        let mut bits = 0u32;
+        for (index, byte) in chunk.iter().enumerate() {
+            bits |= u32::from(*byte) << (16 - 8 * index);
+        }
+        for index in 0..4 {
+            let sextet = (bits >> (18 - 6 * index)) & 63;
+            if index <= chunk.len() {
+                encoded.push(char::from(ALPHABET[sextet as usize]));
+            } else {
+                encoded.push('=');
+            }
+        }
+    }
+    encoded
 }
 
 pub fn rules(value: Value) -> Map<String, Value> {
@@ -149,6 +192,17 @@ pub mod fake {
                 .push((method.to_string(), path.to_string(), body.clone()));
             Ok(())
         }
+
+        fn text(&self, path: &str) -> Result<String, String> {
+            self.send("GET", path, &Value::Null)?;
+            let page = self.pages.get(path).and_then(Value::as_str);
+            Ok(page.unwrap_or("OK").to_string())
+        }
+
+        fn post(&self, path: &str, body: &Value) -> Result<Value, String> {
+            self.send("POST", path, body)?;
+            self.get(path)
+        }
     }
 }
 
@@ -170,6 +224,16 @@ mod tests {
     fn a_merge_keeps_every_other_field() {
         let whole = merged(&json!({"a": 1, "kept": true}), &rules(json!({"a": 2})));
         assert_eq!(json!({"a": 2, "kept": true}), whole);
+    }
+
+    #[test]
+    fn basic_encodes_the_login_in_base64() {
+        assert_eq!(
+            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+            basic("Aladdin", "open sesame")
+        );
+        assert_eq!("Basic YTpi", basic("a", "b"));
+        assert_eq!("Basic YWI6Yw==", basic("ab", "c"));
     }
 
     #[test]

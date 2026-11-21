@@ -1,0 +1,117 @@
+use crate::api::{Api, report};
+use serde_json::{Map, Value};
+
+const SETTINGS: [(&str, &str, &str); 12] = [
+    ("General", "AUTH_TYPE", "BASIC"),
+    ("General", "USER_ACCOUNTS", ""),
+    ("General", "EBOOK_DIR", "/data/media/books"),
+    ("General", "DESTINATION_COPY", "1"),
+    ("TORRENT", "TOR_DOWNLOADER_QBITTORRENT", "1"),
+    ("TORRENT", "KEEP_SEEDING", "1"),
+    ("TORRENT", "SEED_WAIT", "1"),
+    ("QBITTORRENT", "QBITTORRENT_HOST", "gluetun"),
+    ("QBITTORRENT", "QBITTORRENT_PORT", "8080"),
+    ("QBITTORRENT", "QBITTORRENT_LABEL", "books"),
+    ("QBITTORRENT", "QBITTORRENT_DIR", "/data/torrents/books"),
+    ("Telemetry", "TELEMETRY_ENABLE", ""),
+];
+
+fn read_path(group: &str, name: &str) -> String {
+    format!("&cmd=readCFG&name={name}&group={group}")
+}
+
+fn write_path(group: &str, name: &str, value: &str) -> String {
+    format!("&cmd=writeCFG&name={name}&group={group}&value={value}")
+}
+
+fn read(api: &impl Api, group: &str, name: &str) -> Result<String, String> {
+    let reply = api.text(&read_path(group, name))?;
+    reply
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .map(String::from)
+        .ok_or(format!("cannot read {name}: {reply}"))
+}
+
+pub fn enforce(api: &impl Api) -> Result<usize, String> {
+    let mut changes = Map::new();
+    for (group, name, wanted) in SETTINGS {
+        if read(api, group, name)? == wanted {
+            continue;
+        }
+        let reply = api.text(&write_path(group, name, wanted))?;
+        if reply != "OK" {
+            return Err(format!("cannot set {name}: {reply}"));
+        }
+        changes.insert(name.to_string(), Value::from(wanted));
+    }
+    Ok(report("LazyLibrarian", "config", &[&changes]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::fake::Fake;
+    use serde_json::json;
+    use std::collections::BTreeMap;
+
+    fn in_line() -> BTreeMap<String, Value> {
+        let mut pages = BTreeMap::new();
+        for (group, name, value) in SETTINGS {
+            pages.insert(read_path(group, name), json!(format!("[{value}]")));
+        }
+        pages
+    }
+
+    fn writes(fake: &Fake) -> Vec<String> {
+        let paths = fake.paths();
+        paths
+            .into_iter()
+            .filter_map(|path| path.strip_prefix("GET ").map(String::from))
+            .filter(|path| path.contains("writeCFG"))
+            .collect()
+    }
+
+    #[test]
+    fn a_lazylibrarian_in_line_needs_nothing() {
+        let fake = Fake::new(in_line());
+        assert_eq!(Ok(0), enforce(&fake));
+        assert!(writes(&fake).is_empty());
+    }
+
+    #[test]
+    fn a_setting_changed_by_hand_comes_back() {
+        let mut pages = in_line();
+        let label = read_path("QBITTORRENT", "QBITTORRENT_LABEL");
+        pages.insert(label, json!("[ebooks]"));
+        pages.insert(read_path("General", "USER_ACCOUNTS"), json!("[1]"));
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), enforce(&fake));
+        let expected = [
+            write_path("General", "USER_ACCOUNTS", ""),
+            write_path("QBITTORRENT", "QBITTORRENT_LABEL", "books"),
+        ];
+        assert_eq!(expected.to_vec(), writes(&fake));
+    }
+
+    #[test]
+    fn a_refused_write_is_an_error() {
+        let mut pages = in_line();
+        pages.insert(read_path("TORRENT", "SEED_WAIT"), json!("[]"));
+        let write = write_path("TORRENT", "SEED_WAIT", "1");
+        pages.insert(write, json!("SEED_WAIT not found"));
+        let fake = Fake::new(pages);
+        assert_eq!(
+            Err("cannot set SEED_WAIT: SEED_WAIT not found".to_string()),
+            enforce(&fake)
+        );
+    }
+
+    #[test]
+    fn an_unreadable_reply_is_an_error() {
+        let mut pages = in_line();
+        pages.insert(read_path("General", "AUTH_TYPE"), json!("API not enabled"));
+        let fake = Fake::new(pages);
+        assert!(enforce(&fake).is_err());
+    }
+}
