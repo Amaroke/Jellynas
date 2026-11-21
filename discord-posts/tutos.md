@@ -5,7 +5,7 @@ identique à celui du CD, meilleur qu'un MP3 qui en retire une partie.
 **<https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT}>**
 -# Connexion avec le bouton SSO, même compte que Jellyfin.
 
-📺 **[La vidéo tuto](https://youtube.com/shorts/HBRFETkA44k)**
+📺 **La vidéo tuto** <https://www.youtube.com/watch?v=WJfpmXkg-Do>
 
 ## 🔍 Ajouter de la musique
 
