@@ -58,7 +58,7 @@ button:focus-visible {{ outline: 2px solid var(--accent); outline-offset: 1px; }
 </style>
 <main>{cards}</main>
 """
-VIDEO = re.compile(r"^📺 .*\n?", re.M)
+VIDEO = re.compile(r"^📺 .*\n?", re.MULTILINE)
 BLOCK = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|-#|#|>|\||```)")
 
 
