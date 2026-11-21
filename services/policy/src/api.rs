@@ -13,25 +13,40 @@ pub struct Http {
 }
 
 impl Http {
-    fn request(&self, method: &str, path: &str) -> ureq::Request {
-        ureq::request(method, &format!("{}{path}", self.base))
-            .set(self.header, &self.secret)
-            .timeout(Duration::from_secs(30))
+    fn agent() -> ureq::Agent {
+        ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(30)))
+            .build()
+            .into()
+    }
+
+    fn url(&self, path: &str) -> String {
+        format!("{}{path}", self.base)
     }
 }
 
 impl Api for Http {
     fn get(&self, path: &str) -> Result<Value, String> {
-        self.request("GET", path)
+        Self::agent()
+            .get(&self.url(path))
+            .header(self.header, &self.secret)
             .call()
             .map_err(|error| error.to_string())?
-            .into_json()
+            .body_mut()
+            .read_json()
             .map_err(|error| error.to_string())
     }
 
     fn send(&self, method: &str, path: &str, body: &Value) -> Result<(), String> {
-        self.request(method, path)
-            .send_json(body)
+        let request = ureq::http::Request::builder()
+            .method(method)
+            .uri(self.url(path))
+            .header(self.header, &self.secret)
+            .header("content-type", "application/json")
+            .body(body.to_string())
+            .map_err(|error| error.to_string())?;
+        Self::agent()
+            .run(request)
             .map(|_| ())
             .map_err(|error| error.to_string())
     }
