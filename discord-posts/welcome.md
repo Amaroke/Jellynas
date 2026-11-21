@@ -21,9 +21,8 @@ Demande-moi tes identifiants en message privé.
 ## 🎬 Ce que tu peux faire
 
 - **Jellyfin** · regarder, lire et télécharger
-- **Finamp** · écouter la musique, même hors ligne
 - **Seerr** · demander un film, une série ou un animé
-- **Aurral** · découvrir de la musique et recevoir tes playlists
+- **Aurral** · écouter la musique, en découvrir et recevoir tes playlists
 - **Bot musique** · écouter à plusieurs dans un salon vocal, avec le rôle
   MusicDJ
 - **Ton salon** · demander un livre ou un manga, où me poser une question

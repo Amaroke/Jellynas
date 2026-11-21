@@ -1251,13 +1251,13 @@ Aurral serves the Subsonic API at `https://aurral.<DOMAIN>:<CADDY_HTTPS_PORT>`,
 so any Subsonic app plays the Library, the playlists and the flows of each
 Friend:
 
-| Platform | App       | Price          |
-| -------- | --------- | -------------- |
-| Android  | Symfonium | About 5 € once |
-| Android  | Tempus    | Free           |
-| iPhone   | Amperfy   | Free           |
-| iPhone   | play:Sub  | Paid           |
-| Computer | Feishin   | Free           |
+| Platform | App                                           |
+| -------- | --------------------------------------------- |
+| Android  | [Tempus](https://github.com/eddyizm/tempus)   |
+| iPhone   | [Amperfy](https://github.com/BLeeEZ/amperfy)  |
+| Computer | [Feishin](https://github.com/jeffvli/feishin) |
+
+All three are free and open source.
 
 A Subsonic app cannot go through Authelia, so it signs in with a password of
 Aurral, which a user created by Authelia does not have. In Settings > Users, set
