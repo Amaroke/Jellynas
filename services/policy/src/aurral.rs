@@ -337,6 +337,9 @@ mod tests {
             json!({"staticPlaylists": [made]}),
         );
         assert_eq!(Ok(1), enforce(&fake));
-        assert_eq!(vec!["PUT /playlists/static-playlists/b/track-availability"], fake.paths());
+        assert_eq!(
+            vec!["PUT /playlists/static-playlists/b/track-availability"],
+            fake.paths()
+        );
     }
 }
