@@ -31,7 +31,7 @@ Library > Playlists, puis "Import playlist" :
 - **ListenBrainz**, **Last.fm** ou un fichier **M3U** marchent aussi, pour
   ceux qui connaissent ou utilisent ces outils
 
-Choisis une synchro automatique pour que la playlist suive l'originale. Les
+Les
 titres manquants se téléchargent seuls.
 -# Spotify ne donne que les playlists que tu as créées ou où tu collabores.
 Pour celle d'un autre, copie-la d'abord dans les tiennes. Spotify redemande la
@@ -61,16 +61,6 @@ Menu de ton profil > Settings :
 
 - **Profile > Set password** · le mot de passe des applis Tempus, Amperfy et
   Feishin, différent de celui de ton compte
-- **Profile > Pair a device** · un code pour te connecter dans un autre
-  navigateur
-- **Listening > ListenBrainz** · des recommandations selon tout ce que tu
-  écoutes, appli comprise
 - **Listening > Discovery tastes** · Safer, Balanced ou Deeper, du plus connu
   au plus pointu
 - **Appearance** · thème clair ou sombre, couleurs
-
-## ⚠️ À éviter
-
-Ne crée pas de lien de partage et ne rends aucune playlist "Public" : la
-musique du serveur sortirait d'ici.
--# Les applis à installer sont dans links.
