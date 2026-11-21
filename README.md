@@ -2088,9 +2088,12 @@ The messages are in French, for the Friends:
 - `discord-posts/links.md`, in the links channel, gives the public addresses,
   the apps to install, how to ask for a book or a manga, and the commands of the
   music bot. Change it when a public address, an app or a command changes.
-- `discord-posts/tutos.md`, in the tutos channel, explains Aurral: adding
-  music, importing playlists from Spotify, recommendations, flows and the
-  settings of a Friend. Change it when Aurral moves a button or a setting.
+- `discord-posts/aurral-video.md`, `discord-posts/aurral.md` and
+  `discord-posts/tempus.md`, in the tutos channel, in this order: the video
+  tutorial of Aurral, then Aurral in writing, adding music, importing playlists
+  from Spotify, recommendations, flows and the settings of a Friend, then how to
+  install Tempus and sign it in to Aurral. Change them when Aurral or Tempus
+  moves a button or a setting.
 
 A file wraps at 80 columns like any Markdown file of the repo, and
 `scripts/discord_post.py` joins the wrapped lines back, since Discord keeps
@@ -2112,8 +2115,8 @@ its link, since Discord plays a video only from a bare link there.
    python3 scripts/discord_post.py news discord-posts/welcome.md
    ```
 
-The `discord-posts` service republishes these three files every day at 00:30, in
-the time zone of `TZ`, from the `main` branch that doco-cd deployed. A message
+The `discord-posts` service republishes these files every day at 00:30, in the
+time zone of `TZ`, from the `main` branch that doco-cd deployed. A message
 then follows the repo by itself, and its footer gives the date of its last
 publication. A failure on one channel leaves the others
 alone and waits for the next night, as `docker compose logs discord-posts`

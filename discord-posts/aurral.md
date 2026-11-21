@@ -5,8 +5,6 @@ identique à celui du CD, meilleur qu'un MP3 qui en retire une partie.
 **<https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT}>**
 -# Connexion avec le bouton SSO, même compte que Jellyfin.
 
-📺 **La vidéo tuto** <https://www.youtube.com/watch?v=WJfpmXkg-Do>
-
 ## 🔍 Ajouter de la musique
 
 La recherche trouve tous les artistes, albums et titres, même ceux qui ne sont
@@ -31,8 +29,7 @@ Library > Playlists, puis "Import playlist" :
 - **ListenBrainz**, **Last.fm** ou un fichier **M3U** marchent aussi, pour
   ceux qui connaissent ou utilisent ces outils
 
-Les
-titres manquants se téléchargent seuls.
+Les titres manquants se téléchargent seuls.
 -# Spotify ne donne que les playlists que tu as créées ou où tu collabores.
 Pour celle d'un autre, copie-la d'abord dans les tiennes. Spotify redemande la
 connexion tous les six mois.
