@@ -1,0 +1,32 @@
+---
+services:
+  policy:
+    build: .
+    container_name: policy
+    restart: unless-stopped
+    networks:
+      - internal-zone
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    user: ${PUID}:${PGID}
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 16m
+    environment:
+      DOMAIN: ${DOMAIN}
+      CADDY_HTTPS_PORT: ${CADDY_HTTPS_PORT:-443}
+      JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}
+      RADARR_API_KEY: ${RADARR_API_KEY}
+      SONARR_API_KEY: ${SONARR_API_KEY}
+    labels:
+      kuma.policy.docker.name: Policy
+    healthcheck:
+      test:
+        - "CMD"
+        - "/policy"
+        - "health"
+      timeout: 10s
+      start_period: 60s

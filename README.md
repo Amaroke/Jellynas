@@ -358,9 +358,9 @@ docker compose -f services/doco-cd/compose.yaml up -d
 Each deploy runs from a copy of the merged revision, kept in the data volume of
 doco-cd. It recreates the services whose compose definition or image changed,
 and those that mount a file of the repo that changed, such as
-`services/ratio/ratio.py`. It rebuilds Caddy and jellyfin-policy from their
-Dockerfile, and removes the services commented out in `compose.yaml`. A failed
-deploy is retried at the next poll.
+`services/ratio/ratio.py`. It rebuilds Caddy and policy from their Dockerfile,
+and removes the services commented out in `compose.yaml`. A failed deploy is
+retried at the next poll.
 
 doco-cd reaches Docker through its socket, which gives it full control of the
 machine, like any tool that runs Compose. Its logs name each deploy, and the
@@ -401,7 +401,7 @@ and the Dependency Dashboard issue lists every pending update.
 - The apk and apt packages of the Dockerfiles, through their `_VERSION`
   arguments
 - The Python packages of `services/music-bot/requirements.txt`
-- The Rust crates of `services/jellyfin/policy/Cargo.toml`
+- The Rust crates of `services/policy/Cargo.toml`
 - The GitHub Actions and the pre-commit hook
 - The tools pinned in `.github/workflows/ci.yml`: gitleaks, hadolint,
   actionlint, the Rust image, yamllint, ruff, zizmor, markdownlint-cli2 and
@@ -493,7 +493,7 @@ Each Friend gets their own Account, so their watch history and progress are
 theirs. The Accounts live in lldap, as [Accounts](#accounts) sets out, and
 Jellyfin creates its user at the first sign-in of a Friend, with access to all
 libraries and without the right to manage the server. Within 10 minutes,
-jellyfin-policy gives it the rules below.
+policy gives it the rules below.
 
 Quick Connect stays on: a Friend signs in on a TV by typing the code it shows
 into Jellyfin on their phone, without typing their password on the TV.
@@ -501,20 +501,19 @@ into Jellyfin on their phone, without typing their password on the TV.
 ### Transcoding
 
 The NAS has no GPU, so Jellyfin transcodes on the CPU, which holds only a few
-streams at a time, and jellyfin-policy keeps hardware acceleration at "None". A
+streams at a time, and policy keeps hardware acceleration at "None". A
 client that plays the file as it is needs no transcoding at all. With an Intel
 or AMD GPU passed to the NAS, map `/dev/dri` into the container and change
-`HardwareAccelerationType` in jellyfin-policy to `qsv` or `vaapi`.
+`HardwareAccelerationType` in `services/policy/src/jellyfin.rs` to `qsv` or
+`vaapi`.
 
 ### Rules of the server and the Accounts
 
-jellyfin-policy applies the same rules to the server and to every Account of
-Jellyfin, the Admin included, every 10 minutes, through the API key of
-`JELLYFIN_API_KEY`. A new Account gets them within 10 minutes, and a rule
-changed by hand in the Dashboard comes back at the next pass. It is a small Rust
-program, `services/jellyfin/policy/src/main.rs`, which doco-cd builds into an
-image of 2 MB that runs in 1 MB of memory. Change a rule in its `server`,
-`policy` or `configuration` function, never in the Dashboard. The server:
+[policy](#policy) applies the same rules to the server and to every Account of
+Jellyfin, the Admin included, through the API key of `JELLYFIN_API_KEY`. A new
+Account gets them within 10 minutes. Change a rule in the `server`, `policy` or
+`configuration` function of `services/policy/src/jellyfin.rs`, never in the
+Dashboard. The server:
 
 | Rule                               | Value                                  |
 | ---------------------------------- | -------------------------------------- |
@@ -558,7 +557,7 @@ subtitles, stay theirs to set.
 
 ### Jellyfin behind Caddy
 
-jellyfin-policy keeps `caddy` in "Known proxies", so Jellyfin sees the real
+policy keeps `caddy` in "Known proxies", so Jellyfin sees the real
 address of each Friend instead of the address of Caddy. Jellyfin looks up the
 address of Caddy when it starts, so restart it whenever Caddy is recreated:
 
@@ -945,24 +944,8 @@ folder, under `/data/media/movies`, and the torrents tree, under
 
 Open `https://radarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication
 the same way as Prowlarr, with its own username and password. Copy the API key
-from Settings > General > Security into `RADARR_API_KEY` in `.env`, untick
-"Send Anonymous Usage Data" and set the "Log Level" to "Info", as in Prowlarr.
-
-### Media management
-
-In Settings > Media Management, click "Show Advanced" at the top, then:
-
-1. Under Root Folders, add `/data/media/movies`.
-2. Check "Rename Movies", and set both "Standard Movie Format" and "Movie
-   Folder Format" to `{Movie Title} ({Release Year}) [tmdbid-{TmdbId}]`, so
-   Jellyfin always matches the right movie, even a remake with the same title.
-3. Under Importing, uncheck "Use Hardlinks instead of Copy". Each import is a
-   copy, so the torrent keeps seeding from the torrents tree while Tdarr
-   normalises the Library file.
-4. Under File Management, set "Recycling Bin" to `/data/media/movies/.recycle`
-   and "Recycling Bin Cleanup" to `30` days. A deleted movie stays there for 30
-   days and can be moved back. Jellyfin and Radarr skip hidden folders, so it
-   never shows up as a movie.
+from Settings > General > Security into `RADARR_API_KEY` in `.env`, so
+[policy](#policy) keeps the settings below.
 
 ### Download client
 
@@ -971,12 +954,32 @@ In Settings > Media Management, click "Show Advanced" at the top, then:
    the save path. ratio creates it by itself once it runs.
 2. In Radarr, Settings > Download Clients, click "+" and pick qBittorrent.
 3. Enter `gluetun` as the host, since qBittorrent shares its network, `8080` as
-   the port, and the qBittorrent login.
-4. Set "Category" to `movies`.
-5. Check "Remove Completed". No indexer sets a seeding goal, so qBittorrent never
-   stops a torrent and Radarr never removes one: a torrent of C411 seeds
-   forever, and ratio removes a public one.
-6. Click "Test", then "Save".
+   the port, and the qBittorrent login, then click "Test" and "Save". policy
+   sets the rest.
+
+### Settings kept by policy
+
+policy keeps these settings of Radarr, and puts back any of them changed by
+hand:
+
+- Settings > General: authentication by "Forms", always required, no anonymous
+  usage data, log level "Info".
+- Root folder `/data/media/movies`, added again if it is missing.
+- "Rename Movies" on, with both the movie file and folder named
+  `{Movie Title} ({Release Year}) [tmdbid-{TmdbId}]`, so Jellyfin always
+  matches the right movie, even a remake with the same title.
+- "Use Hardlinks instead of Copy" off. Each import is a copy, so the torrent
+  keeps seeding from the torrents tree while Tdarr normalises the Library file.
+- Recycling bin `/data/media/movies/.recycle`, emptied after 30 days. A deleted
+  movie stays there for 30 days and can be moved back. Jellyfin and Radarr skip
+  hidden folders, so it never shows up as a movie.
+- "Unmonitor Deleted Movies" on, so a movie deleted from the disk is not
+  downloaded again.
+- The qBittorrent client on `gluetun` port `8080`, with the category `movies`,
+  and "Remove Completed" and "Remove Failed" on. No indexer sets a seeding goal,
+  so qBittorrent never stops a torrent and Radarr never removes one: a torrent
+  of C411 seeds forever, and ratio removes a public one. policy leaves "Enable"
+  alone, so the downloads can be paused.
 
 ### Indexers from Prowlarr
 
@@ -1059,31 +1062,28 @@ episode into the Library. It sees only the shows and anime folders, under
 
 Open `https://sonarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication
 the same way as Prowlarr, with its own username and password. Copy the API key
-from Settings > General > Security into `SONARR_API_KEY` in `.env`, untick
-"Send Anonymous Usage Data" and set the "Log Level" to "Info", as in Prowlarr.
-
-### Media management of Sonarr
-
-In Settings > Media Management, click "Show Advanced" at the top, then:
-
-1. Under Root Folders, add `/data/media/shows` and `/data/media/anime`.
-2. Check "Rename Episodes" and set "Series Folder Format" to
-   `{Series TitleYear} [tvdbid-{TvdbId}]`, for the same reason as Radarr.
-3. Under Importing, uncheck "Use Hardlinks instead of Copy", for the same reason
-   as Radarr.
-4. Under File Management, set "Recycling Bin" to `/data/media/shows/.recycle`
-   and "Recycling Bin Cleanup" to `30` days. Deleted episodes of both shows and
-   anime stay there for 30 days and can be moved back.
+from Settings > General > Security into `SONARR_API_KEY` in `.env`, so
+[policy](#policy) keeps the settings below.
 
 ### Download client of Sonarr
 
 1. In qBittorrent, add a category `shows` with `/data/torrents/shows` as the
    save path.
 2. In Sonarr, Settings > Download Clients, click "+" and pick qBittorrent.
-3. Enter `gluetun` as the host, `8080` as the port, and the qBittorrent login.
-4. Set "Category" to `shows`.
-5. Check "Remove Completed", for the same reason as Radarr.
-6. Click "Test", then "Save".
+3. Enter `gluetun` as the host, `8080` as the port, and the qBittorrent login,
+   then click "Test" and "Save". policy sets the rest.
+
+### Settings of Sonarr kept by policy
+
+policy keeps the same settings as in Radarr, with these values:
+
+- Root folders `/data/media/shows` and `/data/media/anime`.
+- "Rename Episodes" on, with the folder of a show named
+  `{Series TitleYear} [tvdbid-{TvdbId}]`.
+- Recycling bin `/data/media/shows/.recycle`, for both shows and anime.
+- "Unmonitor Deleted Episodes" on, so an episode deleted from the disk is not
+  downloaded again.
+- The category `shows` for the qBittorrent client.
 
 ### Indexers of Sonarr from Prowlarr
 
@@ -1116,6 +1116,32 @@ The steps are the same as in Radarr, with these differences:
 - An episode that stays unmatched is often an anime in absolute numbering with
   the type "Standard": switch its "Series Type" to "Anime" in "Edit", then
   "Refresh & Scan".
+
+## Policy
+
+Requires [Jellyfin](#jellyfin), [Radarr](#radarr) and [Sonarr](#sonarr).
+
+policy keeps the settings of the apps the way this README sets them. Every 10
+minutes, it reads them through the API of each app, and puts back only what
+differs, so a setting changed by hand in a Dashboard comes back at the next
+pass. It keeps the settings listed in
+[Rules of the server and the Accounts](#rules-of-the-server-and-the-accounts),
+[Settings kept by policy](#settings-kept-by-policy) and
+[Settings of Sonarr kept by policy](#settings-of-sonarr-kept-by-policy).
+
+It keeps an app once its API key is in `.env`: `JELLYFIN_API_KEY`,
+`RADARR_API_KEY` or `SONARR_API_KEY`. It reaches Radarr and Sonarr in the
+internal zone, and Jellyfin through Caddy. Its logs name each setting it puts
+back:
+
+```sh
+docker logs policy
+```
+
+It is a small Rust program in `services/policy`, one module per app, which
+doco-cd builds into an image of 2 MB that runs in 1 MB of memory. To change a
+rule, edit the module of the app and open a pull request: the CI checks its
+format, its lints and its tests.
 
 === TO BE REWORKED: everything below ===
 

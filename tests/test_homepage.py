@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 HOMEPAGE = ROOT / "services" / "homepage"
 CONFIG_FILES = [HOMEPAGE / name for name in ("settings.yaml", "services.yaml", "widgets.yaml", "bookmarks.yaml")]
-WITHOUT_TILE = {"homepage", "beszelagent", "autokuma", "jellyfinpolicy", "ratio", "socketproxy"}
+WITHOUT_TILE = {"homepage", "beszelagent", "autokuma", "policy", "ratio", "socketproxy"}
 SECRET_FIELDS = {"key", "password", "username", "apikey", "token"}
 BOARD_CARDS = ("Farm account", "Farm quests", "Farm settings")
 PLACEHOLDER = re.compile(r"\{\{(HOMEPAGE_[A-Z_]+)\}\}")

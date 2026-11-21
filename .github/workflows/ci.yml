@@ -54,7 +54,7 @@ jobs:
           persist-credentials: false
       - run: >-
           docker run --rm -v "$PWD:/repo" -w /repo hadolint/hadolint:v2.15.1
-          hadolint services/*/Dockerfile services/*/*/Dockerfile
+          hadolint services/*/Dockerfile
       - run: |
           cp .env.example .env
           docker compose build
@@ -123,7 +123,7 @@ jobs:
       - run: >-
           docker run --rm -v "$PWD:/repo" -w /repo rust:1.100.0-alpine3.24
           sh -ec 'rustup component add rustfmt clippy;
-          for manifest in services/*/*/Cargo.toml; do
+          for manifest in services/*/Cargo.toml; do
           cargo fmt --check --manifest-path "$manifest";
           cargo clippy --locked --all-targets --manifest-path "$manifest"
           -- -D warnings;

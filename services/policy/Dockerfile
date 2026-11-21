@@ -5,5 +5,5 @@ COPY src ./src
 RUN cargo build --release --locked
 
 FROM scratch
-COPY --from=builder /src/target/release/jellyfin-policy /jellyfin-policy
-ENTRYPOINT ["/jellyfin-policy"]
+COPY --from=builder /src/target/release/policy /policy
+ENTRYPOINT ["/policy"]
