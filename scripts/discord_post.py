@@ -19,7 +19,13 @@ TITLE_LENGTH = 256
 COLOR = 0xA78BFA
 COLORS = {"news": 0x34D399, "links": 0x60A5FA, "tutos": 0xF472B6}
 ROOT = Path(__file__).resolve().parent.parent
-POSTS = {"links": "links.md", "news": "welcome.md", "tutos": "tutos.md"}
+POSTS = (
+    ("links", "links.md"),
+    ("news", "welcome.md"),
+    ("tutos", "aurral-video.md"),
+    ("tutos", "aurral.md"),
+    ("tutos", "tempus.md"),
+)
 FAILURES = (OSError, ValueError, KeyError, http.client.HTTPException, SystemExit)
 FARM_BOARD = "http://farm-board:8000/refresh"
 ACTIONS = (
@@ -155,7 +161,7 @@ def publish(channel, path, env, api=API, now=None):
 
 
 def publish_all(env, folder=ROOT / "discord-posts", api=API):
-    for channel, name in POSTS.items():
+    for channel, name in POSTS:
         try:
             print(publish(channel, Path(folder) / name, env, api))
         except FAILURES as error:
