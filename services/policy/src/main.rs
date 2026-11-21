@@ -4,10 +4,13 @@ mod aurral;
 mod jellyfin;
 
 use api::Http;
+use jiff::Zoned;
+use jiff::civil::{Time, time};
 use std::time::{Duration, SystemTime};
 use std::{env, fs, process, thread};
 
-const INTERVAL: Duration = Duration::from_secs(600);
+const PASS_AT: Time = time(4, 30, 0, 0);
+const STALE: Duration = Duration::from_secs(49 * 3600);
 const HEARTBEAT: &str = "/tmp/heartbeat";
 
 enum App {
@@ -75,7 +78,21 @@ fn apps(vars: impl Fn(&str) -> Option<String>) -> Vec<App> {
 fn healthy(last_pass: Option<SystemTime>, now: SystemTime) -> bool {
     last_pass
         .and_then(|time| now.duration_since(time).ok())
-        .is_some_and(|age| age < INTERVAL * 3)
+        .is_some_and(|age| age < STALE)
+}
+
+fn next_pass(now: &Zoned) -> Result<Zoned, String> {
+    let today = now
+        .with()
+        .time(PASS_AT)
+        .build()
+        .map_err(|error| error.to_string())?;
+    if today > *now {
+        return Ok(today);
+    }
+    now.tomorrow()
+        .and_then(|day| day.with().time(PASS_AT).build())
+        .map_err(|error| error.to_string())
 }
 
 fn main() {
@@ -109,7 +126,13 @@ fn main() {
         if !failed && let Err(error) = fs::write(HEARTBEAT, b"ok") {
             eprintln!("Cannot write the heartbeat: {error}");
         }
-        thread::sleep(INTERVAL);
+        let now = Zoned::now();
+        let next = next_pass(&now).unwrap_or_else(|error| {
+            eprintln!("Cannot plan the next pass: {error}");
+            process::exit(1);
+        });
+        println!("Next pass at {next}");
+        thread::sleep(Duration::try_from(now.duration_until(&next)).unwrap_or_default());
     }
 }
 
@@ -177,10 +200,35 @@ mod tests {
     fn health_needs_a_recent_pass() {
         let now = SystemTime::now();
         assert!(!healthy(None, now));
-        assert!(healthy(Some(now - INTERVAL), now));
-        assert!(!healthy(
-            Some(now - INTERVAL * 3 - Duration::from_secs(1)),
-            now
-        ));
+        assert!(healthy(Some(now - Duration::from_secs(48 * 3600)), now));
+        assert!(!healthy(Some(now - STALE), now));
+    }
+
+    fn at(moment: &str) -> Zoned {
+        moment.parse().unwrap()
+    }
+
+    #[test]
+    fn a_pass_before_half_past_four_waits_for_the_same_night() {
+        assert_eq!(
+            at("2026-11-21T04:30:00+01:00[Europe/Paris]"),
+            next_pass(&at("2026-11-21T01:00:00+01:00[Europe/Paris]")).unwrap()
+        );
+    }
+
+    #[test]
+    fn a_pass_from_half_past_four_waits_for_the_next_night() {
+        assert_eq!(
+            at("2026-11-22T04:30:00+01:00[Europe/Paris]"),
+            next_pass(&at("2026-11-21T04:30:00+01:00[Europe/Paris]")).unwrap()
+        );
+    }
+
+    #[test]
+    fn the_pass_keeps_local_time_across_a_change_of_hour() {
+        assert_eq!(
+            at("2026-03-29T04:30:00+02:00[Europe/Paris]"),
+            next_pass(&at("2026-03-28T12:00:00+01:00[Europe/Paris]")).unwrap()
+        );
     }
 }
