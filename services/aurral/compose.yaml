@@ -14,6 +14,7 @@ services:
     environment:
       TZ: ${TZ}
       AURRAL_DATA_DIR: /config
+      AURRAL_API_KEY: ${AURRAL_API_KEY}
       AURRAL_PUBLIC_URL: https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       TRUST_PROXY: "true"
       LIBRARY_FOLDER: /data/media/aurral

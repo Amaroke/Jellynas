@@ -1,5 +1,6 @@
 mod api;
 mod arr;
+mod aurral;
 mod jellyfin;
 
 use api::Http;
@@ -12,6 +13,7 @@ const HEARTBEAT: &str = "/tmp/heartbeat";
 enum App {
     Jellyfin(Http),
     Arr(arr::Arr, Http),
+    Aurral(Http),
 }
 
 impl App {
@@ -19,6 +21,7 @@ impl App {
         match self {
             App::Jellyfin(_) => "Jellyfin",
             App::Arr(arr, _) => arr.name,
+            App::Aurral(_) => "Aurral",
         }
     }
 
@@ -26,6 +29,7 @@ impl App {
         match self {
             App::Jellyfin(api) => jellyfin::enforce(api),
             App::Arr(arr, api) => arr::enforce(arr, api),
+            App::Aurral(api) => aurral::enforce(api),
         }
     }
 }
@@ -37,8 +41,8 @@ fn apps(vars: impl Fn(&str) -> Option<String>) -> Vec<App> {
             .filter(|value| !value.is_empty())
     };
     let mut apps = vec![];
+    let port = read("CADDY_HTTPS_PORT").unwrap_or_else(|| "443".into());
     if let (Some(domain), Some(key)) = (read("DOMAIN"), read("JELLYFIN_API_KEY")) {
-        let port = read("CADDY_HTTPS_PORT").unwrap_or_else(|| "443".into());
         apps.push(App::Jellyfin(Http {
             base: format!("https://jellyfin.{domain}:{port}"),
             header: "Authorization",
@@ -57,6 +61,13 @@ fn apps(vars: impl Fn(&str) -> Option<String>) -> Vec<App> {
             };
             apps.push(App::Arr(arr, api));
         }
+    }
+    if let (Some(domain), Some(key)) = (read("DOMAIN"), read("AURRAL_API_KEY")) {
+        apps.push(App::Aurral(Http {
+            base: format!("https://aurral.{domain}:{port}/api"),
+            header: "X-Api-Key",
+            secret: key,
+        }));
     }
     apps
 }
@@ -80,7 +91,9 @@ fn main() {
     }
     let apps = apps(|name| env::var(name).ok());
     if apps.is_empty() {
-        eprintln!("No app to keep: set JELLYFIN_API_KEY, RADARR_API_KEY or SONARR_API_KEY in .env");
+        eprintln!(
+            "No app to keep: set JELLYFIN_API_KEY, RADARR_API_KEY, SONARR_API_KEY or AURRAL_API_KEY in .env"
+        );
         process::exit(1);
     }
     let names: Vec<&str> = apps.iter().map(App::name).collect();
@@ -121,9 +134,10 @@ mod tests {
             ("JELLYFIN_API_KEY", "j"),
             ("RADARR_API_KEY", "r"),
             ("SONARR_API_KEY", "s"),
+            ("AURRAL_API_KEY", "a"),
         ]));
         let names: Vec<&str> = found.iter().map(App::name).collect();
-        assert_eq!(vec!["Jellyfin", "Radarr", "Sonarr"], names);
+        assert_eq!(vec!["Jellyfin", "Radarr", "Sonarr", "Aurral"], names);
         let App::Jellyfin(api) = &found[0] else {
             panic!("Jellyfin comes first")
         };
@@ -134,6 +148,11 @@ mod tests {
         };
         assert_eq!("http://radarr:7878/api/v3", api.base);
         assert_eq!("r", api.secret);
+        let App::Aurral(api) = &found[3] else {
+            panic!("Aurral comes last")
+        };
+        assert_eq!("https://aurral.example.org:50000/api", api.base);
+        assert_eq!("a", api.secret);
     }
 
     #[test]

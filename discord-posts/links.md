@@ -16,15 +16,6 @@ les applis.
   [Swiftfin](https://apps.apple.com/app/id1604098728)
 - **PC** · le navigateur, plus simple
 
-## 🎵 Finamp
-
-La musique de Jellyfin, même hors ligne.
--# Même adresse et même compte que Jellyfin.
-
-- **Android** ·
-  [Finamp](https://play.google.com/store/apps/details?id=com.unicornsonlsd.finamp)
-- **iPhone** · [Finamp](https://apps.apple.com/app/id1574922594)
-
 ## 🍿 Seerr
 
 Demander un film, une série ou un animé. Une fois la demande validée, il arrive
@@ -35,15 +26,23 @@ seul dans Jellyfin.
 
 ## 🎧 Aurral
 
-Découvrir de la musique, demander un artiste ou un album, et recevoir des
-playlists faites pour toi. Elles arrivent dans Jellyfin et Finamp.
+Toute la musique, en FLAC. Découvrir des artistes, en suivre un ou ajouter un
+album, et recevoir des playlists faites pour toi.
 
 **<https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT}>**
 -# Dans le navigateur, connexion avec le bouton SSO, même compte que Jellyfin.
--# Relie Last.fm ou ListenBrainz
-ou même Spotify pour des
-recommandations selon ce
-que tu écoutes.
+
+Pour écouter sur ton téléphone ou ton PC, une appli libre et gratuite :
+
+- **Android** · [Tempus](https://github.com/eddyizm/tempus)
+- **iPhone** · [Amperfy](https://github.com/BLeeEZ/amperfy)
+- **PC** · [Feishin](https://github.com/jeffvli/feishin), ou le navigateur
+
+-# Crée d'abord un mot de passe d'appli dans Aurral, Settings > Profile > Set
+password, différent de celui de ton compte. Dans l'appli, choisis un serveur
+Subsonic, mets l'adresse d'Aurral, ton identifiant et ce mot de passe.
+-# Relie ListenBrainz dans Aurral pour des recommandations selon ce que tu
+écoutes.
 
 ## 📚 Livres et mangas
 
@@ -53,7 +52,7 @@ Jellybook est également disponible sur Github, si tu veux creuser.
 
 ## 🎶 Bot musique
 
-Toute la musique de Jellyfin dans un salon vocal Discord.
+Toute la musique d'Aurral dans un salon vocal Discord.
 -# Réservé au rôle MusicDJ, et dans les serveurs où il est présent. Rejoins un
 salon vocal, puis :
 
