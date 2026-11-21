@@ -13,7 +13,7 @@ services:
     user: ${PUID}:${PGID}
     read_only: true
     tmpfs:
-      - /tmp
+      - /tmp:mode=1777
     mem_limit: 16m
     environment:
       DOMAIN: ${DOMAIN}
