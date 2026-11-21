@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 
 pub use fetch::Client;
 
+use crate::stats::History;
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Figure {
     pub label: String,
@@ -25,6 +27,8 @@ pub struct Row {
 pub struct Reading {
     pub figures: Vec<Figure>,
     pub rows: Vec<Row>,
+    #[serde(skip)]
+    pub metrics: Vec<(&'static str, f64)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -41,6 +45,7 @@ pub struct Board {
     pub farm: Option<Panel<Value>>,
     pub actions: Option<Panel<Value>>,
     pub pulls: Option<Panel<Value>>,
+    pub history: History,
 }
 
 pub fn settle<T: Clone>(
@@ -73,6 +78,7 @@ mod tests {
                 value: value.into(),
             }],
             rows: vec![],
+            metrics: vec![],
         }
     }
 

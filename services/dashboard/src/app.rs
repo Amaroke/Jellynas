@@ -2,9 +2,10 @@ use crate::cards::{self, Service, State};
 use crate::docker::Docker;
 use crate::icons::Icons;
 use crate::shutdown::{self, Shutdown};
+use crate::stats::{self, History, Sample};
 use crate::widgets::{self, Board, Client, Panel};
 use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -21,6 +22,7 @@ fn now() -> u64 {
 pub type Snapshot = Arc<Vec<Service>>;
 
 const POLL: Duration = Duration::from_secs(20);
+const POINTS: usize = 90;
 
 pub enum Outcome {
     Done,
@@ -40,6 +42,8 @@ pub struct App {
     shutdown: Mutex<Shutdown>,
     client: Client,
     farm_changes: AtomicU64,
+    samples: Mutex<HashMap<String, (String, Sample)>>,
+    history: Mutex<History>,
 }
 
 impl App {
@@ -60,6 +64,8 @@ impl App {
             shutdown: Mutex::new(shutdown),
             client,
             farm_changes: AtomicU64::new(0),
+            samples: Mutex::new(HashMap::new()),
+            history: Mutex::new(History::default()),
         }
     }
 
@@ -106,7 +112,20 @@ impl App {
                 .join()
                 .unwrap_or_else(|_| Err("the reading crashed".to_string()))
         }
-        let (host, readings, farm, actions, pulls) = thread::scope(|scope| {
+        let (host, readings, farm, actions, pulls, usage) = thread::scope(|scope| {
+            let measured: Vec<_> = services
+                .iter()
+                .filter(|service| !service.shutdown && service.state != State::Stopped)
+                .map(|service| {
+                    let name = service.card.service.clone();
+                    let id = service.id.clone();
+                    (
+                        name,
+                        id,
+                        scope.spawn(move || self.docker.stats(&service.id)),
+                    )
+                })
+                .collect();
             let host = scope.spawn(|| self.client.host());
             let farm = scope.spawn(|| self.feed("FARM_BOARD", "/board.json", "the Farm"));
             let actions =
@@ -122,14 +141,20 @@ impl App {
                 .into_iter()
                 .map(|(name, reading)| (name, joined(reading)))
                 .collect();
+            let usage: Vec<_> = measured
+                .into_iter()
+                .map(|(name, id, stats)| (name, id, joined(stats)))
+                .collect();
             (
                 joined(host),
                 readings,
                 joined(farm),
                 joined(actions),
                 joined(pulls),
+                usage,
             )
         });
+        let history = self.remember(&usage, &readings);
         let farm = Some(widgets::settle(previous.farm.as_ref(), farm, now));
         let actions = Some(widgets::settle(previous.actions.as_ref(), actions, now));
         let pulls = Some(widgets::settle(previous.pulls.as_ref(), pulls, now));
@@ -159,8 +184,48 @@ impl App {
                 farm,
                 actions,
                 pulls,
+                history,
             });
         });
+    }
+
+    fn remember(
+        &self,
+        usage: &[(String, String, Result<Value, String>)],
+        readings: &[(String, widgets::parse::Parsed)],
+    ) -> History {
+        let mut samples = self
+            .samples
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut history = self
+            .history
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        for (name, id, found) in usage {
+            let Some(sample) = found.as_ref().ok().and_then(stats::sample) else {
+                continue;
+            };
+            let mut metrics = vec![("memory", sample.memory as f64)];
+            if let Some(share) = samples
+                .get(name)
+                .filter(|(before, _)| before == id)
+                .and_then(|(_, before)| stats::cpu(before, &sample))
+            {
+                metrics.push(("cpu", share));
+            }
+            history.record(name, &metrics, POINTS);
+            samples.insert(name.clone(), (id.clone(), sample));
+        }
+        for (name, reading) in readings {
+            if let Ok(reading) = reading {
+                history.record(name, &reading.metrics, POINTS);
+            }
+        }
+        let names: Vec<&str> = usage.iter().map(|(name, _, _)| name.as_str()).collect();
+        history.keep(&names);
+        samples.retain(|name, _| names.contains(&name.as_str()));
+        history.clone()
     }
 
     pub fn farm_control(&self, control: &Value) -> Outcome {

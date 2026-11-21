@@ -36,6 +36,19 @@ impl Docker {
             .map_err(|error| error.to_string())
     }
 
+    pub fn stats(&self, id: &str) -> Result<Value, String> {
+        self.agent
+            .get(format!("{}/containers/{id}/stats", self.base))
+            .query("stream", "false")
+            .query("one-shot", "true")
+            .config()
+            .timeout_global(Some(Duration::from_secs(5)))
+            .build()
+            .call()
+            .and_then(|mut response| response.body_mut().read_json())
+            .map_err(|error| error.to_string())
+    }
+
     pub fn act(&self, id: &str, action: &str) -> Result<(), String> {
         self.agent
             .post(format!("{}/containers/{id}/{action}", self.base))
