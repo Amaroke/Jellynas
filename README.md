@@ -2095,7 +2095,9 @@ The messages are in French, for the Friends:
 A file wraps at 80 columns like any Markdown file of the repo, and
 `scripts/discord_post.py` joins the wrapped lines back, since Discord keeps
 every line break. A new list item, heading or `-#` line stays on its own line in
-Discord. `-#` is the small grey text of Discord.
+Discord. `-#` is the small grey text of Discord. A line starting with 📺 goes
+above the embed, in the text of the message, without the angle brackets around
+its link, since Discord plays a video only from a bare link there.
 
 1. In Discord, in the settings of the links channel, Integrations > Webhooks,
    click "New Webhook", name it `Jellynas`, and copy its URL,

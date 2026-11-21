@@ -107,6 +107,13 @@ class PublishTest(unittest.TestCase):
         self.assertEqual("Liens", embed["title"])
         self.assertEqual("## Jellyfin\nhttps://jellyfin.example.com", embed["description"])
 
+    def test_a_video_line_goes_in_the_content_so_discord_embeds_it(self):
+        self.message.write_text("# Tuto\n\nIntro.\n\n📺 **Vidéo** <https://youtu.be/x>\n\n## Next\n", encoding="utf-8")
+        self.publish()
+        body = self.discord.calls[0][2]
+        self.assertEqual("📺 **Vidéo** https://youtu.be/x", body["content"])
+        self.assertEqual("Intro.\n\n## Next", body["embeds"][0]["description"])
+
     def test_edits_the_same_message_the_next_time(self):
         self.publish()
         self.message.write_text("changed", encoding="utf-8")
@@ -237,7 +244,7 @@ class MessagesTest(unittest.TestCase):
         env = {**read_env(ROOT / ".env.example"), "DOMAIN": "example.com", "CADDY_HTTPS_PORT": "50000"}
         for path in sorted((ROOT / "discord-posts").glob("*.md")):
             with self.subTest(path.name):
-                embed = render(path, env)
+                _, embed = render(path, env)
                 self.assertTrue(embed.get("title"))
                 self.assertLessEqual(len(embed["description"]), MAX_LENGTH)
 

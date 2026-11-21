@@ -58,6 +58,7 @@ button:focus-visible {{ outline: 2px solid var(--accent); outline-offset: 1px; }
 </style>
 <main>{cards}</main>
 """
+VIDEO = re.compile(r"^📺 .*\n?", re.MULTILINE)
 BLOCK = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|-#|#|>|\||```)")
 
 
@@ -100,6 +101,8 @@ def render(path, env):
         text = unwrap(string.Template(Path(path).read_text(encoding="utf-8")).substitute(env).strip())
     except KeyError as error:
         sys.exit(f"{path} uses ${error.args[0]}, which .env does not set")
+    content = re.sub(r"<(https?://[^>]+)>", r"\1", "\n".join(line.strip() for line in VIDEO.findall(text)))
+    text = re.sub(r"\n{3,}", "\n\n", VIDEO.sub("", text)).strip()
     embed = {"description": text, "color": COLOR}
     if text.startswith("# "):
         title, _, description = text.partition("\n")
@@ -108,11 +111,11 @@ def render(path, env):
         sys.exit(f"{path} has a title of {len(embed['title'])} characters, Discord takes {TITLE_LENGTH} at most")
     if len(embed["description"]) > MAX_LENGTH:
         sys.exit(f"{path} holds {len(embed['description'])} characters once filled in, Discord takes {MAX_LENGTH} at most")
-    return embed
+    return content, embed
 
 
-def send(url, method, embed):
-    body = json.dumps({"content": "", "embeds": [embed], "allowed_mentions": {"parse": []}}).encode()
+def send(url, method, content, embed):
+    body = json.dumps({"content": content, "embeds": [embed], "allowed_mentions": {"parse": []}}).encode()
     request = urllib.request.Request(
         url, data=body, method=method, headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
     )
@@ -123,8 +126,9 @@ def send(url, method, embed):
 def publish(channel, path, env, api=API, now=None):
     hook = f"{api}/{webhook(env, channel)}"
     now = now or datetime.datetime.now().astimezone()
+    content, embed = render(path, env)
     embed = {
-        **render(path, env),
+        **embed,
         "color": COLORS.get(channel, COLOR),
         "footer": {"text": f"Dernière mise à jour : {now:%d/%m/%Y} à {now:%H:%M}"},
     }
@@ -138,13 +142,13 @@ def publish(channel, path, env, api=API, now=None):
     message = state.get(key)
     if message:
         try:
-            send(f"{hook}/messages/{message}", "PATCH", embed)
+            send(f"{hook}/messages/{message}", "PATCH", content, embed)
             return f"Edited the message of {path} in {channel}"
         except urllib.error.HTTPError as error:
             error.close()
             if error.code != 404:
                 raise
-    state[key] = send(f"{hook}?wait=true", "POST", embed)
+    state[key] = send(f"{hook}?wait=true", "POST", content, embed)
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     return f"Posted {path} in {channel}"
