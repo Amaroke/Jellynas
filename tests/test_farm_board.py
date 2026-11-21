@@ -1,3 +1,4 @@
+import contextlib
 import datetime
 import io
 import json
@@ -452,6 +453,39 @@ class ServerTest(unittest.TestCase):
 
         url = self.start(sender=refuse)
         self.assertEqual(self.post(url, {"name": "floor", "value": "high"}).code, 400)
+
+    def post_json(self, url, payload):
+        body = json.dumps(payload).encode()
+        request = urllib.request.Request(f"{url}/controls", data=body, method="POST", headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.status
+
+    def test_the_board_is_served_as_json(self):
+        url = self.start()
+        with urllib.request.urlopen(f"{url}/board.json", timeout=10) as response:
+            self.assertEqual(BOARD["seeds"], json.load(response)["seeds"])
+
+    def test_the_json_board_is_unavailable_until_ratio_answers(self):
+        def down():
+            raise OSError("down")
+
+        url = self.start(reader=down)
+        with io.StringIO() as out, contextlib.redirect_stdout(out), self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(f"{url}/board.json", timeout=10)
+        caught.exception.close()
+        self.assertEqual(503, caught.exception.code)
+
+    def test_a_json_switch_goes_to_ratio(self):
+        url = self.start()
+        self.assertEqual(204, self.post_json(url, {"name": "paid", "value": True}))
+        self.assertEqual(204, self.post_json(url, {"name": "floor", "value": 1.5}))
+        self.assertEqual(self.sent, [("paid", True), ("floor", 1.5)])
+        self.assertTrue(self.wake.is_set())
+
+    def test_a_json_switch_for_every_category_reaches_each_open_one(self):
+        url = self.start()
+        self.post_json(url, {"name": "volume:all", "value": False})
+        self.assertEqual(self.sent, [("volume:films-videos", False), ("volume:ebook", False)])
 
     def test_the_page_keeps_the_last_board_while_ratio_is_down(self):
         boards = [BOARD]

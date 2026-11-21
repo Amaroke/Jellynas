@@ -133,6 +133,16 @@ def control_of(fields):
     return name, float(value.replace(",", "."))
 
 
+def json_control_of(fields):
+    name, value = (fields.get("name"), fields.get("value")) if isinstance(fields, dict) else (None, None)
+    named = isinstance(name, str)
+    if named and isinstance(value, bool):
+        return name, value
+    if named and isinstance(value, (int, float)):
+        return name, float(value)
+    raise ValueError("a control needs a name and an on, off or number value")
+
+
 def chromium(folder, *arguments):
     return subprocess.run(
         [
@@ -256,6 +266,21 @@ def serve(wake, port=8000, board_reader=read_board, sender=send_control):
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
             url = urllib.parse.urlsplit(self.path)
+            if url.path == "/board.json":
+                try:
+                    latest["board"] = board_reader()
+                except (OSError, ValueError) as error:
+                    print(f"Cannot read the board of ratio: {error}")
+                if latest["board"] is None:
+                    self.empty(503)
+                    return
+                body = json.dumps(latest["board"]).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if url.path.rstrip("/") != "/graphs":
                 self.send_error(404)
                 return
@@ -288,9 +313,15 @@ def serve(wake, port=8000, board_reader=read_board, sender=send_control):
                 self.send_error(403)
                 return
             length = int(self.headers.get("Content-Length") or 0)
-            fields = {k: v[0] for k, v in urllib.parse.parse_qs(self.rfile.read(length).decode()).items()}
+            raw = self.rfile.read(length)
+            answer_json = self.headers.get("Content-Type", "").startswith("application/json")
             try:
-                name, value = control_of(fields)
+                if answer_json:
+                    fields = json.loads(raw)
+                    name, value = json_control_of(fields)
+                else:
+                    fields = {k: v[0] for k, v in urllib.parse.parse_qs(raw.decode()).items()}
+                    name, value = control_of(fields)
                 if name == ALL_CATEGORIES:
                     for category in open_categories(board_reader()):
                         sender(category["switch"], value)
@@ -304,6 +335,9 @@ def serve(wake, port=8000, board_reader=read_board, sender=send_control):
                 self.send_error(502)
                 return
             wake.set()
+            if answer_json:
+                self.empty(204)
+                return
             part = fields.get("part") if fields.get("part") in PARTS else "1"
             language = "fr" if fields.get("lang") == "fr" else "en"
             self.send_response(303)

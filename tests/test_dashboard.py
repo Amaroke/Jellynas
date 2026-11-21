@@ -115,6 +115,11 @@ class DashboardLabelsTest(unittest.TestCase):
             prefix = kind.upper().replace("-", "_")
             self.assertIn(f"      {prefix}_URL: ", environment, kind)
 
+    def test_the_dashboard_knows_where_the_native_sections_come_from(self):
+        environment = section(all_services()["dashboard"], "environment")
+        for line in ("FARM_BOARD_URL: http://farm-board:8000", "DISCORD_POSTS_URL: http://discord-posts:8000", "PR_RADAR_URL: http://pr-radar:8000"):
+            self.assertIn(f"      {line}", environment)
+
     def test_every_monitor_is_a_web_address(self):
         for service, lines in services().items():
             monitor = labels(lines).get("dashboard.monitor")

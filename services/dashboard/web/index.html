@@ -6,6 +6,8 @@
 <meta name="color-scheme" content="light dark">
 <title>Dashboard</title>
 <link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.min.css">
+<link rel="stylesheet" href="/assets/sections.css">
 <style>
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 var(--font); }
@@ -70,6 +72,8 @@ section h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; 
   <span id="live">offline</span>
 </header>
 <main></main>
+<script src="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.iife.min.js"></script>
+<script src="/assets/sections.js"></script>
 <script id="sections" type="application/json">{{ sections|tojson }}</script>
 <script id="services" type="application/json">{{ services|tojson }}</script>
 <script id="board" type="application/json">{{ board|tojson }}</script>
@@ -147,6 +151,15 @@ function refresh() {
   }
   const host = document.getElementById("status");
   if (host) host.replaceChildren(...[...host.children].slice(0, 2), ...panel(board.host));
+  for (const block of main.querySelectorAll(".native")) {
+    const typing = document.activeElement && document.activeElement.tagName === "INPUT" && block.contains(document.activeElement);
+    if (typing) continue;
+    const fresh = native(block.parentElement.dataset.slug);
+    if (!fresh) continue;
+    unmount(block);
+    block.replaceWith(fresh);
+    mount(fresh);
+  }
 }
 
 function letter(service) {
@@ -196,16 +209,19 @@ let board = JSON.parse(document.getElementById("board").textContent);
 
 function render(services) {
   current = services;
+  for (const block of main.querySelectorAll(".native")) unmount(block);
   main.replaceChildren(...sections.flatMap(section => {
     if (section.slug === "status") return [status()];
     const cards = services.filter(service => service.section === section.slug).map(card);
-    if (!cards.length) return [];
-    const node = element("section", { style: `--accent: var(--${section.slug})` },
-      element("h2", {}, section.title),
-      element("div", { class: "grid" }, ...cards));
+    const extra = native(section.slug);
+    if (!cards.length && !extra) return [];
+    const node = element("section", { style: `--accent: var(--${section.slug})`, "data-slug": section.slug }, element("h2", {}, section.title));
+    if (extra) node.append(extra);
+    if (cards.length) node.append(element("div", { class: "grid" }, ...cards));
     return [node];
   }));
   tick();
+  for (const block of main.querySelectorAll(".native")) mount(block);
 }
 
 render(current);

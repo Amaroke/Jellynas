@@ -50,6 +50,9 @@ services:
       BESZEL_SYSTEM: NAS
       UPTIME_KUMA_URL: http://uptime-kuma:3001
       UPTIME_KUMA_SLUG: nas
+      FARM_BOARD_URL: http://farm-board:8000
+      DISCORD_POSTS_URL: http://discord-posts:8000
+      PR_RADAR_URL: http://pr-radar:8000
     labels:
       kuma.dashboard.docker.name: Dashboard
       dashboard.name: Dashboard

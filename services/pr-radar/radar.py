@@ -250,13 +250,24 @@ def row(pull, now):
     )
 
 
-def pulls_page(pulls, now=None, updated=None):
-    now = now or datetime.datetime.now(datetime.UTC)
+def open_sorted(pulls):
     order = {"ok": 0, "wait": 1, "bad": 2, "muted": 3}
-    open_pulls = sorted(
+    return sorted(
         (pull for pull in pulls.values() if pull["state"] == "OPEN"),
         key=lambda pull: (order[readiness(pull)], pull.get("created", "")),
     )
+
+
+def pulls_json(pulls, updated):
+    return {
+        "updated": updated.isoformat() if updated else None,
+        "pulls": [{**pull, "tone": readiness(pull)} for pull in open_sorted(pulls)],
+    }
+
+
+def pulls_page(pulls, now=None, updated=None):
+    now = now or datetime.datetime.now(datetime.UTC)
+    open_pulls = open_sorted(pulls)
     tones = [readiness(pull) for pull in open_pulls]
     summary = f'{tones.count("ok")} prête(s) · {tones.count("wait")} en attente · {tones.count("bad")} à corriger'
     rows = "".join(row(pull, now) for pull in open_pulls) or '<p class="empty">Aucune pull request ouverte</p>'
@@ -301,6 +312,10 @@ class Radar:
         updated = datetime.datetime.fromtimestamp(self.last_success).astimezone() if self.last_success else None
         return pulls_page(load(self.state_path) or {}, updated=updated)
 
+    def json(self):
+        updated = datetime.datetime.fromtimestamp(self.last_success, datetime.UTC) if self.last_success else None
+        return pulls_json(load(self.state_path) or {}, updated)
+
     def healthy(self, now=None):
         now = now or time.time()
         return self.last_success is not None and now - self.last_success < 3 * INTERVAL
@@ -319,6 +334,8 @@ def serve(radar, port=8000):
             elif self.path == "/health":
                 ok = radar.healthy()
                 self.answer(200 if ok else 503, b"ok" if ok else b"no recent poll", "text/plain")
+            elif self.path == "/pulls.json":
+                self.answer(200, json.dumps(radar.json()).encode(), "application/json")
             elif self.path == "/pulls":
                 self.answer(200, radar.page().encode(), "text/html; charset=utf-8")
             else:

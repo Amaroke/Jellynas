@@ -1,0 +1,431 @@
+const DAYS = 30;
+const SOURCES = { paid: "#f472b6", free: "#34d399", library: "#38bdf8", quest: "#fb923c", unknown: "#94a3b8", public: "#64748b" };
+const TIERS = ["#fb7185", "#fbbf24", "#facc15", "#34d399", "#a78bfa"];
+const BEHAVIOURS = ["free", "twins", "paid", "clean_public", "drop_twins", "hold", "adopt"];
+const NUMBERS = {
+  farm_size_gb: { step: "1", min: 1, max: 100000 },
+  floor: { step: "0.05", min: 0.5, max: 5 },
+  daily_gb: { step: "0.5", min: 0, max: 1000 },
+  max_size_gb: { step: "0.01", min: 0.01, max: 1000 },
+};
+const ALL_CATEGORIES = "volume:all";
+const WORDS = {
+  tierNames: { blocked: "blocked", even: "even", floor: "floor", goal: "goal" },
+  voie: { seed: "Seed path", specialization: "Specialization path" },
+  names: {
+    quantity_seed: "Seed count", duration_seed: "Seeding time", vtr_min: "Seed note",
+    category_volume_seed: "Category volume", category_diversity_seed: "Diversity",
+  },
+  switches: {
+    free: "Freeleech", twins: "Twins", paid: "Fresh paid grabs", clean_public: "Clean Public torrents",
+    drop_twins: "Drop Twins", hold: "Hold Prowlarr under the floor", adopt: "Adopt the Library",
+  },
+  numbers: { farm_size_gb: "Farm budget (GB)", floor: "Ratio floor", daily_gb: "Paid download per day (GB)", max_size_gb: "Quest grab size (GB)" },
+  explainSwitches: {
+    free: "Grabs the freeleech releases of C411 up to 5 GB, the most wanted first. Their download is not counted, their upload is.",
+    twins: "For each fresh episode of C411, downloads the same release from Nyaa. cross-seed then adds the C411 copy without any counted download.",
+    paid: "Grabs C411 releases under 24 hours old with at least 5 leechers, the most leechers per GB first. Their download counts, within the paid download per day and never under the floor.",
+    clean_public: "Removes a public torrent after 14 days of seeding, or once its C411 copy seeds the same files.",
+    drop_twins: "Removes the Nyaa copy of a Twin once its C411 copy seeds. The hardlink keeps the files.",
+    hold: "Under the floor, pauses C411 in Prowlarr so Radarr and Sonarr stop downloading there. Everything keeps seeding.",
+    adopt: "Moves a C411 torrent of the Library into the Farm 6 hours after it finished, so it counts in the Farm budget.",
+  },
+  explainNumbers: {
+    farm_size_gb: "Disk the Farm may fill. Once full, nothing more is grabbed and nothing is removed.",
+    floor: "Account ratio under which no paid download happens on C411, not even for the Library. Freeleech and Twins go on.",
+    daily_gb: "Paid download allowed over the last 24 hours, shared by fresh grabs and Quests.",
+    max_size_gb: "Largest torrent grabbed for a Quest. The smallest go first.",
+  },
+  explainSources: {
+    paid: "Fresh release bought with download", free: "No download counted on C411",
+    library: "Movie or show of the Library", quest: "Grabbed for a Quest",
+    public: "Public tracker copy, leaves within two weeks", unknown: "Source not recorded",
+  },
+};
+const MERGE = {
+  CLEAN: ["ready to merge", "ok"],
+  HAS_HOOKS: ["ready to merge", "ok"],
+  UNSTABLE: ["ready, optional checks pending", "ok"],
+  BEHIND: ["behind the base", "wait"],
+  BLOCKED: ["blocked by the rules", "wait"],
+  DIRTY: ["conflicts", "bad"],
+  DRAFT: ["draft", "muted"],
+};
+const REVIEW = { APPROVED: "approved", CHANGES_REQUESTED: "changes requested", REVIEW_REQUIRED: "review required" };
+const CI = { SUCCESS: ["green", "ok"], FAILURE: ["failing", "bad"], ERROR: ["failing", "bad"], PENDING: ["running", "wait"], EXPECTED: ["waiting", "wait"] };
+
+const unsaved = new Map();
+const outcomes = new Map();
+
+function number(value, digits) {
+  if (value === null || value === undefined) return "-";
+  return Number(value).toLocaleString("en-GB", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function size(value, digits = 1) {
+  return `${number(value, digits)} GB`;
+}
+
+function tag(tagName, attributes, ...children) {
+  return element(tagName, attributes, ...children.filter(child => child !== null && child !== undefined && child !== ""));
+}
+
+function note(panel) {
+  if (!panel || !panel.error) return null;
+  return panel.reading
+    ? tag("p", { class: "note" }, `Stale since ${clock(panel.updated)}: ${panel.error}`)
+    : tag("p", { class: "note failed" }, `No data: ${panel.error}`);
+}
+
+async function send(url, body) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "X-Dashboard": "1", ...(body ? { "Content-Type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  }).catch(() => null);
+  return Boolean(response && response.ok);
+}
+
+function farmControl(button, name, value) {
+  button.disabled = true;
+  send("/farm/controls", { name, value }).then(ok => {
+    if (ok) unsaved.delete(name);
+    else unsaved.set(name, `${WORDS.switches[name] || WORDS.numbers[name] || name} was not saved`);
+    refresh();
+  });
+}
+
+function toggle(name, on) {
+  const button = tag("button", { type: "button", class: `pill${on ? " on" : ""}`, "aria-pressed": String(on) }, on ? "on" : "off");
+  button.onclick = () => farmControl(button, name, !on);
+  return button;
+}
+
+function kpi(css, label, value, sub) {
+  return tag("div", { class: `kpi ${css}` }, tag("span", { class: "label" }, label), tag("span", { class: "value" }, value), tag("span", { class: "sub" }, sub || ""));
+}
+
+function kpis(board) {
+  const account = board.account || {};
+  const today = (board.history || []).at(-1) || {};
+  const day = value => value === undefined || value === null ? "" : `${size(value)} in 24 h`;
+  return tag("div", { class: "kpis" },
+    kpi("ratio", "Account ratio", number(account.ratio, 2)),
+    kpi("up", "Uploaded", size(account.uploaded_gb), day(today.uploaded_day_gb)),
+    kpi("down", "Downloaded", size(account.downloaded_gb), day(today.downloaded_day_gb)),
+    kpi("zen", "Zen", number(account.zen, 0)),
+    kpi("seeds", "Seeds on C411", number(board.seeds, 0)),
+    kpi("available", "Effective GB", size(account.available_gb, 0)));
+}
+
+function gauge(board) {
+  const tiers = board.tiers || [];
+  const ratio = (board.account || {}).ratio;
+  if (!tiers.length) return null;
+  const low = Math.min(0.6, (ratio ?? 1) * 0.9);
+  const top = Math.max(2.2, tiers.at(-1).ratio * 1.1, (ratio ?? 0) * 1.05);
+  const at = value => Math.min(Math.max(100 * (value - low) / (top - low), 0), 100);
+  const edges = [low, ...tiers.map(tier => tier.ratio), top];
+  const bands = edges.slice(1).map((high, index) =>
+    tag("span", { style: `width:${at(high) - at(edges[index])}%;background:${TIERS[index % TIERS.length]}` }));
+  const ticks = tiers.map(tier => tag("span", { class: "tick", style: `left:${at(tier.ratio)}%` }, number(tier.ratio, 1)));
+  const cursor = ratio === undefined || ratio === null ? null : tag("span", { class: "cursor", style: `left:${at(ratio)}%` }, number(ratio, 2));
+  const rows = tiers.map((tier, index) => {
+    const gap = tier.gap_gb;
+    const text = gap === null || gap === undefined ? "" : gap > 0 ? `${size(Math.abs(gap))} to upload` : `${size(Math.abs(gap))} of margin`;
+    return tag("li", { class: gap > 0 ? "ahead" : "behind" },
+      tag("span", { class: "swatch", style: `background:${TIERS[(index + 1) % TIERS.length]}` }),
+      tag("span", { class: "name" }, `${number(tier.ratio, 1)} ${WORDS.tierNames[tier.name] || tier.name}`),
+      tag("span", { class: "amount" }, text));
+  }).reverse();
+  return tag("figure", { class: "panel" }, tag("figcaption", {}, "Ratio tiers"),
+    tag("div", { class: "track" }, cursor, tag("div", { class: "gauge" }, ...bands), ...ticks),
+    tag("ul", { class: "tierlist" }, ...rows));
+}
+
+function windowOf(history) {
+  const end = Date.parse(`${history.at(-1).day}T00:00:00Z`) / 1000;
+  const start = end - (DAYS - 1) * 86400;
+  return history.filter(entry => Date.parse(`${entry.day}T00:00:00Z`) / 1000 >= start);
+}
+
+function chartBox(caption) {
+  const box = tag("div", { class: "plot" });
+  return [tag("figure", { class: "panel chart" }, tag("figcaption", {}, caption), box), box];
+}
+
+function color(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function trends(board, draws) {
+  const entries = windowOf(board.history);
+  const days = entries.map(entry => Date.parse(`${entry.day}T00:00:00Z`) / 1000);
+  const [zen, zenBox] = chartBox("Zen");
+  const [transfer, transferBox] = chartBox("Upload and download");
+  draws.push(keep => {
+    if (typeof uPlot === "undefined") {
+      zenBox.textContent = transferBox.textContent = "Charts need uPlot, which did not load.";
+      return;
+    }
+    const muted = color("--muted");
+    const line = color("--line");
+    const day = (u, values) => values.map(value => new Date(value * 1000).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" }));
+    const axis = extra => ({ stroke: muted, grid: { stroke: line, width: 1 }, ticks: { stroke: line, width: 1 }, font: "11px system-ui", ...extra });
+    const make = (box, options, data) => {
+      const plot = new uPlot({ width: box.clientWidth || 300, height: 200, ...options }, data, box);
+      const observer = new ResizeObserver(() => plot.setSize({ width: box.clientWidth, height: 200 }));
+      observer.observe(box);
+      keep.push({ plot, observer });
+    };
+    const shown = (unit, digits) => (u, value) => value === null || value === undefined ? "-" : `${number(value, digits)}${unit}`;
+    make(zenBox, {
+      scales: { x: { time: false }, paid: {}, zen: {} },
+      axes: [axis({ values: day }), axis({ scale: "paid", size: 44 }), axis({ scale: "zen", side: 1, grid: { show: false }, size: 52 })],
+      series: [
+        { value: (u, value) => value === null ? "" : day(u, [value])[0] },
+        { label: "Paid each night", scale: "paid", stroke: "#fbbf24", fill: "#fbbf24aa", paths: uPlot.paths.bars({ size: [0.6, 14] }), points: { show: false }, value: shown("", 0) },
+        { label: "Balance", scale: "zen", stroke: "#34d399", width: 2, fill: "#34d39933", points: { show: false }, value: shown("", 0) },
+      ],
+    }, [days, entries.map(entry => entry.zen_paid ?? null), entries.map(entry => entry.zen ?? null)]);
+    make(transferBox, {
+      scales: { x: { time: false } },
+      axes: [axis({ values: day }), axis({ size: 64, values: (u, values) => values.map(value => `${value} GB`) })],
+      series: [
+        { value: (u, value) => value === null ? "" : day(u, [value])[0] },
+        { label: "Uploaded", stroke: "#60a5fa", width: 2, fill: "#60a5fa33", points: { show: false }, value: shown(" GB", 1) },
+        { label: "Downloaded", stroke: "#fb7185", width: 2, fill: "#fb718522", points: { show: false }, value: shown(" GB", 1) },
+      ],
+    }, [days, entries.map(entry => entry.uploaded_gb ?? null), entries.map(entry => entry.downloaded_gb ?? null)]);
+  });
+  return tag("div", { class: "charts" }, zen, transfer);
+}
+
+function bar(current, target, done) {
+  const share = target ? Math.min(100 * (current || 0) / target, 100) : 100;
+  return tag("div", { class: `bar${done ? " done" : ""}` }, tag("span", { style: `width:${share}%` }));
+}
+
+function steps(list) {
+  const first = list.find(step => !step.done && step.current < step.target);
+  return tag("div", { class: "steps" }, ...list.map(step => {
+    const state = step.done ? "done" : step.current >= step.target ? "reached" : step === first ? "next" : "later";
+    return tag("div", { class: `step ${state}` }, bar(step.current, step.target), tag("span", { class: "goal" }, String(step.target)));
+  }));
+}
+
+function categories(board, switches) {
+  const open = (board.categories || []).filter(category => !category.complete);
+  const rows = [];
+  if (open.length) {
+    const on = open.every(category => switches[category.switch]);
+    rows.push(tag("div", { class: "row all" }, tag("span", { class: "title" }, "Every category"), tag("span", { class: "side" }, toggle(ALL_CATEGORIES, on))));
+  }
+  for (const category of board.categories || []) {
+    const side = category.complete ? tag("span", { class: "tag complete" }, "completed") : toggle(category.switch, Boolean(switches[category.switch]));
+    rows.push(tag("div", { class: "row" },
+      tag("span", { class: "title" }, category.name),
+      tag("span", { class: "side" }, tag("span", { class: "count" }, `${category.count} / ${category.target}`), side),
+      bar(category.count, category.target, category.count >= category.target)));
+  }
+  return tag("div", { class: "cats" }, ...rows);
+}
+
+function quests(board) {
+  const switches = (board.controls || {}).switches || {};
+  const challenges = board.challenges || [];
+  const cards = challenges.map(challenge => {
+    const level = challenge.done ? "every level done" : `level ${challenge.level} of ${challenge.levels}`;
+    const voie = WORDS.voie[challenge.voie] || challenge.voie || "";
+    let side = tag("span", { class: "tag" }, "indicator");
+    if (challenge.done) side = tag("span", { class: "tag complete" }, "completed");
+    else if (challenge.switch) side = toggle(challenge.switch, Boolean(switches[challenge.switch]));
+    const hint = tag("div", { class: "hint" }, `${voie}, ${level}, ${challenge.description}`);
+    if (!challenge.done && challenge.current >= challenge.target) hint.append(", ", tag("span", { class: "reached" }, "reached, waiting for C411 to count it"));
+    return tag("figure", { class: "panel challenge" },
+      tag("div", { class: "head" },
+        tag("span", { class: "title" }, WORDS.names[challenge.key] || challenge.key),
+        tag("span", { class: "side" }, challenge.done ? null : tag("span", { class: "count" }, `${challenge.current} / ${challenge.target}`), side),
+        hint),
+      challenge.steps && challenge.steps.length ? steps(challenge.steps) : bar(challenge.current, challenge.target, challenge.done),
+      challenge.key === "category_volume_seed" ? categories(board, switches) : null);
+  });
+  if ((board.categories || []).length && !challenges.some(challenge => challenge.key === "category_volume_seed")) {
+    cards.push(tag("figure", { class: "panel" }, tag("figcaption", {}, "Category volume, a badge at 50 seeds"), categories(board, switches)));
+  }
+  return tag("div", { class: "quests" }, ...cards);
+}
+
+function setting(title, hint, control) {
+  return tag("div", { class: "setting" }, tag("div", {}, tag("div", { class: "title" }, title), tag("div", { class: "hint" }, hint)), control);
+}
+
+function numberForm(name, value) {
+  const limits = NUMBERS[name];
+  const input = tag("input", { type: "number", step: limits.step, min: String(limits.min), max: String(limits.max), value: String(value), "aria-label": WORDS.numbers[name] });
+  const save = tag("button", { type: "submit", class: "save" }, "Save");
+  const form = tag("form", { class: "number" }, input, save);
+  form.onsubmit = event => {
+    event.preventDefault();
+    const parsed = Number(input.value);
+    if (!Number.isFinite(parsed) || parsed < limits.min || parsed > limits.max) {
+      input.setCustomValidity(`Between ${limits.min} and ${limits.max}`);
+      input.reportValidity();
+      return;
+    }
+    farmControl(save, name, parsed);
+  };
+  return form;
+}
+
+function settings(board) {
+  const controls = board.controls || {};
+  const switches = controls.switches || {};
+  const toggles = BEHAVIOURS.filter(name => name in switches).map(name =>
+    setting(WORDS.switches[name], WORDS.explainSwitches[name], toggle(name, switches[name])));
+  const numbers = Object.entries(controls.numbers || {}).filter(([name]) => name in NUMBERS).map(([name, value]) =>
+    setting(WORDS.numbers[name], WORDS.explainNumbers[name], numberForm(name, value)));
+  return tag("div", { class: "pair" },
+    tag("figure", { class: "panel" }, tag("figcaption", {}, "Farm switches"), ...toggles),
+    tag("figure", { class: "panel" }, tag("figcaption", {}, "Farm settings"), ...numbers));
+}
+
+function donut(farm) {
+  const budget = farm.budget_gb || 1;
+  const used = farm.slices.reduce((sum, slice) => sum + slice.gb, 0);
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "-1 -1 2 2");
+  const circle = (stroke, part, offset) => {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    for (const [name, value] of Object.entries({ r: "0.84", pathLength: "100", stroke, "stroke-dasharray": `${part} ${100 - part}`, "stroke-dashoffset": String(-offset) })) node.setAttribute(name, value);
+    return node;
+  };
+  svg.append(circle("var(--line)", 100, 0));
+  const legend = [];
+  let start = 0;
+  for (const slice of farm.slices) {
+    const part = 100 * slice.gb / Math.max(budget, used);
+    const swatch = SOURCES[slice.source] || SOURCES.unknown;
+    svg.append(circle(swatch, part, start));
+    legend.push(tag("li", {}, tag("span", { class: "swatch", style: `background:${swatch}` }), tag("span", { class: "name" }, slice.source),
+      tag("span", { class: "amount" }, size(slice.gb)), tag("span", { class: "meta" }, WORDS.explainSources[slice.source] || "")));
+    start += part;
+  }
+  legend.push(tag("li", {}, tag("span", { class: "swatch", style: "background:var(--line)" }), tag("span", { class: "name" }, "Free"),
+    tag("span", { class: "amount" }, size(Math.max(budget - used, 0)))));
+  return tag("figure", { class: "panel" }, tag("figcaption", {}, "Farm disk"),
+    tag("div", { class: "disk" },
+      tag("div", { class: "donut" }, svg, tag("div", { class: "center" }, tag("b", {}, `${number(100 * used / budget, 0)} %`), `of ${number(budget, 0)} GB`)),
+      tag("ul", { class: "legend" }, ...legend)));
+}
+
+function ratioOf(up, down) {
+  return down ? Math.round(100 * up / down) / 100 : null;
+}
+
+function earned(sources) {
+  const rows = (name, swatch, source) => [
+    tag("tr", {}, tag("td", {}, swatch, name), ...[String(source.torrents), size(source.downloaded_gb), size(source.uploaded_gb), number(source.ratio, 2)].map(cell => tag("td", {}, cell))),
+    tag("tr", {}, tag("td", { class: "week", colspan: "5" },
+      `7 days: ${size(source.week_downloaded_gb)} down, ${size(source.week_uploaded_gb)} up, ratio ${number(source.week_ratio, 2)}, ${number(source.farm_days, 1)} days in the Farm`)),
+  ];
+  const body = sources.flatMap(source => rows(source.source, tag("span", { class: "swatch", style: `background:${SOURCES[source.source] || SOURCES.unknown}` }), source));
+  const keys = ["torrents", "downloaded_gb", "uploaded_gb", "week_downloaded_gb", "week_uploaded_gb", "farm_days"];
+  const total = Object.fromEntries(keys.map(key => [key, sources.reduce((sum, source) => sum + source[key], 0)]));
+  total.ratio = ratioOf(total.uploaded_gb, total.downloaded_gb);
+  total.week_ratio = ratioOf(total.week_uploaded_gb, total.week_downloaded_gb);
+  const foot = sources.length ? rows("Total", null, total) : [];
+  return tag("figure", { class: "panel earned" }, tag("figcaption", {}, "Earned by Source"),
+    tag("div", { class: "scroll" }, tag("table", {},
+      tag("thead", {}, tag("tr", {}, ...["Source", "Torrents", "Down", "Up", "Ratio"].map(cell => tag("th", {}, cell)))),
+      tag("tbody", {}, ...body), tag("tfoot", {}, ...foot))));
+}
+
+function farmBlock(panel, draws) {
+  const board = panel && panel.reading;
+  if (!board) return tag("div", { class: "native" }, note(panel) || tag("p", { class: "empty" }, "Waiting for the Farm board"));
+  if (!(board.history || []).length) {
+    return tag("div", { class: "native" }, note(panel), tag("p", { class: "empty" }, "No history yet, ratio records its first day after its first run."));
+  }
+  const failures = [...unsaved.values()].map(text => tag("p", { class: "note failed" }, text));
+  return tag("div", { class: "native farm" }, note(panel), ...failures, kpis(board), gauge(board), trends(board, draws), quests(board), settings(board),
+    tag("div", { class: "pair" }, donut(board.farm), earned(board.sources || [])));
+}
+
+function actionsBlock(panel) {
+  const actions = ((panel && panel.reading) || {}).actions || [];
+  const buttons = actions.map(action => {
+    const status = tag("span", { class: "sub" }, outcomes.get(action.key) || action.hint);
+    const button = tag("button", { type: "button", class: "action" },
+      tag("span", { class: "label" }, action.label), tag("span", { class: "value" }, "Refresh"), status);
+    button.onclick = () => {
+      button.disabled = true;
+      status.textContent = "Publishing";
+      send(`/quick-actions/${encodeURIComponent(action.key)}`).then(ok => {
+        outcomes.set(action.key, ok ? "Sent, publishing now" : "No answer, try again later");
+        button.disabled = false;
+        status.textContent = outcomes.get(action.key);
+      });
+    };
+    return button;
+  });
+  return tag("div", { class: "native" }, note(panel), tag("div", { class: "actions" }, ...buttons));
+}
+
+function age(created) {
+  const seconds = (Date.now() - Date.parse(created)) / 1000;
+  if (!Number.isFinite(seconds)) return "";
+  for (const [unit, length] of [["d", 86400], ["h", 3600], ["min", 60]]) {
+    if (seconds >= length) return `${Math.floor(seconds / length)} ${unit}`;
+  }
+  return "just now";
+}
+
+function pullsBlock(panel) {
+  const pulls = ((panel && panel.reading) || {}).pulls || [];
+  const tones = pulls.map(pull => pull.tone);
+  const count = name => tones.filter(tone => tone === name).length;
+  const head = tag("div", { class: "summary" }, tag("b", {}, `${pulls.length} open`),
+    tag("span", {}, `${count("ok")} ready · ${count("wait")} waiting · ${count("bad")} to fix`));
+  const rows = pulls.map(pull => {
+    const ci = CI[pull.ci] || ["none", ""];
+    const chips = [tag("span", { class: "chip" }, pull.repo), tag("span", { class: "chip" }, pull.author), tag("span", { class: `chip ${ci[1]}` }, `CI ${ci[0]}`)];
+    if (MERGE[pull.merge]) chips.push(tag("span", { class: `chip ${MERGE[pull.merge][1]}` }, MERGE[pull.merge][0]));
+    if (REVIEW[pull.review]) chips.push(tag("span", { class: "chip" }, REVIEW[pull.review]));
+    for (const label of pull.labels || []) chips.push(tag("span", { class: "chip" }, label));
+    chips.push(tag("span", { class: "size" }, tag("span", { class: "add" }, `+${pull.additions || 0}`), " ", tag("span", { class: "del" }, `−${pull.deletions || 0}`), ` · ${pull.files || 0} file(s)`));
+    const when = age(pull.created);
+    if (when) chips.push(tag("span", {}, when));
+    const link = (text, suffix) => tag("a", { href: `${pull.url}${suffix}`, target: "_blank", rel: "noopener" }, text);
+    return tag("article", { class: `pull ${pull.tone}` },
+      tag("div", { class: "what" },
+        tag("a", { class: "title", href: pull.url, target: "_blank", rel: "noopener" }, tag("span", {}, `#${pull.number}`), ` ${pull.title}`),
+        tag("div", { class: "meta" }, ...chips)),
+      tag("nav", {}, link("Files", "/files"), link("Checks", "/checks"), link("Merge", "#partial-pull-merging")));
+  });
+  const empty = tag("p", { class: "empty" }, "No open pull request");
+  return tag("div", { class: "native pulls" }, note(panel), head, ...(rows.length ? rows : [empty]));
+}
+
+function native(slug) {
+  const draws = [];
+  let node = null;
+  if (slug === "farm") node = farmBlock(board.farm, draws);
+  if (slug === "quick-actions") node = actionsBlock(board.actions);
+  if (slug === "pull-requests") node = pullsBlock(board.pulls);
+  if (node) node.draws = draws;
+  return node;
+}
+
+function mount(block) {
+  block.charts = [];
+  for (const draw of block.draws || []) draw(block.charts);
+}
+
+function unmount(block) {
+  for (const chart of block.charts || []) {
+    chart.observer.disconnect();
+    chart.plot.destroy();
+  }
+  block.charts = [];
+}

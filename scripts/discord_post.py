@@ -194,6 +194,15 @@ def serve(wake, farm_board=FARM_BOARD, port=8000):
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
             url = urllib.parse.urlsplit(self.path)
+            if url.path == "/actions.json":
+                actions = [{"key": key, "label": label, "hint": hint} for key, label, hint in ACTIONS]
+                body = json.dumps({"actions": actions}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if url.path != "/actions":
                 self.send_error(404)
                 return
@@ -219,6 +228,11 @@ def serve(wake, farm_board=FARM_BOARD, port=8000):
                     done = "error"
             else:
                 self.send_error(404)
+                return
+            if "application/json" in self.headers.get("Accept", ""):
+                self.send_response(502 if done == "error" else 202)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
                 return
             self.send_response(303)
             self.send_header("Location", f"/actions?done={done}")
