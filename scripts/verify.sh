@@ -546,9 +546,8 @@ check_no_media_mount caddy
 check_no_media_mount gluetun
 check_no_torrents_mount jellyfin
 check_no_media_tree qbittorrent
-check_mounts_only lidarr media/music torrents
-check_mounts_only slskd media/music torrents/soulseek
-check_read_only slskd /data/media/music
+check_mounts_only slskd media/aurral torrents/soulseek
+check_read_only slskd /data/media/aurral
 check_mounts_only music-bot media/music
 check_read_only music-bot /data/media/music
 check_slskd_port
@@ -557,8 +556,7 @@ check_mounts_only suwayomi media/manga
 check_no_media_mount seerr
 check_no_media_mount lldap
 check_no_media_mount authelia
-check_mounts_only aurral media/music media/aurral
-check_read_only aurral /data/media/music
+check_mounts_only aurral media/music media/aurral torrents/soulseek
 check_no_media_mount prowlarr
 check_no_media_mount flaresolverr
 check_no_media_mount recyclarr
@@ -594,7 +592,6 @@ check_login_required qbittorrent "https://qbittorrent.$lan:$https_port/api/v2/ap
 check_login_required prowlarr "https://prowlarr.$lan:$https_port/"
 check_login_required radarr "https://radarr.$lan:$https_port/"
 check_login_required sonarr "https://sonarr.$lan:$https_port/"
-check_login_required lidarr "https://lidarr.$lan:$https_port/"
 check_login_required lazylibrarian "https://lazylibrarian.$lan:$https_port/home"
 check_login_required suwayomi "https://suwayomi.$lan:$https_port/api/graphql"
 check_login_required slskd "https://slskd.$lan:$https_port/api/v0/application"

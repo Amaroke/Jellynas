@@ -9,7 +9,7 @@ ZONE_MEMBERS = {
     "jellyfin-zone": {"caddy", "jellyfin", "lldap"},
     "seerr-zone": {"caddy", "seerr", "radarr", "sonarr"},
     "identity-zone": {"caddy", "authelia", "lldap"},
-    "aurral-zone": {"caddy", "aurral", "lidarr"},
+    "aurral-zone": {"caddy", "aurral", "gluetun"},
 }
 OUTSIDE_INTERNAL_ZONE = {"jellyfin", "seerr", "authelia", "lldap", "aurral"}
 SOCKET_HOLDERS = {"socket-proxy", "backup", "doco-cd"}
@@ -115,7 +115,7 @@ class NetworkZonesTest(unittest.TestCase):
     def test_authelia_sits_with_caddy_and_lldap_only(self):
         self.assertEqual(ZONE_MEMBERS["identity-zone"], zone_members("identity-zone"))
 
-    def test_aurral_sits_with_caddy_and_lidarr_only(self):
+    def test_aurral_sits_with_caddy_and_gluetun_only(self):
         self.assertEqual(ZONE_MEMBERS["aurral-zone"], zone_members("aurral-zone"))
 
     def test_lldap_has_no_public_name(self):

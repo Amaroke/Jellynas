@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     networks:
       - internal-zone
+      - aurral-zone
     security_opt:
       - no-new-privileges
     entrypoint: ["/bin/sh", "/jellynas-entrypoint.sh"]

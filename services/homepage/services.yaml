@@ -200,16 +200,6 @@
           key: '{{HOMEPAGE_VAR_SONARR_API_KEY}}'
           enableQueue: true
           fields: ["series", "wanted", "queued"]
-    - Lidarr:
-        icon: lidarr.svg
-        description: Music
-        href:
-          https://lidarr.lan.{{HOMEPAGE_VAR_DOMAIN}}:{{HOMEPAGE_VAR_HTTPS_PORT}}
-        widget:
-          type: lidarr
-          url: http://lidarr:8686
-          key: '{{HOMEPAGE_VAR_LIDARR_API_KEY}}'
-          fields: ["artists", "wanted", "queued"]
     - LazyLibrarian:
         icon: lazylibrarian.png
         description: Books

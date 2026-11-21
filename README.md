@@ -29,24 +29,23 @@ guide is written so that an AI agent can follow it as well as a person.
 11. [Radarr](#radarr)
 12. [Sonarr](#sonarr)
 13. [slskd](#slskd)
-14. [Lidarr](#lidarr)
-15. [Requests](#requests)
-16. [Recyclarr](#recyclarr)
-17. [Tdarr](#tdarr)
-18. [Bazarr](#bazarr)
-19. [Indexarr](#indexarr)
-20. [Music bot](#music-bot)
-21. [Discord messages](#discord-messages)
-22. [PR radar](#pr-radar)
-23. [Private tracker ratio](#private-tracker-ratio)
-24. [Observation](#observation)
-25. [Beszel](#beszel)
-26. [Uptime Kuma](#uptime-kuma)
-27. [Dozzle](#dozzle)
-28. [Homepage](#homepage)
-29. [Backup](#backup)
-30. [Verify the NAS](#verify-the-nas)
-31. [Contributing](#contributing)
+14. [Requests](#requests)
+15. [Recyclarr](#recyclarr)
+16. [Tdarr](#tdarr)
+17. [Bazarr](#bazarr)
+18. [Indexarr](#indexarr)
+19. [Music bot](#music-bot)
+20. [Discord messages](#discord-messages)
+21. [PR radar](#pr-radar)
+22. [Private tracker ratio](#private-tracker-ratio)
+23. [Observation](#observation)
+24. [Beszel](#beszel)
+25. [Uptime Kuma](#uptime-kuma)
+26. [Dozzle](#dozzle)
+27. [Homepage](#homepage)
+28. [Backup](#backup)
+29. [Verify the NAS](#verify-the-nas)
+30. [Contributing](#contributing)
 
 ## Prerequisites
 
@@ -136,18 +135,17 @@ space. `.env` is ignored by git and must never be committed.
 Both roots live outside the repo, at the paths set in `DATA_ROOT` and
 `APPDATA_ROOT`, and so do the archives of the appdata, at `BACKUP_ROOT`. The
 data root holds a single tree, so that one folder holds every download and the
-whole Library. Radarr, Sonarr, Lidarr and LazyLibrarian download into the
-qBittorrent categories `movies`, `shows`, `music` and `books`, and ratio into
-`farm`. qBittorrent creates the folder of a category the first time a torrent
-lands in it. cross-seed hardlinks its matches into `cross-seed`, and slskd
-downloads into `soulseek`:
+whole Library. Radarr, Sonarr and LazyLibrarian download into the qBittorrent
+categories `movies`, `shows` and `books`, and ratio into `farm`. qBittorrent
+creates the folder of a category the first time a torrent lands in it.
+cross-seed hardlinks its matches into `cross-seed`, and slskd downloads into
+`soulseek`:
 
 ```text
 <DATA_ROOT>
 ├── torrents
 │   ├── movies
 │   ├── shows
-│   ├── music
 │   ├── books
 │   ├── farm
 │   ├── cross-seed
@@ -209,9 +207,9 @@ networks:
 | --------------- | ---------------------------------------------------------- |
 | `jellyfin-zone` | Caddy, Jellyfin, lldap                                     |
 | `seerr-zone`    | Caddy, Seerr, Radarr, Sonarr                               |
-| `aurral-zone`   | Caddy, Aurral, Lidarr                                      |
+| `aurral-zone`   | Caddy, Aurral, Gluetun                                     |
 | `identity-zone` | Caddy, Authelia, lldap                                     |
-| `internal-zone` | every other service, plus Caddy, Radarr, Sonarr and Lidarr |
+| `internal-zone` | every other service, plus Caddy, Radarr, Sonarr, Gluetun   |
 
 qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal
 zone, and the Beszel agent the network of the Host. A service that needs
@@ -294,7 +292,6 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with
 | Prowlarr      | `https://prowlarr.lan.<DOMAIN>`        | Local network |
 | Radarr        | `https://radarr.lan.<DOMAIN>`          | Local network |
 | Sonarr        | `https://sonarr.lan.<DOMAIN>`          | Local network |
-| Lidarr        | `https://lidarr.lan.<DOMAIN>`          | Local network |
 | slskd         | `https://slskd.lan.<DOMAIN>`           | Local network |
 | LazyLibrarian | `https://lazylibrarian.lan.<DOMAIN>`   | Local network |
 | Suwayomi      | `https://suwayomi.lan.<DOMAIN>`        | Local network |
@@ -469,14 +466,16 @@ The media tree is mounted read-only under `/data/media`, so Jellyfin can never
 delete or change a file. In Dashboard > Libraries, add one library per row. Name
 them as you like, Friends see these names, and the NAS names them in French:
 
-| Library | Content type | Folders                                      |
-| ------- | ------------ | -------------------------------------------- |
-| Movies  | Movies       | `/data/media/movies`                         |
-| Shows   | Shows        | `/data/media/shows`                          |
-| Anime   | Shows        | `/data/media/anime`                          |
-| Music   | Music        | `/data/media/music` and `/data/media/aurral` |
-| Books   | Books        | `/data/media/books`                          |
-| Manga   | Books        | `/data/media/manga`                          |
+| Library | Content type | Folders              |
+| ------- | ------------ | -------------------- |
+| Movies  | Movies       | `/data/media/movies` |
+| Shows   | Shows        | `/data/media/shows`  |
+| Anime   | Shows        | `/data/media/anime`  |
+| Books   | Books        | `/data/media/books`  |
+| Manga   | Books        | `/data/media/manga`  |
+
+Jellyfin holds no music: [Aurral](#aurral) serves it, to its own web player and
+to Subsonic apps.
 
 For each library, set the preferred metadata language and country, here French
 and France, so titles and summaries come in that language. Leave "Save artwork
@@ -884,8 +883,8 @@ global upload limit in Speed, about 60% of the upload speed of the line.
 
 Requires [qBittorrent](#qbittorrent).
 
-Prowlarr holds the indexers once and pushes them to Radarr, Sonarr, Lidarr and
-the other tools. FlareSolverr opens indexers protected by Cloudflare for it.
+Prowlarr holds the indexers once and pushes them to Radarr, Sonarr and the
+other tools. FlareSolverr opens indexers protected by Cloudflare for it.
 Neither sees any media file. Jackett can replace Prowlarr, without the push.
 
 ### Login of Prowlarr
@@ -926,7 +925,7 @@ every tracker, so its searches and torrent files go through the VPN. Click
 
 Leave "Seed Ratio" and "Seed Time" empty on every indexer, in Indexers, edit it,
 "Show Advanced". With the global seeding limits of qBittorrent off, no torrent
-ever stops, so Radarr, Sonarr and Lidarr never remove one: a torrent of C411
+ever stops, so Radarr and Sonarr never remove one: a torrent of C411
 seeds forever, and ratio removes a public one after two weeks, or once the same
 files seed on C411.
 
@@ -1117,6 +1116,163 @@ The steps are the same as in Radarr, with these differences:
   the type "Standard": switch its "Series Type" to "Anime" in "Edit", then
   "Refresh & Scan".
 
+## slskd
+
+Requires [qBittorrent](#qbittorrent).
+
+slskd is a Soulseek client. Soulseek is a network of music lovers who share
+their own folders, where rare albums missing from every tracker often turn up.
+slskd shares the network of Gluetun, like qBittorrent: when the VPN is down, it
+has no connectivity at all. It downloads into the `soulseek` folder of the
+torrents tree, under `/data/torrents/soulseek`, where [Aurral](#aurral) picks
+up each album, and shares the Library of Aurral, mounted read-only under
+`/data/media/aurral`, so nobody can change it through slskd. Nicotine+ can
+replace it, without the API that Aurral needs.
+
+### Soulseek account
+
+Soulseek has no sign-up page: slskd creates the account at its first connection,
+if the username is free. In `.env`, set `SOULSEEK_USERNAME` to a username that
+does not identify you and `SOULSEEK_PASSWORD` to a strong password stored in
+your password manager. Other Soulseek users see the username and the IP of the
+VPN, never the home IP.
+
+### Login of slskd
+
+In `.env`, set `SLSKD_USERNAME` and `SLSKD_PASSWORD` to the login of its web UI,
+distinct from the other tools, and `SLSKD_API_KEY` to a new key, which Aurral
+and Homepage use:
+
+```bash
+openssl rand -hex 24
+```
+
+Restart doco-cd to apply `.env`:
+
+```sh
+docker restart doco-cd
+```
+
+Open `https://slskd.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. The status at
+the top turns to connected once slskd reaches Soulseek.
+
+### Forwarded port
+
+Other Soulseek users connect to slskd on its listening port. Without a forwarded
+port, slskd still downloads, but fewer users can reach it and some transfers
+fail.
+
+1. Reserve a second port at the VPN provider, on the [ports
+   page](https://airvpn.org/ports/) with AirVPN, and leave its local port empty.
+2. In `.env`, add it to `VPN_FORWARDED_PORT` after the qBittorrent one, for
+   example `VPN_FORWARDED_PORT=41234,52345`, and set `SLSKD_LISTEN_PORT` to it,
+   here `52345`. Gluetun opens every port of `VPN_FORWARDED_PORT` in its
+   firewall.
+3. Restart doco-cd to apply `.env`.
+
+`./scripts/verify.sh` checks that `SLSKD_LISTEN_PORT` is one of the ports of
+`VPN_FORWARDED_PORT` after the qBittorrent one, and fails slskd until it is.
+
+### Sharing
+
+Many Soulseek users refuse to send files to a user who shares nothing. slskd
+shares the whole Library of Aurral, which it scans at each start. Once Aurral
+added new albums, open Shares in slskd and click "Rescan" so that other users
+see them.
+
+## Aurral
+
+Requires [slskd](#slskd) and [Accounts](#accounts).
+
+[Aurral](https://github.com/lklynet/aurral) is the music of the NAS. Each Friend
+signs in with their Account, discovers artists from what they listen to,
+follows an artist or adds an album, gets playlists of their own, and listens in
+the browser or in a Subsonic app. Aurral downloads every album from Soulseek
+through slskd, FLAC first, into its Library, under `/data/media/aurral`, which
+it alone manages, and checks each file before it keeps it. Jellyfin holds no
+music. Aurral sits in a zone of its own with Caddy and Gluetun, which carries
+slskd, and reaches Authelia through Caddy. Lidarr follows artists too, without
+the discovery and the playlists, and Navidrome plays music without downloading
+any.
+
+### First start
+
+1. Open `https://aurral.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from the local network
+   and create the local admin account, a recovery login stored in your password
+   manager.
+2. Friends sign in with Authelia, through OpenID Connect. Aurral creates their
+   user at the first sign-in, and gives the admin role to the members of
+   `jellynas_admins`. Aurral has no switch to turn off its own passwords: its
+   sign-in page leads with Authelia and hides the password form behind "Sign in
+   with a local account instead".
+3. In Settings > Users, keep "Add artist" and "Add album" on and every delete
+   off in the default permissions, so a Friend adds what they want without
+   waiting for the Admin, and removes nothing.
+
+### Soulseek
+
+1. In Settings > Downloads > slskd, turn on "Enable slskd", enter
+   `http://gluetun:5030` as the server URL, since slskd shares the network of
+   Gluetun, paste `SLSKD_API_KEY`, then click "Test connection". slskd
+   downloads into `/data/torrents/soulseek/downloads`, which Aurral sees at the
+   same path.
+2. In Settings > Downloads > Download clients, keep slskd as the only source:
+   turn off yt-dlp, and leave Prowlarr and qBittorrent off. Aurral then never
+   downloads from YouTube, nor from C411, where ratio could not hold it.
+3. In Settings > Downloads > Quality, pick "Lossless": FLAC first, MP3 or AAC
+   only when no FLAC turns up. Under Advanced, turn on "Automatic upgrades", so
+   Aurral replaces a lossy album with FLAC once Soulseek has it.
+
+### Follow an artist
+
+On the page of an artist, select "Monitor". Aurral checks the artists it
+follows once a day and downloads their new releases. In Settings > Monitoring >
+Default rules, pick what following an artist brings by default: the back
+catalogue, the new releases, and the release types.
+
+### Import a music library
+
+1. Copy the music under `$DATA_ROOT/media/music`, which Aurral mounts as an
+   inbox, and give it to the Apps user:
+
+   ```sh
+   sudo chown -R 568:568 "$DATA_ROOT/media/music"
+   ```
+
+2. In Settings > Library, click "Import a folder", pick `/data/media/music`,
+   the mode "Move" and the monitor "Tracks". Aurral moves each file into its
+   Library as `Artist/Album/07 - Title`, fills in the missing tags, and empties
+   the inbox. Importing never follows an artist.
+3. In slskd, Shares, click "Rescan".
+
+### Apps
+
+Aurral serves the Subsonic API at `https://aurral.<DOMAIN>:<CADDY_HTTPS_PORT>`,
+so any Subsonic app plays the Library, the playlists and the flows of each
+Friend:
+
+| Platform | App       | Price          |
+| -------- | --------- | -------------- |
+| Android  | Symfonium | About 5 € once |
+| Android  | Tempus    | Free           |
+| iPhone   | Amperfy   | Free           |
+| iPhone   | play:Sub  | Paid           |
+| Computer | Feishin   | Free           |
+
+A Subsonic app cannot go through Authelia, so it signs in with a password of
+Aurral, which a user created by Authelia does not have. In Settings > Users, set
+one for each Friend, distinct from their Account, and send it to them with the
+address and their username. In the browser, a Friend signs in with Authelia,
+and can sign in another browser with a code from Settings > Profile > "Pair a
+device".
+
+### Listening history
+
+Each Friend connects ListenBrainz in Settings > Listening > ListenBrainz, with
+the user token of their ListenBrainz settings. Aurral then sends what they play
+in the browser and in the apps, and recommends from it. ListenBrainz can carry
+it on to Last.fm, which Aurral no longer reaches itself.
+
 ## Policy
 
 Requires [Jellyfin](#jellyfin), [Radarr](#radarr) and [Sonarr](#sonarr).
@@ -1206,7 +1362,6 @@ flowchart LR
         FlareSolverr("FlareSolverr<br/>Cloudflare")
         Radarr("Radarr<br/>movies")
         Sonarr("Sonarr<br/>shows, anime")
-        Lidarr("Lidarr<br/>music")
         LazyLibrarian("LazyLibrarian<br/>books")
         Bazarr("Bazarr<br/>subtitles")
         Tdarr("Tdarr<br/>MKV H265")
@@ -1249,7 +1404,7 @@ flowchart LR
     Jellyfin -->|LDAP| lldap
     Authelia -->|LDAP| lldap
     Aurral -->|"OpenID Connect"| Authelia
-    Aurral -->|"follow artists"| Lidarr
+    Aurral -->|"FLAC from Soulseek"| vpn
     watch -->|"Requests, Seerr zone"| automation
     automation -->|grab| vpn
     ratio -->|"grab, clean, cross-seed"| vpn
@@ -1272,7 +1427,6 @@ flowchart LR
     Prowlarr --- FlareSolverr
     Prowlarr -->|indexers| Radarr
     Prowlarr -->|indexers| Sonarr
-    Prowlarr -->|indexers| Lidarr
     Prowlarr -->|indexers| LazyLibrarian
     Recyclarr -->|profiles| Radarr
     Recyclarr -->|profiles| Sonarr
@@ -1303,7 +1457,7 @@ flowchart LR
     style watch fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px,color:#1f2937
     classDef automationNode fill:#ffffff,stroke:#43a047,color:#1f2937,stroke-width:1.5px
     class Prowlarr,Recyclarr,FlareSolverr,Radarr,Sonarr automationNode
-    class Lidarr,LazyLibrarian,Bazarr,Tdarr automationNode
+    class LazyLibrarian,Bazarr,Tdarr automationNode
     style automation fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#1f2937
     classDef vpnNode fill:#ffffff,stroke:#fb8c00,color:#1f2937,stroke-width:1.5px
     class qBittorrent,slskd,Suwayomi vpnNode
@@ -1366,204 +1520,6 @@ pinned, so Renovate keeps them up to date:
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
 | Actions | actionlint checks the workflows, then zizmor audits their security |
-
-## slskd
-
-Requires [qBittorrent](#qbittorrent).
-
-slskd is a Soulseek client. Soulseek is a network of music lovers who share
-their own folders, where rare albums missing from every tracker often turn up.
-slskd shares the network of Gluetun, like qBittorrent: when the VPN is down, it
-has no connectivity at all. It downloads into the `soulseek` folder of the
-torrents tree, under `/data/torrents/soulseek`, and shares the music folder of
-the Library, mounted read-only under `/data/media/music`, so nobody can change
-the Library through it. Nicotine+ can replace it, without the API that Lidarr
-needs.
-
-### Soulseek account
-
-Soulseek has no sign-up page: slskd creates the account at its first connection,
-if the username is free. In `.env`, set `SOULSEEK_USERNAME` to a username that
-does not identify you and `SOULSEEK_PASSWORD` to a strong password stored in
-your password manager. Other Soulseek users see the username and the IP of the
-VPN, never the home IP.
-
-### Login of slskd
-
-In `.env`, set `SLSKD_USERNAME` and `SLSKD_PASSWORD` to the login of its web UI,
-distinct from the other tools, and `SLSKD_API_KEY` to a new key, which Lidarr
-and Homepage use:
-
-```bash
-openssl rand -hex 24
-```
-
-Restart doco-cd to apply `.env`:
-
-```sh
-docker restart doco-cd
-```
-
-Open `https://slskd.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. The status at
-the top turns to connected once slskd reaches Soulseek.
-
-### Forwarded port
-
-Other Soulseek users connect to slskd on its listening port. Without a forwarded
-port, slskd still downloads, but fewer users can reach it and some transfers
-fail.
-
-1. Reserve a second port at the VPN provider, on the [ports
-   page](https://airvpn.org/ports/) with AirVPN, and leave its local port empty.
-2. In `.env`, add it to `VPN_FORWARDED_PORT` after the qBittorrent one, for
-   example `VPN_FORWARDED_PORT=41234,52345`, and set `SLSKD_LISTEN_PORT` to it,
-   here `52345`. Gluetun opens every port of `VPN_FORWARDED_PORT` in its
-   firewall.
-3. Restart doco-cd to apply `.env`.
-
-`./scripts/verify.sh` checks that `SLSKD_LISTEN_PORT` is one of the ports of
-`VPN_FORWARDED_PORT` after the qBittorrent one, and fails slskd until it is.
-
-### Sharing
-
-Many Soulseek users refuse to send files to a user who shares nothing. slskd
-shares the whole music folder, which it scans at each start. Once Lidarr
-imported new albums, open Shares in slskd and click "Rescan" so that other users
-see them.
-
-## Lidarr
-
-Requires [Prowlarr](#prowlarr) and [slskd](#slskd).
-
-Lidarr follows artists: every album of a followed artist arrives in the Library
-on its own, from the indexers through qBittorrent, or from Soulseek through
-slskd when no indexer has it. Its image supports plugins, and it uses the
-[Tubifarry](https://github.com/TypNull/Tubifarry) plugin, which adds slskd as an
-indexer and as a download client. It sees only the music folder, under
-`/data/media/music`, and the torrents tree, under `/data/torrents`. No other
-maintained open source tool follows artists as well.
-
-### Login of Lidarr
-
-Open `https://lidarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication
-the same way as Prowlarr, with its own username and password. Copy the API key
-from Settings > General > Security into `LIDARR_API_KEY` in `.env`.
-
-### Tubifarry
-
-In System > Plugins, paste `https://github.com/TypNull/Tubifarry` into "GitHub
-URL", click "Install", and let Lidarr restart. Tubifarry then shows up in the
-list of installed plugins.
-
-### Media management of Lidarr
-
-In Settings > Media Management, click "Show Advanced" at the top, then:
-
-1. Under Root Folders, add `/data/media/music`, with the default quality and
-   metadata profiles.
-2. Check "Rename Tracks".
-3. Under Importing, uncheck "Use Hardlinks instead of Copy". Each import is a
-   copy, so the torrent keeps seeding from the torrents tree.
-
-### Quality profile
-
-In Settings > Profiles, edit the quality profile of the root folder, check
-"Upgrades Allowed" and set "Upgrade Until" to the format you want, for example
-`FLAC`. Lidarr then replaces an album with a better release until it reaches
-that format, and stops there, like movies and shows.
-
-### Download clients
-
-For qBittorrent:
-
-1. In qBittorrent, add a category `music` with `/data/torrents/music` as the
-   save path.
-2. In Lidarr, Settings > Download Clients, click "+" and pick qBittorrent.
-3. Enter `gluetun` as the host, `8080` as the port, and the qBittorrent login.
-4. Set "Category" to `music`.
-5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding
-   goal, Lidarr removes it and its files from the torrents tree, and the album
-   stays in the Library.
-6. Click "Test", then "Save".
-
-For slskd:
-
-1. In Settings > Download Clients, click "+" and pick Slskd.
-2. Enter `http://gluetun:5030` as the URL, since slskd shares the network of
-   Gluetun, and paste `SLSKD_API_KEY`.
-3. Check "Remove Completed", click "Test", then "Save". Tubifarry reads the
-   download folder from slskd, `/data/torrents/soulseek/downloads`, which Lidarr
-   sees at the same path.
-
-### Indexers of Lidarr
-
-1. In Prowlarr, Settings > Apps, click "+" and pick Lidarr. Set "Prowlarr
-   Server" to `http://prowlarr:9696` and "Lidarr Server" to
-   `http://lidarr:8686`, paste the Lidarr API key, click "Test", then "Save".
-   Every indexer with audio categories then shows up in Lidarr, Settings >
-   Indexers.
-2. In Lidarr, Settings > Indexers, click "+" and pick Slskd. Enter
-   `http://gluetun:5030` as the URL, paste `SLSKD_API_KEY`, check "Include Only
-   Audio Files", click "Test", then "Save".
-
-### Follow an artist
-
-In Library > Add New, search an artist, pick `/data/media/music` as the root
-folder and the albums to monitor, and check "Start search for missing albums".
-Lidarr searches the indexers and Soulseek, sends each album to qBittorrent or
-slskd, then copies it into the music folder, where the Music library of Jellyfin
-picks it up.
-
-## Aurral
-
-Requires [Lidarr](#lidarr) and [Accounts](#accounts).
-
-[Aurral](https://github.com/lklynet/aurral) is the music side of Seerr. Each
-Friend signs in with their Account, discovers artists from what they listen to,
-asks Lidarr for an artist or an album, and gets playlists of their own, which
-Aurral publishes to their Jellyfin user, and so to Finamp. It reads the music
-folder of Lidarr, read-only, and downloads the tracks of its playlists that
-Lidarr does not have into `/data/media/aurral`, which Jellyfin reads with the
-music. It sits in a zone of its own with Lidarr, and reaches Jellyfin and
-Authelia through Caddy. Lidify only discovers, and Ombi requests music without
-playlists.
-
-### First start
-
-1. Open `https://aurral.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from the local network
-   and create the local admin account, a recovery login stored in your password
-   manager.
-2. In Settings > Users > Sign-in, turn on "SSO-only". Friends then sign in with
-   Authelia only. Aurral creates their user at the first sign-in, and gives the
-   admin role to the members of `jellynas_admins`.
-3. In Settings > Users, leave the default permissions of a new user, which may
-   add an artist or an album but delete nothing.
-
-### Aurral and Lidarr
-
-1. In Settings > Library > Lidarr, turn on "Enabled", enter `http://lidarr:8686`
-   and `LIDARR_API_KEY`, then click "Test connection".
-2. Pick `/data/media/music` as the root folder, the quality and metadata
-   profiles of Lidarr, and check "Search on add".
-3. Never click "Apply to Lidarr", it would replace the quality profiles of
-   Lidarr.
-
-### Aurral and Jellyfin
-
-1. In Jellyfin, check that the Music library holds `/data/media/aurral`, as
-   [Libraries](#libraries) sets out, and create an API key named `Aurral` in
-   Dashboard > API Keys.
-2. In Aurral, Settings > Playback > Jellyfin, enter
-   `https://jellyfin.<DOMAIN>:<CADDY_HTTPS_PORT>`, the key, and the user id of
-   the Admin, then click "Test connection". Aurral publishes each playlist to
-   the Jellyfin user with the same username as its owner, which lldap keeps the
-   same.
-
-### Listening history
-
-Each Friend links their Last.fm or ListenBrainz account in Settings > Listening,
-so that Aurral recommends from what they play. With ListenBrainz, its Jellyfin
-plugin sends what each Friend plays in Jellyfin.
 
 ## LazyLibrarian
 
@@ -2025,7 +1981,7 @@ every file of the Library and takes a while.
 
 ## Music bot
 
-Requires [Jellyfin](#jellyfin) and [Lidarr](#lidarr).
+Requires [Jellyfin](#jellyfin) and [Aurral](#aurral).
 
 The music bot plays the music of the Library in a voice channel of the Discord
 server of the Admin. Only a DJ commands it, a member who holds the `MusicDJ`
@@ -2321,7 +2277,7 @@ Homepage, see [Farm board](#farm-board).
    switches say. While the "Pause Prowlarr" switch is on, it also moves each
    indexer of `RATIO_HOLD_INDEXER_IDS` onto a sync profile named Paused, which
    it creates with RSS, automatic and interactive search off. Prowlarr pushes it
-   to Radarr, Sonarr and Lidarr, whose sync level must stay Full Sync, so they
+   to Radarr and Sonarr, whose sync level must stay Full Sync, so they
    stop downloading from C411. Every torrent keeps seeding. Once the Account
    ratio is back over the floor, ratio puts C411 back on its former profile.
 3. **Counts.** It keeps the Ledger in `${APPDATA_ROOT}/ratio/state.json`, which
@@ -2362,8 +2318,9 @@ Homepage, see [Farm board](#farm-board).
    one of the five categories leaves after 14 days of seeding, or once a C411
    torrent seeds the same files, at least 6 hours after it finished.
 9. **Files every torrent.** qBittorrent holds five categories: `movies`,
-   `shows`, `music` and `books` for Radarr, Sonarr, Lidarr and LazyLibrarian,
-   and `farm` for the grabs of ratio and the cross-seeds. The Library stays in
+   `shows` and `books` for Radarr, Sonarr and LazyLibrarian, `music`, which
+   nothing uses since Aurral downloads from Soulseek, and `farm` for the grabs
+   of ratio and the cross-seeds. The Library stays in
    its categories. The "Adopt the Library" switch, off by default, moves a C411
    torrent of the Library into the Farm 6 hours after it finished. ratio tags
    every public torrent `public`, and every C411 torrent with its Source:
@@ -2679,7 +2636,7 @@ Kuma](#uptime-kuma).
 
 Homepage is the start page of the Admin: one tile per service, grouped as in
 [Architecture](#architecture), with a link to its lan name and its live figures,
-such as the Requests waiting in Seerr, the queues of Radarr, Sonarr and Lidarr,
+such as the Requests waiting in Seerr, the queues of Radarr and Sonarr,
 the manga of Suwayomi, the torrents of qBittorrent, the public IP and the
 country of the VPN, and the free space of the data disk, plus the board of ratio
 in two iframes. Homarr or Dashy can replace it.
@@ -2720,7 +2677,6 @@ others, then restart doco-cd to apply `.env`:
 - Prowlarr, `PROWLARR_API_KEY`: set in [Prowlarr](#prowlarr)
 - Radarr, `RADARR_API_KEY`: set in [Radarr](#radarr)
 - Sonarr, `SONARR_API_KEY`: set in [Sonarr](#sonarr)
-- Lidarr, `LIDARR_API_KEY`: set in [Lidarr](#lidarr)
 - slskd, `SLSKD_API_KEY`: set in [slskd](#slskd)
 - Suwayomi, `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD`: set in
   [Suwayomi](#suwayomi)

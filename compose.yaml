@@ -16,7 +16,6 @@ include:
   - services/prowlarr/compose.yaml
   - services/radarr/compose.yaml
   - services/sonarr/compose.yaml
-  - services/lidarr/compose.yaml
   - services/slskd/compose.yaml
   - services/lazylibrarian/compose.yaml
   - services/suwayomi/compose.yaml
