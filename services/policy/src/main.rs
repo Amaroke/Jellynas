@@ -126,9 +126,7 @@ fn main() {
     }
     let apps = apps(|name| env::var(name).ok());
     if apps.is_empty() {
-        eprintln!(
-            "No app to keep: set the API key of an app, or the login of Suwayomi, in .env"
-        );
+        eprintln!("No app to keep: set the API key of an app, or the login of Suwayomi, in .env");
         process::exit(1);
     }
     let names: Vec<&str> = apps.iter().map(App::name).collect();
