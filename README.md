@@ -358,9 +358,9 @@ docker compose -f services/doco-cd/compose.yaml up -d
 Each deploy runs from a copy of the merged revision, kept in the data volume of
 doco-cd. It recreates the services whose compose definition or image changed,
 and those that mount a file of the repo that changed, such as
-`services/ratio/ratio.py`. It rebuilds Caddy from its Dockerfile, and removes
-the services commented out in `compose.yaml`. A failed deploy is retried at the
-next poll.
+`services/ratio/ratio.py`. It rebuilds Caddy and jellyfin-policy from their
+Dockerfile, and removes the services commented out in `compose.yaml`. A failed
+deploy is retried at the next poll.
 
 doco-cd reaches Docker through its socket, which gives it full control of the
 machine, like any tool that runs Compose. Its logs name each deploy, and the
@@ -401,10 +401,11 @@ and the Dependency Dashboard issue lists every pending update.
 - The apk and apt packages of the Dockerfiles, through their `_VERSION`
   arguments
 - The Python packages of `services/music-bot/requirements.txt`
+- The Rust crates of `services/jellyfin/policy/Cargo.toml`
 - The GitHub Actions and the pre-commit hook
 - The tools pinned in `.github/workflows/ci.yml`: gitleaks, hadolint,
-  actionlint,
-  yamllint, ruff, zizmor, markdownlint-cli2 and Renovate itself
+  actionlint, the Rust image, yamllint, ruff, zizmor, markdownlint-cli2 and
+  Renovate itself
 
 Renovate does not follow `ubuntu-latest`, the tools that runner ships such as
 shellcheck, the plugins installed by hand inside an app, or TrueNAS.
@@ -490,13 +491,9 @@ collection. Leave it as it is.
 
 Each Friend gets their own Account, so their watch history and progress are
 theirs. The Accounts live in lldap, as [Accounts](#accounts) sets out, and
-Jellyfin creates its user at the first sign-in of a Friend. Then, in Dashboard >
-Users, open the user and:
-
-1. Grant access to all libraries.
-2. Leave "Allow this user to manage the server" unchecked.
-3. Check "Allow media downloading" so the Friend can download videos, books and
-   manga to their phone.
+Jellyfin creates its user at the first sign-in of a Friend, with access to all
+libraries and without the right to manage the server. Within 10 minutes,
+jellyfin-policy gives it the rules below.
 
 Quick Connect stays on in Dashboard > General: a Friend signs in on a TV by
 typing the code it shows into Jellyfin on their phone, without typing their
@@ -510,11 +507,33 @@ Playback > Transcoding. A client that plays the file as it is needs no
 transcoding at all. With an Intel or AMD GPU passed to the NAS, map `/dev/dri`
 into the container and pick "Intel QuickSync" or "VAAPI" there.
 
-### Login lockout
+### Rules of the Accounts
 
-In Dashboard > Users, keep "Maximum number of failed login attempts before user
-is locked out" at a value (3 for example) on every Account, never `-1`, so no
-Account can be brute forced from the internet.
+jellyfin-policy applies the same rules to every Account of Jellyfin, the Admin
+included, every 10 minutes, through the API key of `JELLYFIN_API_KEY`. A new
+Account gets them within 10 minutes, and a rule changed by hand in Dashboard >
+Users comes back at the next pass. It is a small Rust program,
+`services/jellyfin/policy/src/main.rs`, which doco-cd builds into an image of
+2 MB that runs in 1 MB of memory. Change a rule in its `policy` or
+`configuration` function, never in the Dashboard:
+
+| Rule                                     | Value                         |
+| ---------------------------------------- | ----------------------------- |
+| Live TV                                  | Off                           |
+| Public sharing                           | Off                           |
+| Media conversion                         | Off, it transcodes on the CPU |
+| Media downloading                        | On, for videos, books, manga  |
+| Remote control of other users            | Off                           |
+| Active sessions                          | 1 at a time                   |
+| Failed sign-ins before lockout           | 3                             |
+| SyncPlay                                 | Create and join groups        |
+| Deletion of media                        | Off, except for the Admin     |
+| Next episode plays by itself             | On                            |
+
+An Account locked out after 3 failed sign-ins stays locked until the Admin
+unlocks it, in Dashboard > Users, by unticking "Disable this user". The
+preferences of each Friend, such as the languages of the audio and of the
+subtitles, stay theirs to set.
 
 ### Jellyfin behind Caddy
 
