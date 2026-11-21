@@ -22,5 +22,9 @@ services:
     labels:
       kuma.farm-board.docker.name: Farm board
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: Farm board
+      dashboard.section: Farm
+      dashboard.icon: discord.svg
+      dashboard.switchable: "true"
     volumes:
       - ${APPDATA_ROOT}/farm-board:/state

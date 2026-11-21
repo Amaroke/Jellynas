@@ -30,6 +30,10 @@ services:
       kuma.indexarr.http.name: Indexarr
       kuma.indexarr.http.url: http://indexarr:8787/health
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: Indexarr
+      dashboard.section: Observation
+      dashboard.href: https://indexarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      dashboard.switchable: "true"
     volumes:
       - ${APPDATA_ROOT}/indexarr:/app/data
       - ${DATA_ROOT}/media/movies:/data/media/movies:ro

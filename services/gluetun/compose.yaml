@@ -31,6 +31,9 @@ services:
       HTTPPROXY_STEALTH: "on"
     labels:
       kuma.gluetun.docker.name: Gluetun
+      dashboard.name: Gluetun
+      dashboard.section: Downloads
+      dashboard.icon: gluetun.svg
     volumes:
       - ./entrypoint.sh:/jellynas-entrypoint.sh:ro
       - ${APPDATA_ROOT}/gluetun:/gluetun

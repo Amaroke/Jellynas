@@ -28,6 +28,9 @@ services:
       SUWAYOMI_PASSWORD: ${SUWAYOMI_PASSWORD}
     labels:
       kuma.policy.docker.name: Policy
+      dashboard.name: Policy
+      dashboard.section: Automation
+      dashboard.switchable: "true"
     healthcheck:
       test:
         - "CMD"

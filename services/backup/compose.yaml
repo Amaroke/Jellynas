@@ -21,6 +21,9 @@ services:
       NOTIFICATION_LEVEL: error
     labels:
       kuma.backup.docker.name: Backup
+      dashboard.name: Backup
+      dashboard.section: Observation
+      dashboard.icon: restic.png
     volumes:
       - ${APPDATA_ROOT}/:/backup/appdata:ro
       - ${BACKUP_ROOT}/:/archive

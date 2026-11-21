@@ -17,6 +17,11 @@ services:
       kuma.radarr.http.name: Radarr
       kuma.radarr.http.url: http://radarr:7878/ping
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: Radarr
+      dashboard.section: Automation
+      dashboard.icon: radarr.svg
+      dashboard.href: https://radarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      dashboard.switchable: "true"
     volumes:
       - ${APPDATA_ROOT}/radarr:/config
       - ${DATA_ROOT}/media/movies:/data/media/movies

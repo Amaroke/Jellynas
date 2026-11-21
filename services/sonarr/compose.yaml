@@ -17,6 +17,11 @@ services:
       kuma.sonarr.http.name: Sonarr
       kuma.sonarr.http.url: http://sonarr:8989/ping
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: Sonarr
+      dashboard.section: Automation
+      dashboard.icon: sonarr.svg
+      dashboard.href: https://sonarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      dashboard.switchable: "true"
     volumes:
       - ${APPDATA_ROOT}/sonarr:/config
       - ${DATA_ROOT}/media/shows:/data/media/shows

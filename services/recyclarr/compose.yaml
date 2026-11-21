@@ -17,6 +17,10 @@ services:
       SONARR_API_KEY: ${SONARR_API_KEY}
     labels:
       kuma.recyclarr.docker.name: Recyclarr
+      dashboard.name: Recyclarr
+      dashboard.section: Automation
+      dashboard.icon: recyclarr.svg
+      dashboard.switchable: "true"
     volumes:
       - ./recyclarr.yml:/config/recyclarr.yml:ro
       - ./settings.yml:/config/settings.yml:ro

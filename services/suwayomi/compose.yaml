@@ -23,6 +23,11 @@ services:
     labels:
       kuma.suwayomi.docker.name: Suwayomi
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: Suwayomi
+      dashboard.section: Automation
+      dashboard.icon: suwayomi.svg
+      dashboard.href: https://suwayomi.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      dashboard.switchable: "true"
     volumes:
       - ${DATA_ROOT}/media/manga:/home/suwayomi/.local/share/Tachidesk/downloads
       - ${APPDATA_ROOT}/suwayomi:/home/suwayomi/.local/share/Tachidesk

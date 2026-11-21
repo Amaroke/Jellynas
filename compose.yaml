@@ -34,6 +34,7 @@ include:
   - services/dozzle/compose.yaml
   - services/socket-proxy/compose.yaml
   - services/homepage/compose.yaml
+  - services/dashboard/compose.yaml
   - services/backup/compose.yaml
 
 networks:
@@ -42,3 +43,5 @@ networks:
   identity-zone:
   aurral-zone:
   internal-zone:
+  dashboard-zone:
+  dashboard-docker-zone:

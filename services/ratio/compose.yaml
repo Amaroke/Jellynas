@@ -31,6 +31,9 @@ services:
     labels:
       kuma.ratio.docker.name: ratio
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: Ratio
+      dashboard.section: Farm
+      dashboard.switchable: "true"
     volumes:
       - ./ratio.py:/app/ratio.py:ro
       - ${APPDATA_ROOT}/ratio:/state

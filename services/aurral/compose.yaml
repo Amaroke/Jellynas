@@ -37,6 +37,11 @@ services:
         https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/health/live
       kuma.aurral.http.expiry_notification: "true"
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: Aurral
+      dashboard.section: Watch
+      dashboard.icon: aurral.svg
+      dashboard.href: https://aurral.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      dashboard.switchable: "true"
     volumes:
       - ${APPDATA_ROOT}/aurral:/config
       - ${DATA_ROOT}/media/music:/data/media/music

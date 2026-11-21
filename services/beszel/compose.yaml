@@ -16,6 +16,11 @@ services:
       kuma.beszel.http.name: Beszel
       kuma.beszel.http.url: http://beszel:8090/api/health
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: Beszel
+      dashboard.section: Observation
+      dashboard.icon: beszel.svg
+      dashboard.href: https://beszel.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      dashboard.switchable: "true"
     volumes:
       - ${APPDATA_ROOT}/beszel:/beszel_data
       - beszel_socket:/beszel_socket
@@ -44,6 +49,10 @@ services:
       DOCKER_HOST: tcp://127.0.0.1:2375
     labels:
       kuma.beszel-agent.docker.name: Beszel agent
+      dashboard.name: Beszel agent
+      dashboard.section: Observation
+      dashboard.icon: beszel.svg
+      dashboard.switchable: "true"
     volumes:
       - beszel_socket:/beszel_socket
       - ${DATA_ROOT}/.beszel:/extra-filesystems/data__Data:ro
