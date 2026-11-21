@@ -117,8 +117,65 @@ fn users(api: &impl Api) -> Result<usize, String> {
     Ok(fixed)
 }
 
+fn toggle(api: &impl Api, playlist: &Value, field: &str, path: &str) -> Result<bool, String> {
+    if playlist[field] == true {
+        return Ok(false);
+    }
+    let id = playlist["id"].as_str().ok_or("a playlist has no id")?;
+    api.send(
+        "PUT",
+        &format!("/playlists/{id}/{path}"),
+        &json!({ "enabled": true }),
+    )?;
+    Ok(true)
+}
+
+fn playlists(api: &impl Api) -> Result<usize, String> {
+    let wanted = rules(json!({
+        "syncEnabled": false,
+        "syncIntervalHours": 0,
+        "keepRemovedTracks": true,
+    }));
+    let status = api.get("/playlists/status")?;
+    let mut fixed = 0;
+    for playlist in status["staticPlaylists"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+    {
+        let id = playlist["id"].as_str().ok_or("a playlist has no id")?;
+        let mut changes = Map::new();
+        if toggle(api, &playlist, "recordHistory", "record-history")? {
+            changes.insert("recordHistory".to_string(), json!(true));
+        }
+        if toggle(
+            api,
+            &playlist,
+            "showTrackAvailability",
+            "track-availability",
+        )? {
+            changes.insert("showTrackAvailability".to_string(), json!(true));
+        }
+        let source = &playlist["importSource"];
+        if source.is_object() {
+            let drifted = drift(source, &wanted);
+            if !drifted.is_empty() {
+                api.send(
+                    "PUT",
+                    &format!("/playlists/{id}"),
+                    &json!({ "importSource": Value::Object(drifted.clone()) }),
+                )?;
+                changes.extend(drifted);
+            }
+        }
+        let name = playlist["name"].as_str().unwrap_or("?");
+        fixed += report("Aurral", &format!("playlist {name}"), &[&changes]);
+    }
+    Ok(fixed)
+}
+
 pub fn enforce(api: &impl Api) -> Result<usize, String> {
-    Ok(settings(api)? + following(api)? + users(api)?)
+    Ok(settings(api)? + following(api)? + users(api)? + playlists(api)?)
 }
 
 #[cfg(test)]
@@ -147,7 +204,19 @@ mod tests {
             ("/settings".to_string(), settings),
             ("/library/monitoring/defaults".to_string(), follow()),
             ("/users".to_string(), users),
+            (
+                "/playlists/status".to_string(),
+                json!({"staticPlaylists": []}),
+            ),
         ]))
+    }
+
+    fn imported() -> Value {
+        json!({"provider": "spotify", "externalId": "x", "syncEnabled": false, "syncIntervalHours": 0, "keepRemovedTracks": true})
+    }
+
+    fn playlist(id: &str, source: Value) -> Value {
+        json!({"id": id, "name": id, "recordHistory": true, "showTrackAvailability": true, "importSource": source})
     }
 
     #[test]
@@ -216,5 +285,58 @@ mod tests {
         assert_eq!(Ok(1), enforce(&fake));
         assert_eq!(vec!["PUT /library/monitoring/defaults"], fake.paths());
         assert_eq!(follow(), fake.body(0));
+    }
+
+    #[test]
+    fn kept_playlists_send_nothing() {
+        let mut fake = api(kept(), json!([]));
+        fake.pages.insert(
+            "/playlists/status".to_string(),
+            json!({"staticPlaylists": [playlist("a", imported()), playlist("b", Value::Null)]}),
+        );
+        assert_eq!(Ok(0), enforce(&fake));
+        assert!(fake.paths().is_empty());
+    }
+
+    #[test]
+    fn every_playlist_scrobbles_shows_availability_and_never_syncs() {
+        let mut drifted = playlist("a", imported());
+        drifted["recordHistory"] = json!(false);
+        drifted["showTrackAvailability"] = json!(false);
+        drifted["importSource"]["syncEnabled"] = json!(true);
+        drifted["importSource"]["syncIntervalHours"] = json!(24);
+        drifted["importSource"]["keepRemovedTracks"] = json!(false);
+        let mut fake = api(kept(), json!([]));
+        fake.pages.insert(
+            "/playlists/status".to_string(),
+            json!({"staticPlaylists": [drifted]}),
+        );
+        assert_eq!(Ok(1), enforce(&fake));
+        assert_eq!(
+            vec![
+                "PUT /playlists/a/record-history",
+                "PUT /playlists/a/track-availability",
+                "PUT /playlists/a",
+            ],
+            fake.paths()
+        );
+        assert_eq!(json!({"enabled": true}), fake.body(0));
+        assert_eq!(
+            json!({"importSource": {"syncEnabled": false, "syncIntervalHours": 0, "keepRemovedTracks": true}}),
+            fake.body(2)
+        );
+    }
+
+    #[test]
+    fn a_playlist_made_in_aurral_has_no_sync_to_change() {
+        let mut made = playlist("b", Value::Null);
+        made["showTrackAvailability"] = json!(false);
+        let mut fake = api(kept(), json!([]));
+        fake.pages.insert(
+            "/playlists/status".to_string(),
+            json!({"staticPlaylists": [made]}),
+        );
+        assert_eq!(Ok(1), enforce(&fake));
+        assert_eq!(vec!["PUT /playlists/b/track-availability"], fake.paths());
     }
 }

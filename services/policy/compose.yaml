@@ -16,6 +16,7 @@ services:
       - /tmp:mode=1777
     mem_limit: 16m
     environment:
+      TZ: ${TZ}
       DOMAIN: ${DOMAIN}
       CADDY_HTTPS_PORT: ${CADDY_HTTPS_PORT:-443}
       JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}

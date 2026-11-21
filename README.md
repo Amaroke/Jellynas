@@ -491,8 +491,8 @@ collection. Leave it as it is.
 Each Friend gets their own Account, so their watch history and progress are
 theirs. The Accounts live in lldap, as [Accounts](#accounts) sets out, and
 Jellyfin creates its user at the first sign-in of a Friend, with access to all
-libraries and without the right to manage the server. Within 10 minutes,
-policy gives it the rules below.
+libraries and without the right to manage the server. At the next pass of
+policy, at 4:30 in the morning, it gets the rules below.
 
 Quick Connect stays on: a Friend signs in on a TV by typing the code it shows
 into Jellyfin on their phone, without typing their password on the TV.
@@ -510,7 +510,7 @@ or AMD GPU passed to the NAS, map `/dev/dri` into the container and change
 
 [policy](#policy) applies the same rules to the server and to every Account of
 Jellyfin, the Admin included, through the API key of `JELLYFIN_API_KEY`. A new
-Account gets them within 10 minutes. Change a rule in the `server`, `policy` or
+Account gets them at the next pass. Change a rule in the `server`, `policy` or
 `configuration` function of `services/policy/src/jellyfin.rs`, never in the
 Dashboard. The server:
 
@@ -1229,7 +1229,7 @@ any.
 
 ### Settings of Aurral kept by policy
 
-[policy](#policy) puts these back every 10 minutes:
+[policy](#policy) puts these back every night:
 
 | Setting                | Value                                  |
 | ---------------------- | -------------------------------------- |
@@ -1238,6 +1238,8 @@ any.
 | Quality                | cutoff FLAC, automatic upgrades on     |
 | Permissions of Friends | add artist, add album, playlists       |
 | Following an artist    | new releases only                      |
+| Every playlist         | scrobble tracks, show availability     |
+| Imported playlist      | no auto-sync, keep removed tracks      |
 
 The permissions of Friends are also the default ones, every delete stays off,
 and an admin keeps every right.
@@ -1298,10 +1300,15 @@ it on to Last.fm, which Aurral no longer reaches itself.
 Requires [Jellyfin](#jellyfin), [Radarr](#radarr), [Sonarr](#sonarr) and
 [Aurral](#aurral).
 
-policy keeps the settings of the apps the way this README sets them. Every 10
-minutes, it reads them through the API of each app, and puts back only what
-differs, so a setting changed by hand in a Dashboard comes back at the next
-pass. It keeps the settings listed in
+policy keeps the settings of the apps the way this README sets them. At its
+start, then every day at 4:30 in the time zone of `TZ`, it reads them through
+the API of each app, and puts back only what differs, so a setting changed by
+hand in a Dashboard comes back the next night. Restart it to apply a rule at
+once:
+
+```sh
+docker restart policy
+``` It keeps the settings listed in
 [Rules of the server and the Accounts](#rules-of-the-server-and-the-accounts),
 [Settings kept by policy](#settings-kept-by-policy),
 [Settings of Sonarr kept by policy](#settings-of-sonarr-kept-by-policy) and
