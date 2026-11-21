@@ -14,11 +14,6 @@ d'Aurral, même sans connexion.
 -# Pour l'APK, autorise l'installation d'applis inconnues quand Android le
 demande.
 
-## 🔑 Mot de passe d'appli
-
-Dans Aurral, menu de ton profil > Settings > Profile > Set password. Ce mot de
-passe sert aux applis, il est différent de celui de ton compte.
-
 ## 🔌 Se connecter
 
 Dans Tempus, "Open server editor", puis :
