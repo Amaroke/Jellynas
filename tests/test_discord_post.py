@@ -231,6 +231,30 @@ class ActionsTest(unittest.TestCase):
         self.assertIn('class="farm-board failed"', page)
         self.assertIn("Pas de réponse", page)
 
+    def post_json(self, path):
+        request = urllib.request.Request(self.url + path, data=b"", method="POST", headers={"Accept": "application/json"})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.status
+
+    def test_the_actions_are_listed_as_json(self):
+        self.start()
+        with urllib.request.urlopen(f"{self.url}/actions.json", timeout=10) as response:
+            found = json.load(response)
+        self.assertEqual(["discord", "farm-board"], [action["key"] for action in found["actions"]])
+        self.assertEqual("Messages Discord", found["actions"][0]["label"])
+
+    def test_a_json_client_gets_a_status_instead_of_the_page(self):
+        self.start()
+        self.assertEqual(202, self.post_json("/actions/discord"))
+        self.assertTrue(self.wake.is_set())
+
+    def test_a_json_client_hears_that_the_farm_board_does_not_answer(self):
+        self.start()
+        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(urllib.error.HTTPError) as caught:
+            self.post_json("/actions/farm-board")
+        caught.exception.close()
+        self.assertEqual(502, caught.exception.code)
+
     def test_an_unknown_action_is_refused(self):
         self.start()
         with self.assertRaises(urllib.error.HTTPError) as caught:

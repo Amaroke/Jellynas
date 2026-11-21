@@ -3,6 +3,7 @@ mod format;
 pub mod parse;
 
 use serde::Serialize;
+use serde_json::Value;
 use std::collections::BTreeMap;
 
 pub use fetch::Client;
@@ -26,9 +27,9 @@ pub struct Reading {
     pub rows: Vec<Row>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-pub struct Panel {
-    pub reading: Option<Reading>,
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Panel<T = Reading> {
+    pub reading: Option<T>,
     pub error: Option<String>,
     pub updated: Option<u64>,
 }
@@ -37,9 +38,16 @@ pub struct Panel {
 pub struct Board {
     pub host: Option<Panel>,
     pub widgets: BTreeMap<String, Panel>,
+    pub farm: Option<Panel<Value>>,
+    pub actions: Option<Panel<Value>>,
+    pub pulls: Option<Panel<Value>>,
 }
 
-pub fn settle(previous: Option<&Panel>, result: Result<Reading, String>, now: u64) -> Panel {
+pub fn settle<T: Clone>(
+    previous: Option<&Panel<T>>,
+    result: Result<T, String>,
+    now: u64,
+) -> Panel<T> {
     match result {
         Ok(reading) => Panel {
             reading: Some(reading),
@@ -94,7 +102,7 @@ mod tests {
 
     #[test]
     fn a_failure_without_a_reading_shows_only_the_error() {
-        let panel = settle(None, Err("401 Unauthorized".into()), 130);
+        let panel: Panel = settle(None, Err("401 Unauthorized".into()), 130);
         let expected = Panel {
             reading: None,
             error: Some("401 Unauthorized".into()),

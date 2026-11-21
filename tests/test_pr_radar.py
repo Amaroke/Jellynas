@@ -14,6 +14,7 @@ from radar import (
     embed,
     events,
     poll,
+    pulls_json,
     pulls_page,
     queries,
     readiness,
@@ -178,6 +179,8 @@ class StatusTest(unittest.TestCase):
                     self.assertEqual(200, response.status)
                 with urllib.request.urlopen(f"{base}/status") as response:
                     self.assertEqual(1, json.load(response)["open"])
+                with urllib.request.urlopen(f"{base}/pulls.json") as response:
+                    self.assertEqual([1], [item["number"] for item in json.load(response)["pulls"]])
                 with urllib.request.urlopen(f"{base}/pulls") as response:
                     self.assertIn("default-src 'none'", response.headers["Content-Security-Policy"])
                     self.assertIn("1 ouverte(s)", response.read().decode())
@@ -225,6 +228,18 @@ class PageTest(unittest.TestCase):
         self.assertIn("major", page)
         self.assertIn("2 ouverte(s)", page)
         self.assertIn("1 prête(s) · 0 en attente · 1 à corriger", page)
+
+    def test_the_json_lists_open_pulls_ready_ones_first_with_their_tone(self):
+        pulls = keyed(
+            {**pull(1, ci="FAILURE"), "merge": "BLOCKED"},
+            {**pull(2), "merge": "CLEAN"},
+            pull(3, state="MERGED"),
+        )
+        found = pulls_json(pulls, datetime.datetime(2026, 11, 17, 21, 0, tzinfo=datetime.UTC))
+        self.assertEqual("2026-11-17T21:00:00+00:00", found["updated"])
+        self.assertEqual([(2, "ok"), (1, "bad")], [(item["number"], item["tone"]) for item in found["pulls"]])
+        self.assertEqual("Update thing 2", found["pulls"][0]["title"])
+        self.assertIsNone(pulls_json({}, None)["updated"])
 
     def test_an_empty_radar_says_so(self):
         self.assertIn("Aucune pull request ouverte", pulls_page({}, self.now))

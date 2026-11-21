@@ -7,11 +7,13 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const LIMIT: u64 = 64 * 1024 * 1024;
+const SLOW: Duration = Duration::from_secs(120);
 const SYSTEMS: Duration = Duration::from_secs(10);
 
 pub struct Client {
     agent: ureq::Agent,
     probe: ureq::Agent,
+    slow: ureq::Agent,
     env: HashMap<String, String>,
     systems: Mutex<Option<(Instant, Value)>>,
 }
@@ -49,6 +51,10 @@ impl Client {
                 .timeout_global(Some(Duration::from_secs(10)))
                 .max_redirects(0)
                 .http_status_as_error(false)
+                .build()
+                .into(),
+            slow: ureq::Agent::config_builder()
+                .timeout_global(Some(SLOW))
                 .build()
                 .into(),
             env,
@@ -98,6 +104,27 @@ impl Client {
 
     fn fetch(&self, prefix: &str, path: &str, headers: &Headers) -> Result<Value, String> {
         self.get(&self.url(prefix, path)?, headers)
+    }
+
+    pub fn feed(&self, prefix: &str, path: &str) -> Result<Value, String> {
+        self.slow
+            .get(self.url(prefix, path)?)
+            .call()
+            .and_then(|mut response| response.body_mut().with_config().limit(LIMIT).read_json())
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn send(&self, prefix: &str, path: &str, body: &Value) -> Result<(), String> {
+        let request = self
+            .slow
+            .post(self.url(prefix, path)?)
+            .header("Accept", "application/json");
+        let sent = if body.is_null() {
+            request.send_empty()
+        } else {
+            request.send_json(body)
+        };
+        sent.map(|_| ()).map_err(|error| error.to_string())
     }
 
     pub fn widget(&self, kind: &str) -> parse::Parsed {

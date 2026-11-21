@@ -1,15 +1,16 @@
 use crate::app::{App, Outcome};
 use crate::cards::Section;
-use axum::Router;
 use axum::extract::{ConnectInfo, Path, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
+use axum::{Json, Router};
 use futures_util::Stream;
 use minijinja::value::Serde;
 use minijinja::{Environment, context};
 use serde::Serialize;
+use serde_json::Value;
 use std::convert::Infallible;
 use std::fs;
 use std::net::SocketAddr;
@@ -30,9 +31,12 @@ pub fn router(app: Arc<App>) -> Router {
     Router::new()
         .route("/", get(page))
         .route("/theme.css", get(theme))
+        .route("/assets/{file}", get(asset))
         .route("/events", get(events))
         .route("/icons/{file}", get(icon))
         .route("/services/{service}/{action}", post(control))
+        .route("/farm/controls", post(farm_control))
+        .route("/quick-actions/{key}", post(quick_action))
         .route("/healthz", get(health))
         .with_state(app)
 }
@@ -67,6 +71,32 @@ async fn page(State(app): State<Arc<App>>) -> Response {
     match rendered {
         Ok(html) => Html(html).into_response(),
         Err(error) => failed("render the page", error),
+    }
+}
+
+fn asset_kind(file: &str) -> Option<&'static str> {
+    let (name, extension) = file.split_once('.')?;
+    if name.is_empty()
+        || !name
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte == b'-')
+    {
+        return None;
+    }
+    match extension {
+        "js" => Some("text/javascript"),
+        "css" => Some("text/css"),
+        _ => None,
+    }
+}
+
+async fn asset(State(app): State<Arc<App>>, Path(file): Path<String>) -> Response {
+    let Some(kind) = asset_kind(&file) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    match fs::read(app.web.join(&file)) {
+        Ok(body) => ([(header::CONTENT_TYPE, kind)], body).into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
@@ -128,22 +158,49 @@ async fn from_caddy(peer: SocketAddr) -> bool {
     }
 }
 
+async fn act(
+    peer: SocketAddr,
+    headers: &HeaderMap,
+    work: impl FnOnce() -> Outcome + Send + 'static,
+) -> StatusCode {
+    if !headers.contains_key("x-dashboard") || !from_caddy(peer).await {
+        return StatusCode::FORBIDDEN;
+    }
+    match task::spawn_blocking(work).await {
+        Ok(Outcome::Done) => StatusCode::NO_CONTENT,
+        Ok(Outcome::Unknown) => StatusCode::NOT_FOUND,
+        Ok(Outcome::Invalid) => StatusCode::BAD_REQUEST,
+        Ok(Outcome::Refused) => StatusCode::CONFLICT,
+        Ok(Outcome::Failed) => StatusCode::BAD_GATEWAY,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
 async fn control(
     State(app): State<Arc<App>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Path((service, action)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> StatusCode {
-    if !headers.contains_key("x-dashboard") || !from_caddy(peer).await {
-        return StatusCode::FORBIDDEN;
-    }
-    match task::spawn_blocking(move || app.control(&service, &action)).await {
-        Ok(Outcome::Done) => StatusCode::NO_CONTENT,
-        Ok(Outcome::Unknown) => StatusCode::NOT_FOUND,
-        Ok(Outcome::Refused) => StatusCode::CONFLICT,
-        Ok(Outcome::Failed) => StatusCode::BAD_GATEWAY,
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
-    }
+    act(peer, &headers, move || app.control(&service, &action)).await
+}
+
+async fn farm_control(
+    State(app): State<Arc<App>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(control): Json<Value>,
+) -> StatusCode {
+    act(peer, &headers, move || app.farm_control(&control)).await
+}
+
+async fn quick_action(
+    State(app): State<Arc<App>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Path(key): Path<String>,
+    headers: HeaderMap,
+) -> StatusCode {
+    act(peer, &headers, move || app.quick_action(&key)).await
 }
 
 async fn health(State(app): State<Arc<App>>) -> StatusCode {
@@ -151,5 +208,26 @@ async fn health(State(app): State<Arc<App>>) -> StatusCode {
         StatusCode::OK
     } else {
         StatusCode::SERVICE_UNAVAILABLE
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_plain_scripts_and_styles_are_assets() {
+        assert_eq!(Some("text/javascript"), asset_kind("sections.js"));
+        assert_eq!(Some("text/css"), asset_kind("sections.css"));
+        for file in [
+            "index.html",
+            "../state.js",
+            "Sections.js",
+            "a/b.css",
+            ".js",
+            "theme.css.map",
+        ] {
+            assert_eq!(None, asset_kind(file), "{file}");
+        }
     }
 }
