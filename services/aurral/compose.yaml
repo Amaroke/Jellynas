@@ -1,7 +1,7 @@
 ---
 services:
   aurral:
-    image: ghcr.io/lklynet/aurral:2.13.0
+    image: ghcr.io/lklynet/aurral:3.0.1
     container_name: aurral
     restart: unless-stopped
     networks:
@@ -16,7 +16,7 @@ services:
       AURRAL_DATA_DIR: /config
       AURRAL_PUBLIC_URL: https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       TRUST_PROXY: "true"
-      DOWNLOAD_FOLDER: /data/media/aurral
+      LIBRARY_FOLDER: /data/media/aurral
       FILE_BROWSE_ROOTS: /data/media
       OIDC_ENABLED: "true"
       OIDC_ISSUER: https://auth.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
@@ -38,8 +38,9 @@ services:
       docker-volume-backup.stop-during-backup: "true"
     volumes:
       - ${APPDATA_ROOT}/aurral:/config
-      - ${DATA_ROOT}/media/music:/data/media/music:ro
+      - ${DATA_ROOT}/media/music:/data/media/music
       - ${DATA_ROOT}/media/aurral:/data/media/aurral
+      - ${DATA_ROOT}/torrents/soulseek:/data/torrents/soulseek
     healthcheck:
       test:
         - "CMD"

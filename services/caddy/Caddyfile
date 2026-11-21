@@ -79,7 +79,6 @@
 	import lan prowlarr prowlarr:9696
 	import lan radarr radarr:7878
 	import lan sonarr sonarr:8989
-	import lan lidarr lidarr:8686
 	import lan slskd gluetun:5030
 	import lan lazylibrarian lazylibrarian:5299
 	import lan suwayomi gluetun:4567

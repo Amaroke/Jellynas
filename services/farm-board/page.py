@@ -44,7 +44,7 @@ TEXT = {
             "paid": "Grabs C411 releases under 24 hours old with at least 5 leechers, the most leechers per GB first. Their download counts, within the paid download per day and never under the floor.",
             "clean_public": "Removes a public torrent after 14 days of seeding, or once its C411 copy seeds the same files.",
             "drop_twins": "Removes the Nyaa copy of a Twin once its C411 copy seeds. The hardlink keeps the files.",
-            "hold": "Under the floor, pauses C411 in Prowlarr so Radarr, Sonarr and Lidarr stop downloading there. Everything keeps seeding.",
+            "hold": "Under the floor, pauses C411 in Prowlarr so Radarr and Sonarr stop downloading there. Everything keeps seeding.",
             "adopt": "Moves a C411 torrent of the Library into the Farm 6 hours after it finished, so it counts in the Farm budget.",
         },
         "explain_numbers": {
@@ -91,7 +91,7 @@ TEXT = {
             "paid": "Prend les sorties C411 de moins de 24 h avec au moins 5 leechers, les plus demandées par Go d'abord. Leur download compte, dans la limite du download payant par jour et jamais sous le plancher.",
             "clean_public": "Retire un torrent public après 14 jours de seed, ou dès que sa copie C411 seed les mêmes fichiers.",
             "drop_twins": "Retire la copie Nyaa d'un Twin dès que sa copie C411 seed. Le hardlink garde les fichiers.",
-            "hold": "Sous le plancher, met C411 en pause dans Prowlarr pour que Radarr, Sonarr et Lidarr n'y téléchargent plus. Tout continue de seeder.",
+            "hold": "Sous le plancher, met C411 en pause dans Prowlarr pour que Radarr et Sonarr n'y téléchargent plus. Tout continue de seeder.",
             "adopt": "Déplace un torrent C411 de la Library dans la Farm 6 h après sa fin, pour qu'il compte dans le budget de la Farm.",
         },
         "explain_numbers": {

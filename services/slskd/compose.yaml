@@ -22,7 +22,7 @@ services:
       SLSKD_SLSK_LISTEN_PORT: ${SLSKD_LISTEN_PORT:-50300}
       SLSKD_DOWNLOADS_DIR: /data/torrents/soulseek/downloads
       SLSKD_INCOMPLETE_DIR: /data/torrents/soulseek/incomplete
-      SLSKD_SHARED_DIR: /data/media/music
+      SLSKD_SHARED_DIR: /data/media/aurral
     labels:
       kuma.slskd.http.name: slskd
       kuma.slskd.http.url: http://gluetun:5030/health
@@ -30,7 +30,7 @@ services:
     volumes:
       - ${APPDATA_ROOT}/slskd:/app
       - ${DATA_ROOT}/torrents/soulseek:/data/torrents/soulseek
-      - ${DATA_ROOT}/media/music:/data/media/music:ro
+      - ${DATA_ROOT}/media/aurral:/data/media/aurral:ro
     healthcheck:
       test:
         - "CMD"

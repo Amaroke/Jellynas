@@ -1163,7 +1163,7 @@ def hold_c411(prowlarr, settings, state, wanted):
         print(f"Cannot {'hold' if wanted else 'release'} C411 in Prowlarr: {error}")
         return
     state["held"] = wanted
-    print(f"C411 is {'held' if wanted else 'open again'} for Radarr, Sonarr and Lidarr")
+    print(f"C411 is {'held' if wanted else 'open again'} for Radarr and Sonarr")
 
 
 def use_prowlarr(state, now, step, always=False):
