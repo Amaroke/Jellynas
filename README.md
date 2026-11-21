@@ -2062,7 +2062,7 @@ channel after one minute alone or five minutes without playing.
 
 ## Discord messages
 
-The links and news channels of the Discord server of the Friends hold
+The links, news and tutos channels of the Discord server of the Friends hold
 messages written in `discord-posts/`, one Markdown file per message, so they
 live in git like the rest of the NAS. `${DOMAIN}` and `${CADDY_HTTPS_PORT}` in a
 file are filled in from `.env`. `scripts/discord_post.py` publishes a file
@@ -2081,6 +2081,9 @@ The messages are in French, for the Friends:
 - `discord-posts/links.md`, in the links channel, gives the public addresses,
   the apps to install, how to ask for a book or a manga, and the commands of the
   music bot. Change it when a public address, an app or a command changes.
+- `discord-posts/tutos.md`, in the tutos channel, explains Aurral: adding
+  music, importing playlists from Spotify, recommendations, flows and the
+  settings of a Friend. Change it when Aurral moves a button or a setting.
 
 A file wraps at 80 columns like any Markdown file of the repo, and
 `scripts/discord_post.py` joins the wrapped lines back, since Discord keeps
@@ -2100,7 +2103,7 @@ Discord. `-#` is the small grey text of Discord.
    python3 scripts/discord_post.py news discord-posts/welcome.md
    ```
 
-The `discord-posts` service republishes these two files every day at 00:30, in
+The `discord-posts` service republishes these three files every day at 00:30, in
 the time zone of `TZ`, from the `main` branch that doco-cd deployed. A message
 then follows the repo by itself, and its footer gives the date of its last
 publication. A failure on one channel leaves the others
