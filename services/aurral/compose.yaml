@@ -1,7 +1,7 @@
 ---
 services:
   aurral:
-    image: ghcr.io/lklynet/aurral:2.13.0
+    image: ghcr.io/lklynet/aurral:3.0.1
     container_name: aurral
     restart: unless-stopped
     networks:
