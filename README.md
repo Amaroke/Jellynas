@@ -495,27 +495,48 @@ Jellyfin creates its user at the first sign-in of a Friend, with access to all
 libraries and without the right to manage the server. Within 10 minutes,
 jellyfin-policy gives it the rules below.
 
-Quick Connect stays on in Dashboard > General: a Friend signs in on a TV by
-typing the code it shows into Jellyfin on their phone, without typing their
-password on the TV.
+Quick Connect stays on: a Friend signs in on a TV by typing the code it shows
+into Jellyfin on their phone, without typing their password on the TV.
 
 ### Transcoding
 
 The NAS has no GPU, so Jellyfin transcodes on the CPU, which holds only a few
-streams at a time. Keep hardware acceleration at "None" in Dashboard >
-Playback > Transcoding. A client that plays the file as it is needs no
-transcoding at all. With an Intel or AMD GPU passed to the NAS, map `/dev/dri`
-into the container and pick "Intel QuickSync" or "VAAPI" there.
+streams at a time, and jellyfin-policy keeps hardware acceleration at "None". A
+client that plays the file as it is needs no transcoding at all. With an Intel
+or AMD GPU passed to the NAS, map `/dev/dri` into the container and change
+`HardwareAccelerationType` in jellyfin-policy to `qsv` or `vaapi`.
 
-### Rules of the Accounts
+### Rules of the server and the Accounts
 
-jellyfin-policy applies the same rules to every Account of Jellyfin, the Admin
-included, every 10 minutes, through the API key of `JELLYFIN_API_KEY`. A new
-Account gets them within 10 minutes, and a rule changed by hand in Dashboard >
-Users comes back at the next pass. It is a small Rust program,
-`services/jellyfin/policy/src/main.rs`, which doco-cd builds into an image of
-2 MB that runs in 1 MB of memory. Change a rule in its `policy` or
-`configuration` function, never in the Dashboard:
+jellyfin-policy applies the same rules to the server and to every Account of
+Jellyfin, the Admin included, every 10 minutes, through the API key of
+`JELLYFIN_API_KEY`. A new Account gets them within 10 minutes, and a rule
+changed by hand in the Dashboard comes back at the next pass. It is a small Rust
+program, `services/jellyfin/policy/src/main.rs`, which doco-cd builds into an
+image of 2 MB that runs in 1 MB of memory. Change a rule in its `server`,
+`policy` or `configuration` function, never in the Dashboard. The server:
+
+| Rule                               | Value                                  |
+| ---------------------------------- | -------------------------------------- |
+| Server name                        | Jellynas                               |
+| Language of the interface          | French                                 |
+| Language and country of metadata   | French, France                         |
+| Quick Connect                      | On                                     |
+| Upload of the logs of the clients  | On, to debug a Friend's player         |
+| Metrics                            | Off                                    |
+| Kept logs                          | 3 days                                 |
+| Kept activity                      | 30 days                                |
+| Bitrate limit of remote clients    | None                                   |
+| Hardware acceleration              | None, the NAS has no GPU               |
+| Throttle transcodes                | On, the CPU stops once it is ahead     |
+| Delete segments                    | On, so transcodes do not fill the disk |
+| Tone mapping                       | Off, too heavy for the CPU             |
+| Known proxies                      | `caddy`                                |
+| Remote access                      | On                                     |
+| UPnP                               | Off                                    |
+
+Jellyfin reads its networking settings when it starts: after a change of them,
+restart it as in [Jellyfin behind Caddy](#jellyfin-behind-caddy). The Accounts:
 
 | Rule                                     | Value                         |
 | ---------------------------------------- | ----------------------------- |
@@ -537,10 +558,9 @@ subtitles, stay theirs to set.
 
 ### Jellyfin behind Caddy
 
-In Dashboard > Networking, add `caddy` to "Known proxies" and save. Jellyfin
-then sees the real address of each Friend instead of the address of Caddy.
-Jellyfin looks up the address of Caddy when it starts, so restart it now and
-whenever Caddy is recreated:
+jellyfin-policy keeps `caddy` in "Known proxies", so Jellyfin sees the real
+address of each Friend instead of the address of Caddy. Jellyfin looks up the
+address of Caddy when it starts, so restart it whenever Caddy is recreated:
 
 ```sh
 docker compose restart jellyfin

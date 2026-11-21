@@ -5,8 +5,12 @@ use std::{env, fs, process, thread};
 const INTERVAL: Duration = Duration::from_secs(600);
 const HEARTBEAT: &str = "/tmp/heartbeat";
 
+fn rules(value: Value) -> Map<String, Value> {
+    value.as_object().cloned().unwrap_or_default()
+}
+
 fn policy() -> Map<String, Value> {
-    let rules = json!({
+    rules(json!({
         "EnableLiveTvAccess": false,
         "EnableLiveTvManagement": false,
         "EnablePublicSharing": false,
@@ -16,15 +20,53 @@ fn policy() -> Map<String, Value> {
         "MaxActiveSessions": 1,
         "LoginAttemptsBeforeLockout": 3,
         "SyncPlayAccess": "CreateAndJoinGroups",
-    });
-    rules.as_object().cloned().unwrap_or_default()
+    }))
 }
 
 fn configuration() -> Map<String, Value> {
-    let rules = json!({
+    rules(json!({
         "EnableNextEpisodeAutoPlay": true,
-    });
-    rules.as_object().cloned().unwrap_or_default()
+    }))
+}
+
+fn server() -> Vec<(&'static str, &'static str, Map<String, Value>)> {
+    vec![
+        (
+            "General",
+            "/System/Configuration",
+            rules(json!({
+                "ServerName": "Jellynas",
+                "UICulture": "fr",
+                "PreferredMetadataLanguage": "fr",
+                "MetadataCountryCode": "FR",
+                "QuickConnectAvailable": true,
+                "AllowClientLogUpload": true,
+                "EnableMetrics": false,
+                "LogFileRetentionDays": 3,
+                "ActivityLogRetentionDays": 30,
+                "RemoteClientBitrateLimit": 0,
+            })),
+        ),
+        (
+            "Playback",
+            "/System/Configuration/encoding",
+            rules(json!({
+                "HardwareAccelerationType": "none",
+                "EnableThrottling": true,
+                "EnableSegmentDeletion": true,
+                "EnableTonemapping": false,
+            })),
+        ),
+        (
+            "Networking",
+            "/System/Configuration/network",
+            rules(json!({
+                "KnownProxies": ["caddy"],
+                "EnableRemoteAccess": true,
+                "EnableUPnP": false,
+            })),
+        ),
+    ]
 }
 
 fn wanted_policy(current: &Value) -> Map<String, Value> {
@@ -43,47 +85,25 @@ fn drift(current: &Value, wanted: &Map<String, Value>) -> Map<String, Value> {
         .collect()
 }
 
-struct Change {
-    user: Value,
-    policy: Map<String, Value>,
-    configuration: Map<String, Value>,
-}
-
-fn plan(users: &[Value]) -> Vec<Change> {
-    users
-        .iter()
-        .filter_map(|user| {
-            let policy = drift(&user["Policy"], &wanted_policy(&user["Policy"]));
-            let configuration = drift(&user["Configuration"], &configuration());
-            (!policy.is_empty() || !configuration.is_empty()).then(|| Change {
-                user: user.clone(),
-                policy,
-                configuration,
-            })
-        })
-        .collect()
-}
-
 fn merged(current: &Value, changes: &Map<String, Value>) -> Value {
     let mut whole = current.as_object().cloned().unwrap_or_default();
     whole.extend(changes.clone());
     Value::Object(whole)
 }
 
-fn changed_keys(change: &Change) -> String {
-    let mut keys: Vec<&str> = change
-        .policy
-        .keys()
-        .chain(change.configuration.keys())
+fn keys(changes: &[&Map<String, Value>]) -> String {
+    let mut names: Vec<&str> = changes
+        .iter()
+        .flat_map(|change| change.keys())
         .map(String::as_str)
         .collect();
-    keys.sort_unstable();
-    keys.join(", ")
+    names.sort_unstable();
+    names.join(", ")
 }
 
 trait Jellyfin {
-    fn users(&self) -> Result<Vec<Value>, String>;
-    fn save(&self, change: &Change) -> Result<(), String>;
+    fn get(&self, path: &str) -> Result<Value, String>;
+    fn post(&self, path: &str, body: &Value) -> Result<(), String>;
 }
 
 struct Server {
@@ -91,7 +111,17 @@ struct Server {
     authorization: String,
 }
 
-impl Server {
+impl Jellyfin for Server {
+    fn get(&self, path: &str) -> Result<Value, String> {
+        ureq::get(&format!("{}{path}", self.base))
+            .set("Authorization", &self.authorization)
+            .timeout(Duration::from_secs(30))
+            .call()
+            .map_err(|error| error.to_string())?
+            .into_json()
+            .map_err(|error| error.to_string())
+    }
+
     fn post(&self, path: &str, body: &Value) -> Result<(), String> {
         ureq::post(&format!("{}{path}", self.base))
             .set("Authorization", &self.authorization)
@@ -102,43 +132,59 @@ impl Server {
     }
 }
 
-impl Jellyfin for Server {
-    fn users(&self) -> Result<Vec<Value>, String> {
-        ureq::get(&format!("{}/Users", self.base))
-            .set("Authorization", &self.authorization)
-            .timeout(Duration::from_secs(30))
-            .call()
-            .map_err(|error| error.to_string())?
-            .into_json()
-            .map_err(|error| error.to_string())
+fn settle(
+    jellyfin: &impl Jellyfin,
+    path: &str,
+    current: &Value,
+    wanted: &Map<String, Value>,
+) -> Result<Map<String, Value>, String> {
+    let changes = drift(current, wanted);
+    if !changes.is_empty() {
+        jellyfin.post(path, &merged(current, &changes))?;
     }
+    Ok(changes)
+}
 
-    fn save(&self, change: &Change) -> Result<(), String> {
-        let id = change.user["Id"].as_str().ok_or("a user has no Id")?;
-        if !change.policy.is_empty() {
-            self.post(
-                &format!("/Users/{id}/Policy"),
-                &merged(&change.user["Policy"], &change.policy),
-            )?;
+fn enforce_server(jellyfin: &impl Jellyfin) -> Result<usize, String> {
+    let mut changed = 0;
+    for (name, path, wanted) in server() {
+        let changes = settle(jellyfin, path, &jellyfin.get(path)?, &wanted)?;
+        if !changes.is_empty() {
+            println!("{name}: set {}", keys(&[&changes]));
+            changed += 1;
         }
-        if !change.configuration.is_empty() {
-            self.post(
-                &format!("/Users/Configuration?userId={id}"),
-                &merged(&change.user["Configuration"], &change.configuration),
-            )?;
-        }
-        Ok(())
     }
+    Ok(changed)
+}
+
+fn enforce_users(jellyfin: &impl Jellyfin) -> Result<usize, String> {
+    let users = jellyfin.get("/Users")?;
+    let mut changed = 0;
+    for user in users.as_array().ok_or("Jellyfin sent no list of users")? {
+        let id = user["Id"].as_str().ok_or("a user has no Id")?;
+        let policy = settle(
+            jellyfin,
+            &format!("/Users/{id}/Policy"),
+            &user["Policy"],
+            &wanted_policy(&user["Policy"]),
+        )?;
+        let configuration = settle(
+            jellyfin,
+            &format!("/Users/Configuration?userId={id}"),
+            &user["Configuration"],
+            &configuration(),
+        )?;
+        if !policy.is_empty() || !configuration.is_empty() {
+            let name = user["Name"].as_str().unwrap_or("?");
+            println!("{name}: set {}", keys(&[&policy, &configuration]));
+            changed += 1;
+        }
+    }
+    Ok(changed)
 }
 
 fn enforce(jellyfin: &impl Jellyfin) -> Result<usize, String> {
-    let changes = plan(&jellyfin.users()?);
-    for change in &changes {
-        jellyfin.save(change)?;
-        let name = change.user["Name"].as_str().unwrap_or("?");
-        println!("{name}: set {}", changed_keys(change));
-    }
-    Ok(changes.len())
+    Ok(enforce_server(jellyfin)? + enforce_users(jellyfin)?)
 }
 
 fn settings(vars: impl Fn(&str) -> Option<String>) -> Result<Server, String> {
@@ -195,33 +241,72 @@ fn main() {
 mod tests {
     use super::*;
     use std::cell::RefCell;
+    use std::collections::BTreeMap;
 
     fn user(name: &str, admin: bool, overrides: Value) -> Value {
         let mut policy = policy();
         policy.insert("IsAdministrator".into(), json!(admin));
         policy.insert("EnableContentDeletion".into(), json!(admin));
         policy.insert("EnableAllFolders".into(), json!(true));
-        policy.extend(overrides.as_object().cloned().unwrap_or_default());
+        policy.extend(rules(overrides));
         let mut configuration = configuration();
         configuration.insert("SubtitleMode".into(), json!("Smart"));
         json!({"Id": format!("id-{name}"), "Name": name, "Policy": policy, "Configuration": configuration})
     }
 
+    fn in_line() -> BTreeMap<String, Value> {
+        let mut pages: BTreeMap<String, Value> = server()
+            .into_iter()
+            .map(|(_, path, wanted)| {
+                let mut page = wanted;
+                page.insert("Untouched".into(), json!("kept"));
+                (path.to_string(), Value::Object(page))
+            })
+            .collect();
+        pages.insert(
+            "/Users".into(),
+            json!([
+                user("theo", false, json!({})),
+                user("amaroke", true, json!({}))
+            ]),
+        );
+        pages
+    }
+
     struct Fake {
-        users: Vec<Value>,
-        saved: RefCell<Vec<String>>,
+        pages: BTreeMap<String, Value>,
+        posted: RefCell<Vec<(String, Value)>>,
+    }
+
+    impl Fake {
+        fn new(pages: BTreeMap<String, Value>) -> Self {
+            Fake {
+                pages,
+                posted: RefCell::new(vec![]),
+            }
+        }
+
+        fn paths(&self) -> Vec<String> {
+            self.posted
+                .borrow()
+                .iter()
+                .map(|(path, _)| path.clone())
+                .collect()
+        }
     }
 
     impl Jellyfin for Fake {
-        fn users(&self) -> Result<Vec<Value>, String> {
-            Ok(self.users.clone())
+        fn get(&self, path: &str) -> Result<Value, String> {
+            self.pages
+                .get(path)
+                .cloned()
+                .ok_or(format!("no page {path}"))
         }
 
-        fn save(&self, change: &Change) -> Result<(), String> {
-            let name = change.user["Name"].as_str().unwrap_or_default();
-            self.saved
+        fn post(&self, path: &str, body: &Value) -> Result<(), String> {
+            self.posted
                 .borrow_mut()
-                .push(format!("{name}: {}", changed_keys(change)));
+                .push((path.to_string(), body.clone()));
             Ok(())
         }
     }
@@ -251,56 +336,54 @@ mod tests {
     }
 
     #[test]
-    fn an_account_in_line_needs_nothing() {
-        assert!(
-            plan(&[
-                user("theo", false, json!({})),
-                user("amaroke", true, json!({}))
-            ])
-            .is_empty()
-        );
+    fn a_server_in_line_needs_nothing() {
+        let fake = Fake::new(in_line());
+        assert_eq!(Ok(0), enforce(&fake));
+        assert!(fake.paths().is_empty());
     }
 
     #[test]
     fn a_new_account_is_brought_in_line() {
+        let mut pages = in_line();
         let mut fresh = user(
             "nima",
             false,
             json!({"EnableLiveTvAccess": true, "EnablePublicSharing": true, "MaxActiveSessions": 0, "LoginAttemptsBeforeLockout": -1, "EnableContentDeletion": true}),
         );
         fresh["Configuration"]["EnableNextEpisodeAutoPlay"] = json!(false);
-        let changes = plan(&[fresh]);
-        assert_eq!(1, changes.len());
-        assert_eq!(
-            "EnableContentDeletion, EnableLiveTvAccess, EnableNextEpisodeAutoPlay, EnablePublicSharing, LoginAttemptsBeforeLockout, MaxActiveSessions",
-            changed_keys(&changes[0])
-        );
-    }
-
-    #[test]
-    fn a_save_keeps_every_other_field() {
-        let current =
-            json!({"IsAdministrator": false, "EnableAllFolders": true, "MaxActiveSessions": 0});
-        let changes = drift(&current, &wanted_policy(&current));
-        let whole = merged(&current, &changes);
-        assert_eq!(json!(true), whole["EnableAllFolders"]);
-        assert_eq!(json!(1), whole["MaxActiveSessions"]);
-    }
-
-    #[test]
-    fn enforce_saves_only_the_accounts_that_drifted() {
-        let fake = Fake {
-            users: vec![
-                user("theo", false, json!({})),
-                user("yann", false, json!({"EnableMediaConversion": true})),
-            ],
-            saved: RefCell::new(vec![]),
-        };
+        pages.insert("/Users".into(), json!([fresh]));
+        let fake = Fake::new(pages);
         assert_eq!(Ok(1), enforce(&fake));
         assert_eq!(
-            vec!["yann: EnableMediaConversion".to_string()],
-            *fake.saved.borrow()
+            vec![
+                "/Users/id-nima/Policy",
+                "/Users/Configuration?userId=id-nima"
+            ],
+            fake.paths()
         );
+        let (_, saved) = &fake.posted.borrow()[0];
+        assert_eq!(json!(1), saved["MaxActiveSessions"]);
+        assert_eq!(json!(false), saved["EnableContentDeletion"]);
+        assert_eq!(json!(true), saved["EnableAllFolders"]);
+    }
+
+    #[test]
+    fn a_server_setting_changed_by_hand_comes_back() {
+        let mut pages = in_line();
+        pages.get_mut("/System/Configuration/encoding").unwrap()["EnableThrottling"] = json!(false);
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), enforce(&fake));
+        let (path, saved) = &fake.posted.borrow()[0];
+        assert_eq!("/System/Configuration/encoding", path);
+        assert_eq!(json!(true), saved["EnableThrottling"]);
+        assert_eq!(json!("kept"), saved["Untouched"]);
+    }
+
+    #[test]
+    fn keys_are_listed_in_order() {
+        let first = rules(json!({"b": 1, "a": 2}));
+        let second = rules(json!({"c": 3}));
+        assert_eq!("a, b, c", keys(&[&first, &second]));
     }
 
     #[test]
