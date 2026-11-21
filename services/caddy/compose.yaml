@@ -7,7 +7,6 @@ services:
     networks:
       jellyfin-zone:
       identity-zone:
-      dashboard-zone:
       seerr-zone:
         aliases:
           - jellyfin.${DOMAIN}
@@ -46,6 +45,7 @@ services:
       kuma.caddy.docker.name: Caddy
       dashboard.name: Caddy
       dashboard.section: Hosting
+      dashboard.description: HTTPS proxy, the only published port
       dashboard.icon: caddy.svg
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro

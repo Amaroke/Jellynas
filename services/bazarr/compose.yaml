@@ -19,6 +19,8 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: Bazarr
       dashboard.section: Automation
+      dashboard.description: Subtitles
+      dashboard.widget: bazarr
       dashboard.icon: bazarr.svg
       dashboard.href: https://bazarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"

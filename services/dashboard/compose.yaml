@@ -7,7 +7,7 @@ services:
     depends_on:
       - dashboard-socket-proxy
     networks:
-      - dashboard-zone
+      - internal-zone
       - dashboard-docker-zone
     security_opt:
       - no-new-privileges
@@ -15,14 +15,46 @@ services:
       - ALL
     user: ${PUID}:${PGID}
     read_only: true
-    mem_limit: 64m
+    mem_limit: 256m
     environment:
       TZ: ${TZ}
       DOCKER_HOST: tcp://dashboard-socket-proxy:2375
+      JELLYFIN_URL: https://jellyfin.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}
+      SEERR_URL: https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      SEERR_API_KEY: ${SEERR_API_KEY}
+      QBITTORRENT_URL: http://gluetun:8080
+      QBITTORRENT_API_KEY: ${QBITTORRENT_API_KEY}
+      GLUETUN_URL: http://gluetun:8000
+      GLUETUN_API_KEY: ${GLUETUN_API_KEY:-}
+      SLSKD_URL: http://gluetun:5030
+      SLSKD_API_KEY: ${SLSKD_API_KEY}
+      AUTOBRR_URL: http://autobrr:7474
+      AUTOBRR_API_KEY: ${AUTOBRR_API_KEY:-}
+      PROWLARR_URL: http://prowlarr:9696
+      PROWLARR_API_KEY: ${PROWLARR_API_KEY}
+      RADARR_URL: http://radarr:7878
+      RADARR_API_KEY: ${RADARR_API_KEY}
+      SONARR_URL: http://sonarr:8989
+      SONARR_API_KEY: ${SONARR_API_KEY}
+      SUWAYOMI_URL: http://gluetun:4567
+      SUWAYOMI_USERNAME: ${SUWAYOMI_USERNAME}
+      SUWAYOMI_PASSWORD: ${SUWAYOMI_PASSWORD}
+      BAZARR_URL: http://bazarr:6767
+      BAZARR_API_KEY: ${BAZARR_API_KEY}
+      TDARR_URL: http://tdarr:8265
+      TDARR_API_KEY: ${TDARR_API_KEY}
+      BESZEL_URL: http://beszel:8090
+      BESZEL_EMAIL: ${BESZEL_EMAIL:-}
+      BESZEL_PASSWORD: ${BESZEL_PASSWORD:-}
+      BESZEL_SYSTEM: NAS
+      UPTIME_KUMA_URL: http://uptime-kuma:3001
+      UPTIME_KUMA_SLUG: nas
     labels:
       kuma.dashboard.docker.name: Dashboard
       dashboard.name: Dashboard
       dashboard.section: Hosting
+      dashboard.description: Watches and drives every service
       dashboard.icon: homepage.svg
       dashboard.href: https://dashboard.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
     volumes:

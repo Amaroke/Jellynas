@@ -29,6 +29,8 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: slskd
       dashboard.section: Downloads
+      dashboard.description: Soulseek, through the VPN only
+      dashboard.widget: slskd
       dashboard.icon: slskd.svg
       dashboard.href: https://slskd.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"

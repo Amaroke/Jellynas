@@ -32,6 +32,8 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: Indexarr
       dashboard.section: Observation
+      dashboard.description: Catalog of the Library files, read-only
+      dashboard.monitor: http://indexarr:8787/health
       dashboard.href: https://indexarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"
     volumes:

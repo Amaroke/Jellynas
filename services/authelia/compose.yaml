@@ -29,6 +29,9 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: Authelia
       dashboard.section: Hosting
+      dashboard.description: Sign-in of Aurral with the Account
+      dashboard.monitor:
+        https://auth.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/health
       dashboard.icon: authelia.svg
     volumes:
       - ./configuration.yml:/config/configuration.yml:ro

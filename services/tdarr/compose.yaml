@@ -27,6 +27,8 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: Tdarr
       dashboard.section: Automation
+      dashboard.description: MKV H265 1080p
+      dashboard.widget: tdarr
       dashboard.icon: tdarr.png
       dashboard.href: https://tdarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"

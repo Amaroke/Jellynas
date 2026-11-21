@@ -19,6 +19,8 @@ services:
       kuma.dozzle.http.url: http://dozzle:8080/healthcheck
       dashboard.name: Dozzle
       dashboard.section: Observation
+      dashboard.description: Logs of every container
+      dashboard.monitor: http://dozzle:8080/healthcheck
       dashboard.icon: dozzle.svg
       dashboard.href: https://dozzle.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"

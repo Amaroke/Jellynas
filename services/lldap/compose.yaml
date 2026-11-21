@@ -26,6 +26,7 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: lldap
       dashboard.section: Hosting
+      dashboard.description: Accounts of the Friends and the Admin
       dashboard.icon: lldap.svg
       dashboard.href: https://lldap.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
     volumes:

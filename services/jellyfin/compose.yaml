@@ -26,6 +26,8 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: Jellyfin
       dashboard.section: Watch
+      dashboard.description: Streams the Library
+      dashboard.widget: jellyfin
       dashboard.icon: jellyfin.svg
       dashboard.href: https://jellyfin.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"

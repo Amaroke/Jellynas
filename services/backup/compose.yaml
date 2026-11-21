@@ -23,6 +23,7 @@ services:
       kuma.backup.docker.name: Backup
       dashboard.name: Backup
       dashboard.section: Observation
+      dashboard.description: Archive of the appdata, every night
       dashboard.icon: restic.png
     volumes:
       - ${APPDATA_ROOT}/:/backup/appdata:ro

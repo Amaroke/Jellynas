@@ -19,6 +19,7 @@ services:
       kuma.recyclarr.docker.name: Recyclarr
       dashboard.name: Recyclarr
       dashboard.section: Automation
+      dashboard.description: Quality profiles, synced every night
       dashboard.icon: recyclarr.svg
       dashboard.switchable: "true"
     volumes:

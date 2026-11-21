@@ -4,6 +4,7 @@ mod docker;
 mod icons;
 mod shutdown;
 mod web;
+mod widgets;
 
 use app::App;
 use docker::Docker;
@@ -50,9 +51,12 @@ async fn main() {
         shutdown,
         Icons::new(state.join("icons")),
         PathBuf::from(WEB),
+        widgets::Client::new(env::vars().collect()),
     ));
     let watcher = app.clone();
     thread::spawn(move || watcher.watch());
+    let poller = app.clone();
+    thread::spawn(move || poller.poll());
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", PORT))
         .await
         .unwrap_or_else(|error| {
@@ -60,7 +64,8 @@ async fn main() {
             process::exit(1);
         });
     println!("Serving the Dashboard on port {PORT}");
-    if let Err(error) = axum::serve(listener, web::router(app)).await {
+    let service = web::router(app).into_make_service_with_connect_info::<SocketAddr>();
+    if let Err(error) = axum::serve(listener, service).await {
         eprintln!("The Dashboard stopped serving: {error}");
         process::exit(1);
     }
