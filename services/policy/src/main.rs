@@ -4,7 +4,7 @@ mod aurral;
 mod jellyfin;
 
 use api::Http;
-use jiff::Zoned;
+use jiff::ZonedDateTime;
 use jiff::civil::{Time, time};
 use std::time::{Duration, SystemTime};
 use std::{env, fs, process, thread};
@@ -81,7 +81,7 @@ fn healthy(last_pass: Option<SystemTime>, now: SystemTime) -> bool {
         .is_some_and(|age| age < STALE)
 }
 
-fn next_pass(now: &Zoned) -> Result<Zoned, String> {
+fn next_pass(now: &ZonedDateTime) -> Result<ZonedDateTime, String> {
     let today = now
         .with()
         .time(PASS_AT)
@@ -126,7 +126,7 @@ fn main() {
         if !failed && let Err(error) = fs::write(HEARTBEAT, b"ok") {
             eprintln!("Cannot write the heartbeat: {error}");
         }
-        let now = Zoned::now();
+        let now = ZonedDateTime::now();
         let next = next_pass(&now).unwrap_or_else(|error| {
             eprintln!("Cannot plan the next pass: {error}");
             process::exit(1);
@@ -204,7 +204,7 @@ mod tests {
         assert!(!healthy(Some(now - STALE), now));
     }
 
-    fn at(moment: &str) -> Zoned {
+    fn at(moment: &str) -> ZonedDateTime {
         moment.parse().unwrap()
     }
 
