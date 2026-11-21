@@ -1205,9 +1205,11 @@ any.
    `jellynas_admins`. Aurral has no switch to turn off its own passwords: its
    sign-in page leads with Authelia and hides the password form behind "Sign in
    with a local account instead".
-3. In Settings > Users, keep "Add artist" and "Add album" on and every delete
-   off in the default permissions, so a Friend adds what they want without
-   waiting for the Admin, and removes nothing.
+3. In Settings > Users, keep "Add artist", "Add album" and "Playlists" on and
+   every delete off in the default permissions, so a Friend adds what they
+   want without waiting for the Admin, makes playlists, and removes nothing. A
+   Friend edits only their own playlists: the others they only play, or join
+   when the owner invites them.
 
 ### Soulseek
 
@@ -1216,19 +1218,37 @@ any.
    Gluetun, paste `SLSKD_API_KEY`, then click "Test connection". slskd
    downloads into `/data/torrents/soulseek/downloads`, which Aurral sees at the
    same path.
-2. In Settings > Downloads > Download clients, keep slskd as the only source:
-   turn off yt-dlp, and leave Prowlarr and qBittorrent off. Aurral then never
-   downloads from YouTube, nor from C411, where ratio could not hold it.
+2. In Settings > Downloads > Download clients, keep yt-dlp on with the
+   priority 1000 under Advanced, so Aurral tries it last, for a track Soulseek
+   does not have. Leave Prowlarr and qBittorrent off, so Aurral never downloads
+   from C411, where ratio could not hold it.
 3. In Settings > Downloads > Quality, pick "Lossless": FLAC first, MP3 or AAC
    only when no FLAC turns up. Under Advanced, turn on "Automatic upgrades", so
-   Aurral replaces a lossy album with FLAC once Soulseek has it.
+   Aurral replaces a lossy album, or a track from YouTube, with FLAC once
+   Soulseek has it.
+
+### Settings of Aurral kept by policy
+
+[policy](#policy) puts these back every 10 minutes:
+
+| Setting                | Value                                  |
+| ---------------------- | -------------------------------------- |
+| slskd                  | on, `http://gluetun:5030`, priority 10 |
+| yt-dlp                 | on, priority 1000                      |
+| Quality                | cutoff FLAC, automatic upgrades on     |
+| Permissions of Friends | add artist, add album, playlists       |
+| Following an artist    | new releases only                      |
+
+The permissions of Friends are also the default ones, every delete stays off,
+and an admin keeps every right.
 
 ### Follow an artist
 
 On the page of an artist, select "Monitor". Aurral checks the artists it
 follows once a day and downloads their new releases. In Settings > Monitoring >
-Default rules, pick what following an artist brings by default: the back
-catalogue, the new releases, and the release types.
+Default rules, keep the back catalogue on "None" and only "New releases" on, so
+following an artist never downloads a whole discography: a Friend adds the
+albums they want one by one.
 
 ### Import a music library
 
@@ -1260,11 +1280,11 @@ Friend:
 All three are free and open source.
 
 A Subsonic app cannot go through Authelia, so it signs in with a password of
-Aurral, which a user created by Authelia does not have. In Settings > Users, set
-one for each Friend, distinct from their Account, and send it to them with the
-address and their username. In the browser, a Friend signs in with Authelia,
-and can sign in another browser with a code from Settings > Profile > "Pair a
-device".
+Aurral, which a user created by Authelia does not have. Each Friend sets their
+own in Settings > Profile > "Set password", distinct from their Account, then
+signs in the app with the address and their username. In the browser, a
+Friend signs in with Authelia, and can sign in another browser with a code from
+Settings > Profile > "Pair a device".
 
 ### Listening history
 
@@ -1275,20 +1295,23 @@ it on to Last.fm, which Aurral no longer reaches itself.
 
 ## Policy
 
-Requires [Jellyfin](#jellyfin), [Radarr](#radarr) and [Sonarr](#sonarr).
+Requires [Jellyfin](#jellyfin), [Radarr](#radarr), [Sonarr](#sonarr) and
+[Aurral](#aurral).
 
 policy keeps the settings of the apps the way this README sets them. Every 10
 minutes, it reads them through the API of each app, and puts back only what
 differs, so a setting changed by hand in a Dashboard comes back at the next
 pass. It keeps the settings listed in
 [Rules of the server and the Accounts](#rules-of-the-server-and-the-accounts),
-[Settings kept by policy](#settings-kept-by-policy) and
-[Settings of Sonarr kept by policy](#settings-of-sonarr-kept-by-policy).
+[Settings kept by policy](#settings-kept-by-policy),
+[Settings of Sonarr kept by policy](#settings-of-sonarr-kept-by-policy) and
+[Settings of Aurral kept by policy](#settings-of-aurral-kept-by-policy).
 
 It keeps an app once its API key is in `.env`: `JELLYFIN_API_KEY`,
-`RADARR_API_KEY` or `SONARR_API_KEY`. It reaches Radarr and Sonarr in the
-internal zone, and Jellyfin through Caddy. Its logs name each setting it puts
-back:
+`RADARR_API_KEY`, `SONARR_API_KEY` or `AURRAL_API_KEY`. It reaches Radarr and
+Sonarr in the internal zone, and Jellyfin and Aurral through Caddy. Aurral takes
+`AURRAL_API_KEY` as its own API key in place of the one it generates. Its logs
+name each setting it puts back:
 
 ```sh
 docker logs policy

@@ -38,8 +38,9 @@ Pour écouter sur ton téléphone ou ton PC, une appli libre et gratuite :
 - **iPhone** · [Amperfy](https://github.com/BLeeEZ/amperfy)
 - **PC** · [Feishin](https://github.com/jeffvli/feishin), ou le navigateur
 
--# Dans l'appli, choisis un serveur Subsonic, mets l'adresse d'Aurral et ton
-identifiant, avec le mot de passe d'appli que je t'envoie en privé.
+-# Crée d'abord un mot de passe d'appli dans Aurral, Settings > Profile > Set
+password, différent de celui de ton compte. Dans l'appli, choisis un serveur
+Subsonic, mets l'adresse d'Aurral, ton identifiant et ce mot de passe.
 -# Relie ListenBrainz dans Aurral pour des recommandations selon ce que tu
 écoutes.
 
