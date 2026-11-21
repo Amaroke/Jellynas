@@ -358,9 +358,9 @@ docker compose -f services/doco-cd/compose.yaml up -d
 Each deploy runs from a copy of the merged revision, kept in the data volume of
 doco-cd. It recreates the services whose compose definition or image changed,
 and those that mount a file of the repo that changed, such as
-`services/ratio/ratio.py`. It rebuilds Caddy from its Dockerfile, and removes
-the services commented out in `compose.yaml`. A failed deploy is retried at the
-next poll.
+`services/ratio/ratio.py`. It rebuilds Caddy and policy from their Dockerfile,
+and removes the services commented out in `compose.yaml`. A failed deploy is
+retried at the next poll.
 
 doco-cd reaches Docker through its socket, which gives it full control of the
 machine, like any tool that runs Compose. Its logs name each deploy, and the
@@ -401,10 +401,11 @@ and the Dependency Dashboard issue lists every pending update.
 - The apk and apt packages of the Dockerfiles, through their `_VERSION`
   arguments
 - The Python packages of `services/music-bot/requirements.txt`
+- The Rust crates of `services/policy/Cargo.toml`
 - The GitHub Actions and the pre-commit hook
 - The tools pinned in `.github/workflows/ci.yml`: gitleaks, hadolint,
-  actionlint,
-  yamllint, ruff, zizmor, markdownlint-cli2 and Renovate itself
+  actionlint, the Rust image, yamllint, ruff, zizmor, markdownlint-cli2 and
+  Renovate itself
 
 Renovate does not follow `ubuntu-latest`, the tools that runner ships such as
 shellcheck, the plugins installed by hand inside an app, or TrueNAS.
@@ -490,38 +491,75 @@ collection. Leave it as it is.
 
 Each Friend gets their own Account, so their watch history and progress are
 theirs. The Accounts live in lldap, as [Accounts](#accounts) sets out, and
-Jellyfin creates its user at the first sign-in of a Friend. Then, in Dashboard >
-Users, open the user and:
+Jellyfin creates its user at the first sign-in of a Friend, with access to all
+libraries and without the right to manage the server. Within 10 minutes,
+policy gives it the rules below.
 
-1. Grant access to all libraries.
-2. Leave "Allow this user to manage the server" unchecked.
-3. Check "Allow media downloading" so the Friend can download videos, books and
-   manga to their phone.
-
-Quick Connect stays on in Dashboard > General: a Friend signs in on a TV by
-typing the code it shows into Jellyfin on their phone, without typing their
-password on the TV.
+Quick Connect stays on: a Friend signs in on a TV by typing the code it shows
+into Jellyfin on their phone, without typing their password on the TV.
 
 ### Transcoding
 
 The NAS has no GPU, so Jellyfin transcodes on the CPU, which holds only a few
-streams at a time. Keep hardware acceleration at "None" in Dashboard >
-Playback > Transcoding. A client that plays the file as it is needs no
-transcoding at all. With an Intel or AMD GPU passed to the NAS, map `/dev/dri`
-into the container and pick "Intel QuickSync" or "VAAPI" there.
+streams at a time, and policy keeps hardware acceleration at "None". A
+client that plays the file as it is needs no transcoding at all. With an Intel
+or AMD GPU passed to the NAS, map `/dev/dri` into the container and change
+`HardwareAccelerationType` in `services/policy/src/jellyfin.rs` to `qsv` or
+`vaapi`.
 
-### Login lockout
+### Rules of the server and the Accounts
 
-In Dashboard > Users, keep "Maximum number of failed login attempts before user
-is locked out" at a value (3 for example) on every Account, never `-1`, so no
-Account can be brute forced from the internet.
+[policy](#policy) applies the same rules to the server and to every Account of
+Jellyfin, the Admin included, through the API key of `JELLYFIN_API_KEY`. A new
+Account gets them within 10 minutes. Change a rule in the `server`, `policy` or
+`configuration` function of `services/policy/src/jellyfin.rs`, never in the
+Dashboard. The server:
+
+| Rule                               | Value                                  |
+| ---------------------------------- | -------------------------------------- |
+| Server name                        | Jellynas                               |
+| Language of the interface          | French                                 |
+| Language and country of metadata   | French, France                         |
+| Quick Connect                      | On                                     |
+| Upload of the logs of the clients  | On, to debug a Friend's player         |
+| Metrics                            | Off                                    |
+| Kept logs                          | 3 days                                 |
+| Kept activity                      | 30 days                                |
+| Bitrate limit of remote clients    | None                                   |
+| Hardware acceleration              | None, the NAS has no GPU               |
+| Throttle transcodes                | On, the CPU stops once it is ahead     |
+| Delete segments                    | On, so transcodes do not fill the disk |
+| Tone mapping                       | Off, too heavy for the CPU             |
+| Known proxies                      | `caddy`                                |
+| Remote access                      | On                                     |
+| UPnP                               | Off                                    |
+
+Jellyfin reads its networking settings when it starts: after a change of them,
+restart it as in [Jellyfin behind Caddy](#jellyfin-behind-caddy). The Accounts:
+
+| Rule                                     | Value                         |
+| ---------------------------------------- | ----------------------------- |
+| Live TV                                  | Off                           |
+| Public sharing                           | Off                           |
+| Media conversion                         | Off, it transcodes on the CPU |
+| Media downloading                        | On, for videos, books, manga  |
+| Remote control of other users            | Off                           |
+| Active sessions                          | 1 at a time                   |
+| Failed sign-ins before lockout           | 3                             |
+| SyncPlay                                 | Create and join groups        |
+| Deletion of media                        | Off, except for the Admin     |
+| Next episode plays by itself             | On                            |
+
+An Account locked out after 3 failed sign-ins stays locked until the Admin
+unlocks it, in Dashboard > Users, by unticking "Disable this user". The
+preferences of each Friend, such as the languages of the audio and of the
+subtitles, stay theirs to set.
 
 ### Jellyfin behind Caddy
 
-In Dashboard > Networking, add `caddy` to "Known proxies" and save. Jellyfin
-then sees the real address of each Friend instead of the address of Caddy.
-Jellyfin looks up the address of Caddy when it starts, so restart it now and
-whenever Caddy is recreated:
+policy keeps `caddy` in "Known proxies", so Jellyfin sees the real
+address of each Friend instead of the address of Caddy. Jellyfin looks up the
+address of Caddy when it starts, so restart it whenever Caddy is recreated:
 
 ```sh
 docker compose restart jellyfin
@@ -892,6 +930,219 @@ ever stops, so Radarr, Sonarr and Lidarr never remove one: a torrent of C411
 seeds forever, and ratio removes a public one after two weeks, or once the same
 files seed on C411.
 
+## Radarr
+
+Requires [Prowlarr](#prowlarr).
+
+Radarr fulfils movie Requests: it searches the indexers, sends the torrent to
+qBittorrent, then copies the finished movie into the Library. No other
+maintained open source tool covers movies as well. It sees only the movies
+folder, under `/data/media/movies`, and the torrents tree, under
+`/data/torrents`.
+
+### Login of Radarr
+
+Open `https://radarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication
+the same way as Prowlarr, with its own username and password. Copy the API key
+from Settings > General > Security into `RADARR_API_KEY` in `.env`, so
+[policy](#policy) keeps the settings below.
+
+### Download client
+
+1. In qBittorrent, right-click "Categories" in the left panel, pick "Add
+   category", and enter `movies` as the category and `/data/torrents/movies` as
+   the save path. ratio creates it by itself once it runs.
+2. In Radarr, Settings > Download Clients, click "+" and pick qBittorrent.
+3. Enter `gluetun` as the host, since qBittorrent shares its network, `8080` as
+   the port, and the qBittorrent login, then click "Test" and "Save". policy
+   sets the rest.
+
+### Settings kept by policy
+
+policy keeps these settings of Radarr, and puts back any of them changed by
+hand:
+
+- Settings > General: authentication by "Forms", always required, no anonymous
+  usage data, log level "Info".
+- Root folder `/data/media/movies`, added again if it is missing.
+- "Rename Movies" on, with both the movie file and folder named
+  `{Movie Title} ({Release Year}) [tmdbid-{TmdbId}]`, so Jellyfin always
+  matches the right movie, even a remake with the same title.
+- "Use Hardlinks instead of Copy" off. Each import is a copy, so the torrent
+  keeps seeding from the torrents tree while Tdarr normalises the Library file.
+- Recycling bin `/data/media/movies/.recycle`, emptied after 30 days. A deleted
+  movie stays there for 30 days and can be moved back. Jellyfin and Radarr skip
+  hidden folders, so it never shows up as a movie.
+- "Unmonitor Deleted Movies" on, so a movie deleted from the disk is not
+  downloaded again.
+- The qBittorrent client on `gluetun` port `8080`, with the category `movies`,
+  and "Remove Completed" and "Remove Failed" on. No indexer sets a seeding goal,
+  so qBittorrent never stops a torrent and Radarr never removes one: a torrent
+  of C411 seeds forever, and ratio removes a public one. policy leaves "Enable"
+  alone, so the downloads can be paused.
+
+### Indexers from Prowlarr
+
+1. In Prowlarr, not Radarr, open Settings > Apps, click "+" and pick Radarr.
+2. Leave "Sync Level" on "Full Sync".
+3. Set "Prowlarr Server" to `http://prowlarr:9696` and "Radarr Server" to
+   `http://radarr:7878`.
+4. Paste the Radarr API key, click "Test", then "Save".
+
+Every indexer then shows up in Radarr, Settings > Indexers, and follows any
+change made in Prowlarr.
+
+### Pause the downloads
+
+Turn the downloads off before any large change, such as importing a library, so
+Radarr sends nothing to qBittorrent meanwhile: in Settings > Download Clients,
+edit qBittorrent, untick "Enable", then "Save". Radarr still searches and keeps
+the Requests of Seerr, but grabs nothing, and shows a health warning until the
+client is back. Tick "Enable" again to resume. What was missed in between does
+not start on its own: Wanted > Missing > "Search All" fetches it.
+
+### Import an existing library
+
+1. Pause the downloads, as above.
+2. Copy the movies under `$DATA_ROOT/media/movies`, one folder per movie, such
+   as `Fight Club (1999)/Fight Club.mkv`. Radarr skips a file left loose at the
+   root of the folder. Give them to the Apps user:
+
+   ```sh
+   sudo chown -R 568:568 "$DATA_ROOT/media/movies"
+   ```
+
+3. In Movies > Library Import, pick `/data/media/movies`. Radarr lists every
+   folder it does not manage yet, each with the movie it guessed.
+4. Check each guess. For a wrong one, click it and search by title and year, or
+   by `tmdb:550` with the id of the movie on TMDB.
+5. Pick the quality profile, leave "Start search for missing movie" unticked,
+   then click "Import". With the downloads paused, that search would find
+   releases but grab none of them, and would not run again on its own.
+6. Rename what was imported: Radarr names only its own downloads by itself. In
+   Movies, click "Select Movies", "Select All", then "Organize": a preview lists
+   every file before and after, click "Organize" to apply. For the folders, in
+   the same selection click "Edit", pick the same root folder, and answer "Yes"
+   to move the files: each folder takes the "Movie Folder Format".
+7. Resume the downloads.
+8. Pick what to fetch. Radarr only searches a movie that is monitored: in
+   Movies, click the bookmark of a movie to unmonitor it, and Radarr ignores it
+   for good, even when a better release shows up. Then Wanted > Missing >
+   "Search All" fetches the movies without a file, and Wanted > Cutoff Unmet >
+   "Search All" replaces the files below the quality profile.
+
+Jellyfin sees the renamed files as new items: a movie already watched loses its
+watched state. Seerr shows each movie as available after its next scan of
+Jellyfin.
+
+If an import goes wrong:
+
+- A folder is missing from the list: it is not under `/data/media/movies`, is
+  already managed by Radarr, or belongs to another user. Fix the owner with the
+  `chown` above.
+- A movie was matched to the wrong title: delete it from Radarr with "Delete
+  Movie Folder" unticked, then import its folder again with the right match.
+- A file shows as missing after the import: open the movie, then "Manage
+  Files", and check its quality and language. A sample or a bonus is never
+  imported as the movie.
+- "Organize" changes nothing: "Rename Movies" is unticked in Settings > Media
+  Management.
+
+## Sonarr
+
+Requires [Prowlarr](#prowlarr).
+
+Sonarr fulfils show Requests and fetches new episodes on its own: it searches
+the indexers, sends the torrent to qBittorrent, then copies each finished
+episode into the Library. It sees only the shows and anime folders, under
+`/data/media/shows` and `/data/media/anime`, and the torrents tree, under
+`/data/torrents`. Medusa or SickChill can replace it.
+
+### Login of Sonarr
+
+Open `https://sonarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication
+the same way as Prowlarr, with its own username and password. Copy the API key
+from Settings > General > Security into `SONARR_API_KEY` in `.env`, so
+[policy](#policy) keeps the settings below.
+
+### Download client of Sonarr
+
+1. In qBittorrent, add a category `shows` with `/data/torrents/shows` as the
+   save path.
+2. In Sonarr, Settings > Download Clients, click "+" and pick qBittorrent.
+3. Enter `gluetun` as the host, `8080` as the port, and the qBittorrent login,
+   then click "Test" and "Save". policy sets the rest.
+
+### Settings of Sonarr kept by policy
+
+policy keeps the same settings as in Radarr, with these values:
+
+- Root folders `/data/media/shows` and `/data/media/anime`.
+- "Rename Episodes" on, with the folder of a show named
+  `{Series TitleYear} [tvdbid-{TvdbId}]`.
+- Recycling bin `/data/media/shows/.recycle`, for both shows and anime.
+- "Unmonitor Deleted Episodes" on, so an episode deleted from the disk is not
+  downloaded again.
+- The category `shows` for the qBittorrent client.
+
+### Indexers of Sonarr from Prowlarr
+
+In Prowlarr, Settings > Apps, click "+" and pick Sonarr. Set "Prowlarr Server"
+to `http://prowlarr:9696` and "Sonarr Server" to `http://sonarr:8989`, paste the
+Sonarr API key, click "Test", then "Save". Every indexer with TV categories then
+shows up in Sonarr, Settings > Indexers. An indexer without TV categories, such
+as Internet Archive, is never synced to Sonarr.
+
+### Import an existing library into Sonarr
+
+The steps are the same as in Radarr, with these differences:
+
+- Pause the downloads of Sonarr the same way, in its Settings > Download
+  Clients.
+- Copy one folder per show under `$DATA_ROOT/media/shows`, or
+  `$DATA_ROOT/media/anime` for an anime, with the episodes in it or in one
+  folder per season. Sonarr reads the season and the episode from names such as
+  `S01E02`.
+- Use Series > Library Import, pick the root folder, search a wrong guess by
+  `tvdb:` and the id of the show on TheTVDB, set "Series Type" to "Anime" for an
+  anime, choose what to monitor, and leave "Start search for missing episodes"
+  unticked.
+- Once the downloads resume, ignore what you do not want before searching: in a
+  show, click the bookmark of a season or of an episode to unmonitor it. Then
+  Wanted > Missing > "Search All" fetches every monitored episode without a
+  file.
+- Rename with "Select Series", "Select All", then "Organize", and the folders
+  with "Edit" and the same root folder.
+- An episode that stays unmatched is often an anime in absolute numbering with
+  the type "Standard": switch its "Series Type" to "Anime" in "Edit", then
+  "Refresh & Scan".
+
+## Policy
+
+Requires [Jellyfin](#jellyfin), [Radarr](#radarr) and [Sonarr](#sonarr).
+
+policy keeps the settings of the apps the way this README sets them. Every 10
+minutes, it reads them through the API of each app, and puts back only what
+differs, so a setting changed by hand in a Dashboard comes back at the next
+pass. It keeps the settings listed in
+[Rules of the server and the Accounts](#rules-of-the-server-and-the-accounts),
+[Settings kept by policy](#settings-kept-by-policy) and
+[Settings of Sonarr kept by policy](#settings-of-sonarr-kept-by-policy).
+
+It keeps an app once its API key is in `.env`: `JELLYFIN_API_KEY`,
+`RADARR_API_KEY` or `SONARR_API_KEY`. It reaches Radarr and Sonarr in the
+internal zone, and Jellyfin through Caddy. Its logs name each setting it puts
+back:
+
+```sh
+docker logs policy
+```
+
+It is a small Rust program in `services/policy`, one module per app, which
+doco-cd builds into an image of 2 MB that runs in 1 MB of memory. To change a
+rule, edit the module of the app and open a pull request: the CI checks its
+format, its lints and its tests.
+
 === TO BE REWORKED: everything below ===
 
 ## Architecture
@@ -1115,109 +1366,6 @@ pinned, so Renovate keeps them up to date:
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
 | Actions | actionlint checks the workflows, then zizmor audits their security |
-
-## Radarr
-
-Requires [Prowlarr](#prowlarr).
-
-Radarr fulfils movie Requests: it searches the indexers, sends the torrent to
-qBittorrent, then copies the finished movie into the Library. No other
-maintained open source tool covers movies as well. It sees only the movies
-folder, under `/data/media/movies`, and the torrents tree, under
-`/data/torrents`.
-
-### Login of Radarr
-
-Open `https://radarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication
-the same way as Prowlarr, with its own username and password. Copy the API key
-from Settings > General > Security into `RADARR_API_KEY` in `.env`.
-
-### Media management
-
-In Settings > Media Management, click "Show Advanced" at the top, then:
-
-1. Under Root Folders, add `/data/media/movies`.
-2. Check "Rename Movies".
-3. Under Importing, uncheck "Use Hardlinks instead of Copy". Each import is a
-   copy, so the torrent keeps seeding from the torrents tree while Tdarr
-   normalises the Library file.
-4. Under File Management, set "Recycling Bin" to `/data/media/movies/.recycle`
-   and "Recycling Bin Cleanup" to `30` days. A deleted movie stays there for 30
-   days and can be moved back. Jellyfin and Radarr skip hidden folders, so it
-   never shows up as a movie.
-
-### Download client
-
-1. In qBittorrent, right-click "Categories" in the left panel, pick "Add
-   category", and enter `movies` as the category and `/data/torrents/movies` as
-   the save path. ratio creates it by itself once it runs.
-2. In Radarr, Settings > Download Clients, click "+" and pick qBittorrent.
-3. Enter `gluetun` as the host, since qBittorrent shares its network, `8080` as
-   the port, and the qBittorrent login.
-4. Set "Category" to `movies`.
-5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding
-   goal, Radarr removes it and its files from the torrents tree, and the movie
-   stays in the Library.
-6. Click "Test", then "Save".
-
-### Indexers from Prowlarr
-
-1. In Prowlarr, not Radarr, open Settings > Apps, click "+" and pick Radarr.
-2. Leave "Sync Level" on "Full Sync".
-3. Set "Prowlarr Server" to `http://prowlarr:9696` and "Radarr Server" to
-   `http://radarr:7878`.
-4. Paste the Radarr API key, click "Test", then "Save".
-
-Every indexer then shows up in Radarr, Settings > Indexers, and follows any
-change made in Prowlarr.
-
-## Sonarr
-
-Requires [Prowlarr](#prowlarr).
-
-Sonarr fulfils show Requests and fetches new episodes on its own: it searches
-the indexers, sends the torrent to qBittorrent, then copies each finished
-episode into the Library. It sees only the shows and anime folders, under
-`/data/media/shows` and `/data/media/anime`, and the torrents tree, under
-`/data/torrents`. Medusa or SickChill can replace it.
-
-### Login of Sonarr
-
-Open `https://sonarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and set the authentication
-the same way as Prowlarr, with its own username and password. Copy the API key
-from Settings > General > Security into `SONARR_API_KEY` in `.env`.
-
-### Media management of Sonarr
-
-In Settings > Media Management, click "Show Advanced" at the top, then:
-
-1. Under Root Folders, add `/data/media/shows` and `/data/media/anime`.
-2. Check "Rename Episodes".
-3. Under Importing, uncheck "Use Hardlinks instead of Copy", for the same reason
-   as Radarr.
-4. Under File Management, set "Recycling Bin" to `/data/media/shows/.recycle`
-   and "Recycling Bin Cleanup" to `30` days. Deleted episodes of both shows and
-   anime stay there for 30 days and can be moved back.
-
-### Download client of Sonarr
-
-1. In qBittorrent, add a category `shows` with `/data/torrents/shows` as the
-   save path.
-2. In Sonarr, Settings > Download Clients, click "+" and pick qBittorrent.
-3. Enter `gluetun` as the host, `8080` as the port, and the qBittorrent login.
-4. Set "Category" to `shows`.
-5. Check "Remove Completed": once qBittorrent stops a torrent at its seeding
-   goal, Sonarr removes it and its files from the torrents tree, and the
-   episodes stay in the Library.
-6. Click "Test", then "Save".
-
-### Indexers of Sonarr from Prowlarr
-
-In Prowlarr, Settings > Apps, click "+" and pick Sonarr. Set "Prowlarr Server"
-to `http://prowlarr:9696` and "Sonarr Server" to `http://sonarr:8989`, paste the
-Sonarr API key, click "Test", then "Save". Every indexer with TV categories then
-shows up in Sonarr, Settings > Indexers. An indexer without TV categories, such
-as Internet Archive, is never synced to Sonarr.
 
 ## slskd
 
