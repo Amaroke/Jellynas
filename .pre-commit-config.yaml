@@ -5,6 +5,6 @@ repos:
     hooks:
       - id: gitleaks
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.24.1
+    rev: v0.24.2
     hooks:
       - id: markdownlint-cli2

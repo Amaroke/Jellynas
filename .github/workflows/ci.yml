@@ -110,7 +110,7 @@ jobs:
         with:
           persist-credentials: false
       - run: shellcheck scripts/*.sh services/gluetun/entrypoint.sh
-      - run: pipx run ruff==0.17.5 check .
+      - run: pipx run ruff==0.17.6 check .
 
   rust:
     name: Rust
@@ -139,7 +139,7 @@ jobs:
         with:
           persist-credentials: false
       - run: >-
-          npx --yes --package renovate@44.251.0 --
+          npx --yes --package renovate@44.257.9 --
           renovate-config-validator --strict renovate.json
 
   markdown:
