@@ -23,6 +23,8 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: Seerr
       dashboard.section: Watch
+      dashboard.description: Requests of the Friends
+      dashboard.widget: seerr
       dashboard.icon: seerr.svg
       dashboard.href: https://seerr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"

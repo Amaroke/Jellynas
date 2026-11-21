@@ -43,5 +43,4 @@ networks:
   identity-zone:
   aurral-zone:
   internal-zone:
-  dashboard-zone:
   dashboard-docker-zone:

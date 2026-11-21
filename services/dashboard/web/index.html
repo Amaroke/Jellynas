@@ -19,7 +19,26 @@ section h2 { margin: 0 0 10px; font-size: 12px; font-weight: 600; text-transform
 section h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; background: var(--accent); }
 .grid { display: grid; gap: 12px; grid-template-columns: 1fr; }
 @media (min-width: 700px) { .grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); } }
-.card { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 12px; min-width: 0; }
+.card { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); display: grid; gap: 10px; min-width: 0; align-content: start; }
+.card .head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.card .description { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 6px; }
+.figure { background: var(--bg); border-radius: 8px; padding: 6px 8px; min-width: 0; }
+.figure b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.figure span { display: block; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rows { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.rows li { display: grid; gap: 2px; font-size: 12px; min-width: 0; }
+.rows .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rows .detail { color: var(--muted); }
+.rows meter { width: 100%; height: 4px; }
+.note { font-size: 12px; color: var(--restarting); }
+.note.failed { color: var(--unhealthy); }
+#status { display: grid; gap: 12px; }
+#status .clock { font-size: 22px; font-weight: 600; }
+#status .date { color: var(--muted); }
+#status .figures { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+#status .figure { background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 10px 12px; }
+#status .figure b { font-size: 18px; }
 .card .link { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; flex: 1; min-width: 0; }
 .card a.link:hover .name { text-decoration: underline; }
 .card img, .card .letter { width: 32px; height: 32px; flex: none; border-radius: 8px; }
@@ -53,6 +72,7 @@ section h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; 
 <main></main>
 <script id="sections" type="application/json">{{ sections|tojson }}</script>
 <script id="services" type="application/json">{{ services|tojson }}</script>
+<script id="board" type="application/json">{{ board|tojson }}</script>
 <script>
 const sections = JSON.parse(document.getElementById("sections").textContent);
 const main = document.querySelector("main");
@@ -77,6 +97,58 @@ async function control(service, action) {
   render(current);
 }
 
+function clock(seconds) {
+  return new Date(seconds * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+}
+
+function panel(found) {
+  if (!found) return [];
+  const nodes = [];
+  const reading = found.reading;
+  if (reading && reading.figures.length) {
+    nodes.push(element("div", { class: "figures" }, ...reading.figures.map(figure =>
+      element("div", { class: "figure" }, element("b", {}, figure.value), element("span", {}, figure.label)))));
+  }
+  if (reading && reading.rows.length) {
+    nodes.push(element("ul", { class: "rows" }, ...reading.rows.map(row => {
+      const item = element("li", {}, element("span", { class: "title" }, row.title), element("span", { class: "detail" }, row.detail));
+      if (row.progress !== null) item.append(element("meter", { min: "0", max: "1", value: String(row.progress) }));
+      return item;
+    })));
+  }
+  if (found.error) {
+    nodes.push(reading
+      ? element("span", { class: "note" }, `Stale since ${clock(found.updated)}: ${found.error}`)
+      : element("span", { class: "note failed" }, `No data: ${found.error}`));
+  }
+  return nodes;
+}
+
+function status() {
+  return element("section", { id: "status", style: "--accent: var(--status)" },
+    element("h2", {}, "Status"),
+    element("div", {}, element("div", { class: "clock" }), element("div", { class: "date" })),
+    ...panel(board.host));
+}
+
+function tick() {
+  const now = new Date();
+  for (const node of document.querySelectorAll("#status .clock")) {
+    node.textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  }
+  for (const node of document.querySelectorAll("#status .date")) {
+    node.textContent = now.toLocaleDateString([], { dateStyle: "full" });
+  }
+}
+
+function refresh() {
+  for (const node of main.querySelectorAll("article.card")) {
+    node.replaceChildren(node.querySelector(".head"), ...panel(board.widgets[node.dataset.service]));
+  }
+  const host = document.getElementById("status");
+  if (host) host.replaceChildren(...[...host.children].slice(0, 2), ...panel(board.host));
+}
+
 function letter(service) {
   return element("span", { class: "letter" }, service.name.charAt(0).toUpperCase());
 }
@@ -87,14 +159,15 @@ function card(service) {
     icon = element("img", { src: `/icons/${service.icon}`, alt: "", loading: "lazy" });
     icon.onerror = () => icon.replaceWith(letter(service));
   }
-  const text = element("span", { class: "text" },
-    element("span", { class: "name" }, service.name),
-    element("span", { class: "state" }, service.shutdown ? "shut down" : service.state));
+  const text = element("span", { class: "text" }, element("span", { class: "name" }, service.name));
+  if (service.description) text.append(element("span", { class: "description" }, service.description));
+  text.append(element("span", { class: "state" }, service.shutdown ? "shut down" : service.state));
   if (errors.has(service.service)) text.append(element("span", { class: "error" }, errors.get(service.service)));
   const link = service.href
     ? element("a", { class: "link", href: service.href }, icon, text)
     : element("span", { class: "link" }, icon, text);
-  const node = element("article", { class: "card", "data-state": service.state }, link);
+  const head = element("div", { class: "head" }, link);
+  const node = element("article", { class: "card", "data-state": service.state, "data-service": service.service }, head, ...panel(board.widgets[service.service]));
   if (service.switchable) {
     const toggle = element("input", { type: "checkbox", role: "switch", "aria-label": `${service.name} on` });
     toggle.checked = !service.shutdown;
@@ -113,16 +186,18 @@ function card(service) {
       restart.disabled = true;
       control(service, "restart");
     };
-    node.append(element("span", { class: "controls" }, restart, element("label", { class: "switch" }, toggle, element("span"))));
+    head.append(element("span", { class: "controls" }, restart, element("label", { class: "switch" }, toggle, element("span"))));
   }
   return node;
 }
 
 let current = JSON.parse(document.getElementById("services").textContent);
+let board = JSON.parse(document.getElementById("board").textContent);
 
 function render(services) {
   current = services;
   main.replaceChildren(...sections.flatMap(section => {
+    if (section.slug === "status") return [status()];
     const cards = services.filter(service => service.section === section.slug).map(card);
     if (!cards.length) return [];
     const node = element("section", { style: `--accent: var(--${section.slug})` },
@@ -130,13 +205,19 @@ function render(services) {
       element("div", { class: "grid" }, ...cards));
     return [node];
   }));
+  tick();
 }
 
 render(current);
+setInterval(tick, 1000);
 const live = document.getElementById("live");
 function follow() {
   const stream = new EventSource("/events");
   stream.addEventListener("services", event => render(JSON.parse(event.data)));
+  stream.addEventListener("board", event => {
+    board = JSON.parse(event.data);
+    refresh();
+  });
   stream.onopen = () => { live.className = "on"; live.textContent = "live"; };
   stream.onerror = () => {
     live.className = "";

@@ -1,7 +1,7 @@
 use crate::app::{App, Outcome};
 use crate::cards::Section;
 use axum::Router;
-use axum::extract::{Path, State};
+use axum::extract::{ConnectInfo, Path, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Response};
@@ -12,9 +12,13 @@ use minijinja::{Environment, context};
 use serde::Serialize;
 use std::convert::Infallible;
 use std::fs;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use tokio::sync::watch;
 use tokio::task;
+
+const CADDY: &str = "caddy";
 
 #[derive(Serialize)]
 struct Heading {
@@ -51,11 +55,13 @@ async fn page(State(app): State<Arc<App>>) -> Response {
         })
         .collect();
     let services = app.snapshot.borrow().clone();
+    let board = app.board.borrow().clone();
     let rendered = Environment::new().render_str(
         &source,
         context! {
             sections => Serde(&sections),
             services => Serde(&*services),
+            board => Serde(&*board),
         },
     );
     match rendered {
@@ -71,17 +77,25 @@ async fn theme(State(app): State<Arc<App>>) -> Response {
     }
 }
 
+fn follow<T: Serialize + Send + Sync + 'static>(
+    receiver: watch::Receiver<Arc<T>>,
+    name: &'static str,
+) -> impl Stream<Item = Result<Event, Infallible>> {
+    futures_util::stream::unfold((receiver, true), move |(mut receiver, first)| async move {
+        if !first {
+            receiver.changed().await.ok()?;
+        }
+        let data = serde_json::to_string(&**receiver.borrow_and_update()).ok()?;
+        let event = Event::default().event(name).data(data);
+        Some((Ok(event), (receiver, false)))
+    })
+}
+
 async fn events(State(app): State<Arc<App>>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let receiver = app.snapshot.subscribe();
-    let stream =
-        futures_util::stream::unfold((receiver, true), |(mut receiver, first)| async move {
-            if !first {
-                receiver.changed().await.ok()?;
-            }
-            let data = serde_json::to_string(&**receiver.borrow_and_update()).ok()?;
-            let event = Event::default().event("services").data(data);
-            Some((Ok(event), (receiver, false)))
-        });
+    let stream = futures_util::stream::select(
+        follow(app.snapshot.subscribe(), "services"),
+        follow(app.board.subscribe(), "board"),
+    );
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
@@ -104,12 +118,23 @@ async fn icon(State(app): State<Arc<App>>, Path(file): Path<String>) -> Response
     }
 }
 
+async fn from_caddy(peer: SocketAddr) -> bool {
+    match tokio::net::lookup_host((CADDY, 0)).await {
+        Ok(mut addresses) => addresses.any(|address| address.ip() == peer.ip()),
+        Err(error) => {
+            eprintln!("Cannot resolve {CADDY}: {error}");
+            false
+        }
+    }
+}
+
 async fn control(
     State(app): State<Arc<App>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Path((service, action)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> StatusCode {
-    if !headers.contains_key("x-dashboard") {
+    if !headers.contains_key("x-dashboard") || !from_caddy(peer).await {
         return StatusCode::FORBIDDEN;
     }
     match task::spawn_blocking(move || app.control(&service, &action)).await {

@@ -17,6 +17,7 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: LazyLibrarian
       dashboard.section: Automation
+      dashboard.description: Books
       dashboard.icon: lazylibrarian.png
       dashboard.href:
         https://lazylibrarian.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}

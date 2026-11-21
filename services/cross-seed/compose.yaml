@@ -27,6 +27,8 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: cross-seed
       dashboard.section: Farm
+      dashboard.description: Seeds the same data on C411
+      dashboard.monitor: http://cross-seed:2468/api/ping
       dashboard.icon: cross-seed.svg
       dashboard.switchable: "true"
     volumes:

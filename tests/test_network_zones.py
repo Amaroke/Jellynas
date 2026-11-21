@@ -10,10 +10,9 @@ ZONE_MEMBERS = {
     "seerr-zone": {"caddy", "seerr", "radarr", "sonarr"},
     "identity-zone": {"caddy", "authelia", "lldap"},
     "aurral-zone": {"caddy", "aurral", "gluetun"},
-    "dashboard-zone": {"caddy", "dashboard"},
     "dashboard-docker-zone": {"dashboard", "dashboard-socket-proxy"},
 }
-OUTSIDE_INTERNAL_ZONE = {"jellyfin", "seerr", "authelia", "lldap", "aurral", "dashboard", "dashboard-socket-proxy"}
+OUTSIDE_INTERNAL_ZONE = {"jellyfin", "seerr", "authelia", "lldap", "aurral", "dashboard-socket-proxy"}
 SOCKET_HOLDERS = {"socket-proxy", "dashboard-socket-proxy", "backup", "doco-cd"}
 DIRECT_ADDRESSES = ("jellyfin:8096", "seerr:5055", "authelia:9091", "aurral:3001")
 
@@ -141,9 +140,6 @@ class NetworkZonesTest(unittest.TestCase):
             {"qbittorrent": "service:gluetun", "slskd": "service:gluetun", "suwayomi": "service:gluetun", "beszel-agent": "host"},
             borrowed,
         )
-
-    def test_the_dashboard_sits_with_caddy_only(self):
-        self.assertEqual(ZONE_MEMBERS["dashboard-zone"], zone_members("dashboard-zone"))
 
     def test_only_the_dashboard_reaches_its_socket_proxy(self):
         self.assertEqual(ZONE_MEMBERS["dashboard-docker-zone"], zone_members("dashboard-docker-zone"))

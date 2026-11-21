@@ -19,6 +19,8 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: autobrr
       dashboard.section: Farm
+      dashboard.description: IRC announces
+      dashboard.widget: autobrr
       dashboard.icon: autobrr.svg
       dashboard.href: https://autobrr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"

@@ -19,6 +19,8 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: Radarr
       dashboard.section: Automation
+      dashboard.description: Movies
+      dashboard.widget: radarr
       dashboard.icon: radarr.svg
       dashboard.href: https://radarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"

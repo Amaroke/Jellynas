@@ -21,6 +21,8 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: qBittorrent
       dashboard.section: Downloads
+      dashboard.description: Torrents, through the VPN only
+      dashboard.widget: qbittorrent
       dashboard.icon: qbittorrent.svg
       dashboard.href: https://qbittorrent.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"

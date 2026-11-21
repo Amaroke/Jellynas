@@ -24,6 +24,9 @@ pub struct Card {
     pub icon: Option<String>,
     pub href: Option<String>,
     pub switchable: bool,
+    pub description: Option<String>,
+    pub widget: Option<String>,
+    pub monitor: Option<String>,
 }
 
 impl Section {
@@ -87,6 +90,9 @@ pub fn card(labels: &HashMap<String, String>) -> Option<Card> {
         icon: label("dashboard.icon").filter(|icon| icon_file(icon)),
         href: label("dashboard.href"),
         switchable: label("dashboard.switchable").as_deref() == Some("true"),
+        description: label("dashboard.description"),
+        widget: label("dashboard.widget"),
+        monitor: label("dashboard.monitor"),
         service,
     })
 }
@@ -166,6 +172,9 @@ mod tests {
             ("dashboard.icon", "jellyfin.svg"),
             ("dashboard.href", "https://jellyfin.lan.example.org:443"),
             ("dashboard.switchable", "true"),
+            ("dashboard.description", "Streams the Library"),
+            ("dashboard.widget", "jellyfin"),
+            ("dashboard.monitor", "https://jellyfin.example.org/health"),
         ]));
         let expected = Card {
             service: "jellyfin".into(),
@@ -174,6 +183,9 @@ mod tests {
             icon: Some("jellyfin.svg".into()),
             href: Some("https://jellyfin.lan.example.org:443".into()),
             switchable: true,
+            description: Some("Streams the Library".into()),
+            widget: Some("jellyfin".into()),
+            monitor: Some("https://jellyfin.example.org/health".into()),
         };
         assert_eq!(Some(expected), found);
     }

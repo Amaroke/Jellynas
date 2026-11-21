@@ -25,6 +25,8 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: Suwayomi
       dashboard.section: Automation
+      dashboard.description: Manga, through the VPN only
+      dashboard.widget: suwayomi
       dashboard.icon: suwayomi.svg
       dashboard.href: https://suwayomi.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"
