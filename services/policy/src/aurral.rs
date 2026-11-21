@@ -124,7 +124,7 @@ fn toggle(api: &impl Api, playlist: &Value, field: &str, path: &str) -> Result<b
     let id = playlist["id"].as_str().ok_or("a playlist has no id")?;
     api.send(
         "PUT",
-        &format!("/playlists/{id}/{path}"),
+        &format!("/playlists/static-playlists/{id}/{path}"),
         &json!({ "enabled": true }),
     )?;
     Ok(true)
@@ -162,7 +162,7 @@ fn playlists(api: &impl Api) -> Result<usize, String> {
             if !drifted.is_empty() {
                 api.send(
                     "PUT",
-                    &format!("/playlists/{id}"),
+                    &format!("/playlists/static-playlists/{id}"),
                     &json!({ "importSource": Value::Object(drifted.clone()) }),
                 )?;
                 changes.extend(drifted);
@@ -314,9 +314,9 @@ mod tests {
         assert_eq!(Ok(1), enforce(&fake));
         assert_eq!(
             vec![
-                "PUT /playlists/a/record-history",
-                "PUT /playlists/a/track-availability",
-                "PUT /playlists/a",
+                "PUT /playlists/static-playlists/a/record-history",
+                "PUT /playlists/static-playlists/a/track-availability",
+                "PUT /playlists/static-playlists/a",
             ],
             fake.paths()
         );
@@ -337,6 +337,6 @@ mod tests {
             json!({"staticPlaylists": [made]}),
         );
         assert_eq!(Ok(1), enforce(&fake));
-        assert_eq!(vec!["PUT /playlists/b/track-availability"], fake.paths());
+        assert_eq!(vec!["PUT /playlists/static-playlists/b/track-availability"], fake.paths());
     }
 }
