@@ -20,6 +20,9 @@ services:
       POST: "0"
     labels:
       kuma.socket-proxy.docker.name: Docker socket proxy
+      dashboard.name: Docker socket proxy
+      dashboard.section: Hosting
+      dashboard.icon: docker.svg
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:

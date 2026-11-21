@@ -1,0 +1,66 @@
+---
+services:
+  dashboard:
+    build: .
+    container_name: dashboard
+    restart: unless-stopped
+    depends_on:
+      - dashboard-socket-proxy
+    networks:
+      - dashboard-zone
+      - dashboard-docker-zone
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    user: ${PUID}:${PGID}
+    read_only: true
+    mem_limit: 64m
+    environment:
+      TZ: ${TZ}
+      DOCKER_HOST: tcp://dashboard-socket-proxy:2375
+    labels:
+      kuma.dashboard.docker.name: Dashboard
+      dashboard.name: Dashboard
+      dashboard.section: Hosting
+      dashboard.icon: homepage.svg
+      dashboard.href: https://dashboard.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+    volumes:
+      - ./web:/web:ro
+      - ${APPDATA_ROOT}/dashboard:/state
+    healthcheck:
+      test:
+        - "CMD"
+        - "/dashboard"
+        - "health"
+      timeout: 10s
+      start_period: 30s
+
+  dashboard-socket-proxy:
+    image: lscr.io/linuxserver/socket-proxy:3.4.8-r0-ls107
+    container_name: dashboard-socket-proxy
+    restart: unless-stopped
+    networks:
+      - dashboard-docker-zone
+    security_opt:
+      - no-new-privileges
+    read_only: true
+    tmpfs:
+      - /run
+    environment:
+      CONTAINERS: "1"
+      EVENTS: "1"
+      INFO: "1"
+      PING: "1"
+      VERSION: "1"
+      ALLOW_START: "1"
+      ALLOW_STOP: "1"
+      ALLOW_RESTARTS: "1"
+      POST: "0"
+    labels:
+      kuma.dashboard-socket-proxy.docker.name: Dashboard socket proxy
+      dashboard.name: Dashboard socket proxy
+      dashboard.section: Hosting
+      dashboard.icon: docker.svg
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro

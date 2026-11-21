@@ -21,6 +21,11 @@ services:
         https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/v1/settings/public
       kuma.seerr.http.expiry_notification: "true"
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: Seerr
+      dashboard.section: Watch
+      dashboard.icon: seerr.svg
+      dashboard.href: https://seerr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      dashboard.switchable: "true"
     volumes:
       - ${APPDATA_ROOT}/seerr:/app/config
     healthcheck:

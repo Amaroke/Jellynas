@@ -10,9 +10,11 @@ ZONE_MEMBERS = {
     "seerr-zone": {"caddy", "seerr", "radarr", "sonarr"},
     "identity-zone": {"caddy", "authelia", "lldap"},
     "aurral-zone": {"caddy", "aurral", "gluetun"},
+    "dashboard-zone": {"caddy", "dashboard"},
+    "dashboard-docker-zone": {"dashboard", "dashboard-socket-proxy"},
 }
-OUTSIDE_INTERNAL_ZONE = {"jellyfin", "seerr", "authelia", "lldap", "aurral"}
-SOCKET_HOLDERS = {"socket-proxy", "backup", "doco-cd"}
+OUTSIDE_INTERNAL_ZONE = {"jellyfin", "seerr", "authelia", "lldap", "aurral", "dashboard", "dashboard-socket-proxy"}
+SOCKET_HOLDERS = {"socket-proxy", "dashboard-socket-proxy", "backup", "doco-cd"}
 DIRECT_ADDRESSES = ("jellyfin:8096", "seerr:5055", "authelia:9091", "aurral:3001")
 
 
@@ -140,6 +142,12 @@ class NetworkZonesTest(unittest.TestCase):
             borrowed,
         )
 
+    def test_the_dashboard_sits_with_caddy_only(self):
+        self.assertEqual(ZONE_MEMBERS["dashboard-zone"], zone_members("dashboard-zone"))
+
+    def test_only_the_dashboard_reaches_its_socket_proxy(self):
+        self.assertEqual(ZONE_MEMBERS["dashboard-docker-zone"], zone_members("dashboard-docker-zone"))
+
     def test_caddy_answers_the_public_names_inside_the_nas(self):
         found = aliases(all_services()["caddy"])
         for zone in ("seerr-zone", "aurral-zone", "internal-zone"):
@@ -153,7 +161,7 @@ class NetworkZonesTest(unittest.TestCase):
             for address in DIRECT_ADDRESSES:
                 self.assertNotIn(address, text, path.relative_to(ROOT).as_posix())
 
-    def test_only_the_proxy_backup_and_doco_cd_hold_the_docker_socket(self):
+    def test_only_the_proxies_backup_and_doco_cd_hold_the_docker_socket(self):
         services = {**all_services(), **service_blocks(DOCO_CD)}
         holders = {service for service, lines in services.items() if mounts_docker_socket(lines)}
         self.assertEqual(SOCKET_HOLDERS, holders)
@@ -162,6 +170,14 @@ class NetworkZonesTest(unittest.TestCase):
         proxy = all_services()["socket-proxy"]
         self.assertIn("      - /var/run/docker.sock:/var/run/docker.sock:ro", proxy)
         self.assertIn('      POST: "0"', proxy)
+
+    def test_the_dashboard_proxy_only_starts_stops_and_restarts(self):
+        proxy = all_services()["dashboard-socket-proxy"]
+        self.assertIn("      - /var/run/docker.sock:/var/run/docker.sock:ro", proxy)
+        self.assertIn('      POST: "0"', proxy)
+        allowed = {line.split(":")[0].strip() for line in section(proxy, "environment") if line.strip().endswith('"1"')}
+        self.assertEqual({"CONTAINERS", "EVENTS", "INFO", "PING", "VERSION", "ALLOW_START", "ALLOW_STOP", "ALLOW_RESTARTS"}, allowed)
+        self.assertEqual([], ports(proxy))
 
     def test_only_caddy_publishes_a_port_to_the_network(self):
         for service, lines in all_services().items():

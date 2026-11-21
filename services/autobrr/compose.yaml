@@ -17,6 +17,11 @@ services:
       kuma.autobrr.http.name: autobrr
       kuma.autobrr.http.url: http://autobrr:7474/api/healthz/liveness
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: autobrr
+      dashboard.section: Farm
+      dashboard.icon: autobrr.svg
+      dashboard.href: https://autobrr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      dashboard.switchable: "true"
     volumes:
       - ${APPDATA_ROOT}/autobrr:/config
     healthcheck:

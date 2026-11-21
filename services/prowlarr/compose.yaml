@@ -16,6 +16,11 @@ services:
       kuma.prowlarr.http.name: Prowlarr
       kuma.prowlarr.http.url: http://prowlarr:9696/ping
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: Prowlarr
+      dashboard.section: Automation
+      dashboard.icon: prowlarr.svg
+      dashboard.href: https://prowlarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      dashboard.switchable: "true"
     volumes:
       - ${APPDATA_ROOT}/prowlarr:/config
     healthcheck:

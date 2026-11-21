@@ -22,6 +22,10 @@ services:
       kuma.pr-radar.http.name: PR radar
       kuma.pr-radar.http.url: http://pr-radar:8000/health
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: PR radar
+      dashboard.section: Pull requests
+      dashboard.icon: github.svg
+      dashboard.switchable: "true"
     volumes:
       - ./radar.py:/app/radar.py:ro
       - ${APPDATA_ROOT}/pr-radar:/state

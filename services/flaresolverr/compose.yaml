@@ -15,6 +15,10 @@ services:
     labels:
       kuma.flaresolverr.http.name: FlareSolverr
       kuma.flaresolverr.http.url: http://flaresolverr:8191/health
+      dashboard.name: FlareSolverr
+      dashboard.section: Automation
+      dashboard.icon: flaresolverr.svg
+      dashboard.switchable: "true"
     healthcheck:
       test:
         - "CMD"

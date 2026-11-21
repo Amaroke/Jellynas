@@ -27,6 +27,11 @@ services:
       kuma.slskd.http.name: slskd
       kuma.slskd.http.url: http://gluetun:5030/health
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: slskd
+      dashboard.section: Downloads
+      dashboard.icon: slskd.svg
+      dashboard.href: https://slskd.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      dashboard.switchable: "true"
     volumes:
       - ${APPDATA_ROOT}/slskd:/app
       - ${DATA_ROOT}/torrents/soulseek:/data/torrents/soulseek

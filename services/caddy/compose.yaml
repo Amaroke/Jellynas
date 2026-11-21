@@ -7,6 +7,7 @@ services:
     networks:
       jellyfin-zone:
       identity-zone:
+      dashboard-zone:
       seerr-zone:
         aliases:
           - jellyfin.${DOMAIN}
@@ -43,6 +44,9 @@ services:
       - host.docker.internal:host-gateway
     labels:
       kuma.caddy.docker.name: Caddy
+      dashboard.name: Caddy
+      dashboard.section: Hosting
+      dashboard.icon: caddy.svg
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ${APPDATA_ROOT}/caddy/data:/data

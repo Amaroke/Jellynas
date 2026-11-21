@@ -114,6 +114,7 @@
 	import lan uptime-kuma uptime-kuma:3001
 	import lan dozzle dozzle:8080
 	import lan homepage homepage:3000
+	import lan dashboard dashboard:8000
 	handle {
 		abort
 	}

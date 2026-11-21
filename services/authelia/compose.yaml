@@ -27,6 +27,9 @@ services:
         https://auth.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/health
       kuma.authelia.http.expiry_notification: "true"
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: Authelia
+      dashboard.section: Hosting
+      dashboard.icon: authelia.svg
     volumes:
       - ./configuration.yml:/config/configuration.yml:ro
       - ${APPDATA_ROOT}/authelia:/var/lib/authelia

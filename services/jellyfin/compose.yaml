@@ -24,6 +24,11 @@ services:
         https://jellyfin.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/health
       kuma.jellyfin.http.expiry_notification: "true"
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: Jellyfin
+      dashboard.section: Watch
+      dashboard.icon: jellyfin.svg
+      dashboard.href: https://jellyfin.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      dashboard.switchable: "true"
     volumes:
       - ${APPDATA_ROOT}/jellyfin:/config
       - ${DATA_ROOT}/media:/data/media:ro

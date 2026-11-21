@@ -39,6 +39,11 @@ services:
     labels:
       kuma.homepage.http.name: Homepage
       kuma.homepage.http.url: http://homepage:3000/api/healthcheck
+      dashboard.name: Homepage
+      dashboard.section: Hosting
+      dashboard.icon: homepage.svg
+      dashboard.href: https://homepage.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      dashboard.switchable: "true"
     volumes:
       - ./settings.yaml:/app/config/settings.yaml:ro
       - ./services.yaml:/app/config/services.yaml:ro

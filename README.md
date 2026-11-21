@@ -172,7 +172,8 @@ mkdir -p "$BACKUP_ROOT" \
   "$DATA_ROOT"/media/{movies,shows,anime,music,aurral,books,manga} \
   "$DATA_ROOT"/media/{movies,shows}/.recycle \
   "$APPDATA_ROOT"/{seerr,lldap,authelia,aurral,recyclarr,autobrr,cross-seed} \
-  "$APPDATA_ROOT"/{ratio,farm-board,discord-posts,pr-radar,slskd,suwayomi}
+  "$APPDATA_ROOT"/{ratio,farm-board,discord-posts,pr-radar,slskd,suwayomi} \
+  "$APPDATA_ROOT"/dashboard
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 

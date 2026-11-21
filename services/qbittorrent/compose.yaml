@@ -19,6 +19,11 @@ services:
       kuma.qbittorrent.http.name: qBittorrent
       kuma.qbittorrent.http.url: http://gluetun:8080
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: qBittorrent
+      dashboard.section: Downloads
+      dashboard.icon: qbittorrent.svg
+      dashboard.href: https://qbittorrent.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      dashboard.switchable: "true"
     volumes:
       - ${APPDATA_ROOT}/qbittorrent:/config
       - ${DATA_ROOT}/torrents:/data/torrents

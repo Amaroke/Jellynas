@@ -24,6 +24,10 @@ services:
     labels:
       kuma.lldap.docker.name: lldap
       docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: lldap
+      dashboard.section: Hosting
+      dashboard.icon: lldap.svg
+      dashboard.href: https://lldap.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
     volumes:
       - ${APPDATA_ROOT}/lldap:/data
     healthcheck:
