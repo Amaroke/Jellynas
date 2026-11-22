@@ -6,6 +6,7 @@ pub type Parsed = Result<Reading, String>;
 
 const ROWS: usize = 8;
 const POSTERS: usize = 8;
+const NOTHING_PLAYING: &str = "Nothing playing";
 
 fn artwork(images: &str, id: &str, height: u32) -> Option<String> {
     let plain = !id.is_empty()
@@ -54,6 +55,7 @@ fn reading(figures: Vec<(&str, String)>) -> Reading {
             .collect(),
         rows: vec![],
         posters: vec![],
+        idle: None,
         metrics: vec![],
     }
 }
@@ -143,6 +145,7 @@ pub fn jellyfin(counts: &Value, sessions: &Value, latest: &Value, images: &str) 
         .iter()
         .filter_map(|session| playing(session, images))
         .collect();
+    found.idle = Some(NOTHING_PLAYING.to_string());
     let mut seen = Vec::new();
     for (key, poster) in items(field(latest, "Items")?)?
         .iter()
@@ -168,6 +171,7 @@ pub fn music_bot(status: &Value, images: &str) -> Parsed {
         ("Shuffle", text(status, "shuffle")?),
         ("Channel", channel.clone()),
     ]);
+    found.idle = Some(NOTHING_PLAYING.to_string());
     let track = text(status, "track")?;
     if state != "Idle" && track != "Nothing" {
         found.rows = vec![Row {
@@ -515,6 +519,7 @@ pub fn host(systems: &Value, name: &str) -> Parsed {
             .collect(),
         rows: vec![],
         posters: vec![],
+        idle: None,
         metrics: vec![],
     })
 }
@@ -564,6 +569,9 @@ mod tests {
                 "PlayState": {"PlayMethod": "DirectStream"}
             }
         ]);
+        let quiet = jellyfin(&counts, &json!([]), &json!({"Items": []}), IMAGES).unwrap();
+        assert!(quiet.rows.is_empty());
+        assert_eq!(Some("Nothing playing".to_string()), quiet.idle);
         let reading = jellyfin(&counts, &sessions, &json!({"Items": []}), IMAGES).unwrap();
         assert_eq!(
             vec![("Movies", "1"), ("Series", "2"), ("Episodes", "16,803")],
@@ -651,7 +659,9 @@ mod tests {
         }];
         assert_eq!(expected, reading.rows);
         let idle = json!({"state": "Idle", "track": "Nothing", "queue": 0, "shuffle": "Off", "channel": "None", "artwork": null});
-        assert!(music_bot(&idle, IMAGES).unwrap().rows.is_empty());
+        let idle = music_bot(&idle, IMAGES).unwrap();
+        assert!(idle.rows.is_empty());
+        assert_eq!(Some("Nothing playing".to_string()), idle.idle);
         let between = json!({"state": "Playing", "track": "Nothing", "queue": 0, "shuffle": "Off", "channel": "Lounge", "artwork": null});
         assert!(music_bot(&between, IMAGES).unwrap().rows.is_empty());
         let odd = json!({"state": "Paused", "track": "Air - La femme d'argent", "queue": 0, "shuffle": "Off", "channel": "Lounge", "artwork": "../x?y"});

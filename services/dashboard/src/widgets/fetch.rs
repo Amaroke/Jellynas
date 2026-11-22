@@ -315,6 +315,7 @@ impl Client {
             ],
             rows: vec![],
             posters: vec![],
+            idle: None,
             metrics: vec![],
         })
     }
