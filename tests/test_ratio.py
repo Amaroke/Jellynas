@@ -686,7 +686,7 @@ class Tags(unittest.TestCase):
 
     def test_a_c411_torrent_whose_tracker_is_down_is_not_public(self):
         qbt = FakeQBittorrent([torrent("c411", category="movies", tracker="", size_gb=200, seeding_days=20)])
-        run(qbt, state=empty_state(transfers={"c411": [GB, 0]}, origins={"c411": "radarr"}))
+        run(qbt, state=empty_state(transfers={"c411": [GB, 0]}, origins={"c411": ["radarr", "c411"]}))
         self.assertEqual(qbt.deleted, [])
         self.assertNotIn(("c411", "public"), qbt.tagged)
 
@@ -728,7 +728,7 @@ class PublicTorrents(unittest.TestCase):
             torrent("public", tracker=PUBLIC, seeding_days=14),
             torrent("copy", progress=0.4, seeding_days=0, state="checkingUP"),
         ])
-        run(qbt, state=empty_state(transfers={"copy": [0, 0]}, origins={"copy": "farm"}))
+        run(qbt, state=empty_state(transfers={"copy": [0, 0]}, origins={"copy": ["farm", "c411"]}))
         self.assertEqual(qbt.deleted, ["public"])
         self.assertEqual(qbt.kept, ["public"])
 
@@ -771,17 +771,17 @@ class Adoption(unittest.TestCase):
 
 
 class Ledger(unittest.TestCase):
-    def test_only_c411_torrents_count_and_removed_ones_stay(self):
+    def test_every_torrent_counts_and_removed_ones_stay(self):
         qbt = FakeQBittorrent([
             torrent("c411", category="movies", downloaded_gb=6, uploaded_gb=1),
-            torrent("public", tracker=PUBLIC, downloaded_gb=9),
+            torrent("public", category="movies", tracker=PUBLIC, downloaded_gb=9),
         ])
         state = run(qbt, state=empty_state(transfers={"gone": [2 * GB, 0]}))
-        self.assertEqual(state["transfers"], {"c411": [6 * GB, 1 * GB], "gone": [2 * GB, 0]})
+        self.assertEqual(state["transfers"], {"c411": [6 * GB, 1 * GB], "public": [9 * GB, 0], "gone": [2 * GB, 0]})
 
 
-def report_of(state, origin):
-    return state["report"]["origins"].get(origin)
+def report_of(state, origin, tracker="c411"):
+    return next(f for f in state["report"]["origins"] if (f["origin"], f["tracker"]) == (origin, tracker))
 
 
 class Origins(unittest.TestCase):
@@ -793,21 +793,30 @@ class Origins(unittest.TestCase):
             torrent("grab"),
             torrent("seed", category="movies", save_path="/data/torrents/cross-seed/C411"),
             torrent("public", category="movies", tracker=PUBLIC),
+            torrent("other", category="shows", tracker="https://other.example/announce"),
+            torrent("down", category="", tracker=""),
         ])
-        state = run(qbt, state=empty_state(transfers={"gone": [GB, 0]}))
+        state = run(qbt, state=empty_state(transfers={"gone": [GB, 0]}, origins={"gone": ["radarr", "c411"]}))
         self.assertEqual(state["origins"], {
-            "movie": "radarr", "show": "sonarr", "book": "lazylibrarian", "grab": "farm", "seed": "cross-seed", "gone": "unknown",
+            "movie": ["radarr", "c411"], "show": ["sonarr", "c411"], "book": ["lazylibrarian", "c411"], "grab": ["farm", "c411"],
+            "seed": ["cross-seed", "c411"], "public": ["radarr", "nyaa"], "other": ["sonarr", "other"],
+            "down": ["unknown", "other"], "gone": ["radarr", "c411"],
         })
+
+    def test_a_torrent_whose_tracker_goes_down_keeps_its_tracker(self):
+        state = run(FakeQBittorrent([torrent("public", category="movies", tracker=PUBLIC)]))
+        run(FakeQBittorrent([torrent("public", category="movies", tracker="")]), state=state, now=NOW + 600)
+        self.assertEqual(state["origins"]["public"], ["radarr", "nyaa"])
 
     def test_a_removed_torrent_keeps_its_origin(self):
         state = empty_state()
         run(FakeQBittorrent([torrent("grab", downloaded_gb=3, uploaded_gb=1)]), state=state)
         run(FakeQBittorrent(), state=state, now=NOW + 2 * DAY)
-        self.assertEqual(state["origins"], {"grab": "farm"})
+        self.assertEqual(state["origins"], {"grab": ["farm", "c411"]})
         self.assertEqual(report_of(state, "farm")["torrents"], 1)
 
     def test_an_origin_out_of_the_ledger_is_forgotten(self):
-        state = run(FakeQBittorrent(), state=empty_state(origins={"lost": "farm"}))
+        state = run(FakeQBittorrent(), state=empty_state(origins={"lost": ["farm", "c411"]}))
         self.assertEqual(state["origins"], {})
 
 
@@ -824,7 +833,7 @@ class Report(unittest.TestCase):
         state = empty_state()
         lines = self.run_quietly(qbt, state, NOW)
         self.assertEqual(len(lines), 1)
-        self.assertIn("Origin radarr:", lines[0])
+        self.assertIn("Origin radarr c411:", lines[0])
         self.assertEqual(report_of(state, "radarr")["ratio"], 0.5)
         self.assertEqual(self.run_quietly(qbt, state, NOW + 600), [])
         self.assertEqual(len(self.run_quietly(qbt, state, NOW + DAY)), 1)
@@ -832,7 +841,7 @@ class Report(unittest.TestCase):
     def test_the_week_counts_only_the_last_seven_days(self):
         state = empty_state(
             transfers={"movie": [5 * GB, GB], "gone": [GB, GB]},
-            origins={"movie": "radarr", "gone": "radarr"},
+            origins={"movie": ["radarr", "c411"], "gone": ["radarr", "c411"]},
             history={
                 "movie": [[NOW - 9 * DAY, GB, 0], [NOW - 6.5 * DAY, 2 * GB, GB // 2]],
                 "gone": [[NOW - 8 * DAY, GB, GB]],
@@ -847,7 +856,7 @@ class Report(unittest.TestCase):
         self.assertNotIn("gone", state["history"])
 
     def test_days_in_the_farm_count_from_the_move(self):
-        state = empty_state(origins={"kept": "radarr"})
+        state = empty_state(transfers={"kept": [0, 0]}, origins={"kept": ["radarr", "c411"]})
         self.run_quietly(FakeQBittorrent([torrent("kept", category="movies", size_gb=200, seeding_days=10)]), state, NOW)
         self.run_quietly(FakeQBittorrent([torrent("kept", seeding_days=13)]), state, NOW + 3 * DAY)
         self.run_quietly(FakeQBittorrent([torrent("kept", seeding_days=16)]), state, NOW + 6 * DAY)
@@ -932,7 +941,10 @@ class Board(unittest.TestCase):
         board, _ = run_board(qbt)
         self.assertEqual(board["farm"], {
             "budget_gb": 100,
-            "slices": [{"origin": "farm", "gb": 7}, {"origin": "cross-seed", "gb": 0.5}],
+            "slices": [
+                {"origin": "farm", "tracker": "nyaa", "gb": 4}, {"origin": "farm", "tracker": "c411", "gb": 3},
+                {"origin": "cross-seed", "tracker": "c411", "gb": 0.5},
+            ],
         })
 
     def test_the_board_carries_the_account_the_seeds_and_the_controls(self):
@@ -947,9 +959,13 @@ class Board(unittest.TestCase):
             torrent("grab", downloaded_gb=4, uploaded_gb=2),
             torrent("show", category="shows", seeders=100, downloaded_gb=0, uploaded_gb=5),
             torrent("movie", category="movies", seeders=100, downloaded_gb=10, uploaded_gb=1),
+            torrent("anime", category="shows", tracker=PUBLIC, uploaded_gb=3),
         ])
         board, _ = run_board(qbt)
-        self.assertEqual([o["origin"] for o in board["origins"]], ["sonarr", "farm", "radarr"])
+        self.assertEqual(
+            [(o["origin"], o["tracker"]) for o in board["origins"]],
+            [("sonarr", "c411"), ("sonarr", "nyaa"), ("farm", "c411"), ("radarr", "c411")],
+        )
 
 
 class ControlsStore(unittest.TestCase):
@@ -1025,13 +1041,17 @@ class State(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = os.path.join(folder, "state.json")
             save_state(path, {"transfers": {"a": [6 * GB, GB]}, "grabbed": {"a": 100}})
-            self.assertEqual(load_state(path), empty_state(transfers={"a": [6 * GB, GB]}))
+            self.assertEqual(load_state(path), empty_state(transfers={"a": [6 * GB, GB]}, origins={"a": ["unknown", "c411"]}))
 
     def test_the_old_sources_load_as_origins(self):
         with tempfile.TemporaryDirectory() as folder:
             path = os.path.join(folder, "state.json")
-            save_state(path, {"sources": {"a": "paid", "b": "twin", "c": "library"}})
-            self.assertEqual(load_state(path)["origins"], {"a": "farm", "b": "farm", "c": "unknown"})
+            transfers = {"a": [0, 0], "b": [0, 0], "c": [0, 0], "d": [0, 0]}
+            save_state(path, {"transfers": transfers, "sources": {"a": "paid", "b": "twin", "c": "library"}})
+            self.assertEqual(
+                load_state(path)["origins"],
+                {"a": ["farm", "c411"], "b": ["farm", "c411"], "c": ["unknown", "c411"], "d": ["unknown", "c411"]},
+            )
 
     def test_a_missing_file_is_an_empty_state(self):
         with tempfile.TemporaryDirectory() as folder:

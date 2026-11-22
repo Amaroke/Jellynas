@@ -10,6 +10,7 @@ COLORS = {
     "radarr": "#fbbf24", "sonarr": "#38bdf8", "lazylibrarian": "#a78bfa", "farm": "#34d399", "cross-seed": "#f472b6",
     "unknown": "#94a3b8",
 }
+FADE = {"c411": "", "nyaa": "99", "other": "55"}
 TIER_COLORS = ("#fb7185", "#fbbf24", "#facc15", "#34d399", "#a78bfa")
 BEHAVIOURS = ("free", "twins", "paid", "clean_public", "drop_twins", "hold", "adopt")
 NUMBER_STEPS = {"farm_size_gb": "1", "floor": "0.05", "daily_gb": "0.5"}
@@ -394,20 +395,28 @@ def settings(board, words, language):
     )
 
 
+def color_of(f):
+    return COLORS.get(f["origin"], COLORS["unknown"]) + FADE.get(f["tracker"], FADE["other"])
+
+
+def name_of(f):
+    return f'{f["origin"]} · {f["tracker"]}'
+
+
 def donut(farm, words):
     budget = farm["budget_gb"] or 1
     used = sum(s["gb"] for s in farm["slices"])
     start, rings, legend = 0, [], []
     for s in farm["slices"]:
         part = 100 * s["gb"] / max(budget, used)
-        color = COLORS.get(s["origin"], COLORS["unknown"])
+        color = color_of(s)
         rings.append(
             f'<circle r="0.84" pathLength="100" stroke="{color}" '
             f'stroke-dasharray="{part:.2f} {100 - part:.2f}" stroke-dashoffset="{-start:.2f}"/>'
         )
         legend.append(
             f'<li><span class="swatch" style="background:{color}"></span>'
-            f'<span class="name">{escape(s["origin"])}</span>'
+            f'<span class="name">{escape(name_of(s))}</span>'
             f'<span class="figure">{escape(size_text(s["gb"], words))}</span>'
             f'<span class="meta">{escape(words["explain"].get(s["origin"], ""))}</span></li>'
         )
@@ -450,7 +459,7 @@ def total_of(origins):
 def earned(origins, words):
     head = "".join(f"<th>{escape(c)}</th>" for c in words["columns"])
     body = "".join(
-        earned_rows(f["origin"], f'<span class="swatch" style="background:{COLORS.get(f["origin"], COLORS["unknown"])}"></span>', f, words)
+        earned_rows(name_of(f), f'<span class="swatch" style="background:{color_of(f)}"></span>', f, words)
         for f in origins
     )
     foot = earned_rows(words["total"], "", total_of(origins), words) if origins else ""

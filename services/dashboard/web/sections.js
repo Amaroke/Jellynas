@@ -1,4 +1,7 @@
 const DAYS = 30;
+const FADE = { c411: "", nyaa: "99", other: "55" };
+const colorOf = item => (ORIGINS[item.origin] || ORIGINS.unknown) + (FADE[item.tracker] ?? FADE.other);
+const nameOf = item => `${item.origin} · ${item.tracker}`;
 const ORIGINS = {
   radarr: "#fbbf24", sonarr: "#38bdf8", lazylibrarian: "#a78bfa", farm: "#34d399", "cross-seed": "#f472b6", unknown: "#94a3b8",
 };
@@ -243,9 +246,9 @@ function donut(farm) {
   let start = 0;
   for (const slice of farm.slices) {
     const part = 100 * slice.gb / Math.max(budget, used);
-    const swatch = ORIGINS[slice.origin] || ORIGINS.unknown;
+    const swatch = colorOf(slice);
     svg.append(circle(swatch, part, start));
-    legend.push(tag("li", {}, tag("span", { class: "swatch", style: `background:${swatch}` }), tag("span", { class: "name" }, slice.origin),
+    legend.push(tag("li", {}, tag("span", { class: "swatch", style: `background:${swatch}` }), tag("span", { class: "name" }, nameOf(slice)),
       tag("span", { class: "amount" }, size(slice.gb)), tag("span", { class: "meta" }, WORDS.explainOrigins[slice.origin] || "")));
     start += part;
   }
@@ -267,7 +270,7 @@ function earned(origins) {
     tag("tr", {}, tag("td", { class: "week", colspan: "5" },
       `7 days: ${size(origin.week_downloaded_gb)} down, ${size(origin.week_uploaded_gb)} up, ratio ${number(origin.week_ratio, 2)}, ${number(origin.farm_days, 1)} days in the Farm`)),
   ];
-  const body = origins.flatMap(origin => rows(origin.origin, tag("span", { class: "swatch", style: `background:${ORIGINS[origin.origin] || ORIGINS.unknown}` }), origin));
+  const body = origins.flatMap(origin => rows(nameOf(origin), tag("span", { class: "swatch", style: `background:${colorOf(origin)}` }), origin));
   const keys = ["torrents", "downloaded_gb", "uploaded_gb", "week_downloaded_gb", "week_uploaded_gb", "farm_days"];
   const total = Object.fromEntries(keys.map(key => [key, origins.reduce((sum, origin) => sum + origin[key], 0)]));
   total.ratio = ratioOf(total.uploaded_gb, total.downloaded_gb);

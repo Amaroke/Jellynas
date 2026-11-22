@@ -128,19 +128,20 @@ its C411 copy costs no download on C411.
 _Avoid_: mirror, duplicate
 
 **Origin**:
-What added a torrent to qBittorrent: radarr, sonarr or lazylibrarian for the
-Library, farm for the Farm, or cross-seed. It follows the category of the
-torrent, so a Library torrent moved to the Farm counts for the Farm.
+What added a torrent to qBittorrent, radarr, sonarr or lazylibrarian for the
+Library, farm for the Farm, or cross-seed, with the tracker it seeds on, c411,
+nyaa or other. It follows the category of the torrent, so a Library torrent
+moved to the Farm counts for the Farm.
 _Avoid_: source, kind, pool
 
 **Ledger**:
-What every C411 torrent of the NAS downloaded and uploaded, removed torrents
+What every torrent of the NAS downloaded and uploaded, removed torrents
 included.
 _Avoid_: history, stats
 
 **Deficit**:
-How much more the Ledger downloaded than it uploaded. Its opposite is the
-**Surplus**.
+How much more the C411 torrents of the Ledger downloaded than they uploaded.
+Its opposite is the **Surplus**.
 _Avoid_: debt, balance
 
 ### Hosting
