@@ -256,9 +256,9 @@ BOARD = {
         },
         "numbers": {"farm_size_gb": 100, "floor": 1.2, "daily_gb": 5},
     },
-    "farm": {"budget_gb": 100, "slices": [{"source": "free", "gb": 30.5}, {"source": "paid", "gb": 9.5}]},
-    "sources": [
-        {"source": "free", "torrents": 12, "downloaded_gb": 0, "uploaded_gb": 80.5, "ratio": None,
+    "farm": {"budget_gb": 100, "slices": [{"origin": "farm", "tracker": "c411", "gb": 30.5}, {"origin": "farm", "tracker": "nyaa", "gb": 9.5}]},
+    "origins": [
+        {"origin": "sonarr", "tracker": "nyaa", "torrents": 12, "downloaded_gb": 0, "uploaded_gb": 80.5, "ratio": None,
          "week_downloaded_gb": 0, "week_uploaded_gb": 20.25, "week_ratio": None, "farm_days": 40.5},
     ],
 }
@@ -286,7 +286,7 @@ class PageTest(unittest.TestCase):
 
     def test_the_second_part_shows_the_switches_the_settings_the_disk_and_the_earnings(self):
         page = board_page(BOARD, "2", "fr")
-        for text in ("Grabs payants frais", "Pause Prowlarr sous le plancher", "Budget de la Farm (Go)", "Disque de la Farm", "Gains par Source"):
+        for text in ("Grabs payants frais", "Pause Prowlarr sous le plancher", "Budget de la Farm (Go)", "Disque de la Farm", "Gains par origine", "sonarr · nyaa", "farm · c411"):
             self.assertIn(text, page)
         self.assertEqual(page.count('class="setting"'), 10)
         self.assertIn("Le hardlink garde les fichiers", page)

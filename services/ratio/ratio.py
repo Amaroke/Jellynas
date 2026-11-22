@@ -27,16 +27,16 @@ CATEGORIES = {
     "books": "/data/torrents/books",
     FARM: "/data/torrents/farm",
 }
-PUBLIC = "public"
 CROSS_SEED = "/data/torrents/cross-seed"
 ORIGINS = {"movies": "radarr", "shows": "sonarr", "books": "lazylibrarian", FARM: FARM}
 SEEDING = ("uploading", "stalledUP", "queuedUP", "forcedUP")
 SHARE_LIMITS = ("max_ratio_enabled", "max_seeding_time_enabled", "max_inactive_seeding_time_enabled")
 HISTORY_DAYS = 30
-SOURCES = ("paid", "free", "library", "unknown")
-RETIRED_SOURCES = {
-    "quest": "paid", "zen-hunt": "paid", "volume-hunt": "paid", "twin": "free", "freeleech": "free", "cross-seed": "free",
-}
+UNKNOWN = "unknown"
+ON_C411 = "c411"
+NYAA = "nyaa"
+OTHER = "other"
+FARM_SOURCES = {"paid", "free", "quest", "zen-hunt", "volume-hunt", "twin", "freeleech", "cross-seed"}
 C411_URL = "https://c411.org"
 BLOCKED = 0.8
 TIERS = (("blocked", BLOCKED), ("even", 1.0), ("floor", None), ("goal", 2.0))
@@ -450,7 +450,9 @@ def load_state(path):
         "free": state.get("free", {}),
         "checked": state.get("checked", {}),
         "paused": state.get("paused", False),
-        "sources": state.get("sources", {}),
+        "origins": state.get("origins") or {
+            h: [FARM if state.get("sources", {}).get(h) in FARM_SOURCES else UNKNOWN, ON_C411] for h in state.get("transfers", {})
+        },
         "history": state.get("history", {}),
         "zen": state.get("zen", {}),
         "report": state.get("report", {}),
@@ -542,8 +544,18 @@ def prepare(qbt, settings):
         print("qBittorrent now tells cross-seed about every finished torrent")
 
 
+def tracker_of(state, settings, t):
+    url = t["tracker"].lower()
+    known = state["origins"].get(t["hash"], [None, None])[1]
+    if known == ON_C411 or settings["tracker"] in url:
+        return ON_C411
+    if NYAA in url:
+        return NYAA
+    return known or OTHER
+
+
 def is_c411(state, settings, t):
-    return t["hash"] in state["transfers"] or settings["tracker"] in t["tracker"].lower()
+    return tracker_of(state, settings, t) == ON_C411
 
 
 def is_public(state, settings, t):
@@ -566,26 +578,15 @@ def twin_copies(state):
     return {entry[0] for entry in state["twins"].values()}
 
 
-def source_of(state, settings, copies, t):
-    if t is None:
-        return "unknown"
-    if t["hash"] in copies or t["hash"] in state["free"] or t["category"] == FARM:
-        return "free"
-    if is_library(settings, t["category"]):
-        return "library"
-    return "unknown"
-
-
-def record_sources(state, torrents, settings):
-    copies = twin_copies(state)
-    for infohash, source in state["sources"].items():
-        state["sources"][infohash] = RETIRED_SOURCES.get(source, source)
+def record_origins(state, settings, torrents):
     for infohash in state["transfers"]:
-        if infohash not in state["sources"]:
-            state["sources"][infohash] = source_of(state, settings, copies, torrents.get(infohash))
-    for infohash in list(state["sources"]):
-        if infohash not in state["transfers"] and infohash not in torrents and infohash not in copies:
-            del state["sources"][infohash]
+        t = torrents.get(infohash)
+        if t is not None:
+            state["origins"][infohash] = [origin_of(t) or UNKNOWN, tracker_of(state, settings, t)]
+        else:
+            state["origins"].setdefault(infohash, [UNKNOWN, OTHER])
+    for infohash in [h for h in state["origins"] if h not in state["transfers"]]:
+        del state["origins"][infohash]
 
 
 def record_history(state, torrents, fresh, now):
@@ -624,11 +625,10 @@ def record_zen(state, torrents):
 def record(state, torrents, settings, now):
     fresh = set()
     for t in torrents.values():
-        if t["hash"] in state["transfers"] or settings["tracker"] in t["tracker"].lower():
-            if t["hash"] not in state["transfers"]:
-                fresh.add(t["hash"])
-            downloaded = 0 if t["hash"] in state["free"] else t["downloaded"]
-            state["transfers"][t["hash"]] = [downloaded, t["uploaded"]]
+        if t["hash"] not in state["transfers"]:
+            fresh.add(t["hash"])
+        downloaded = 0 if t["hash"] in state["free"] else t["downloaded"]
+        state["transfers"][t["hash"]] = [downloaded, t["uploaded"]]
     for infohash in [h for h, (at, _) in state["hunted"].items() if at < now - DAY]:
         del state["hunted"][infohash]
     for infohash in [h for h in state["free"] if h not in torrents and h in state["transfers"]]:
@@ -637,7 +637,7 @@ def record(state, torrents, settings, now):
         del state["given_up"][infohash]
     for infohash in [h for h, at in state["checked"].items() if at < now - 2 * DAY]:
         del state["checked"][infohash]
-    record_sources(state, torrents, settings)
+    record_origins(state, settings, torrents)
     record_history(state, torrents, fresh, now)
     record_zen(state, torrents)
 
@@ -655,19 +655,16 @@ def ledger_lines(state):
         samples = state["history"].get(infohash)
         _, downloaded_before, uploaded_before = samples[0] if samples else [0, downloaded, uploaded]
         zen = state["zen"].get(infohash, [0, 0])[1]
-        source = state["sources"].get(infohash)
-        source = source if source in SOURCES else "unknown"
-        yield source, [1, downloaded, uploaded, downloaded - downloaded_before, uploaded - uploaded_before, zen]
+        yield tuple(state["origins"].get(infohash, [UNKNOWN, OTHER])), [1, downloaded, uploaded, downloaded - downloaded_before, uploaded - uploaded_before, zen]
 
 
-def figures_by_source(state):
+def figures_by_origin(state):
     totals = {}
-    for source, line in ledger_lines(state):
-        totals[source] = [a + b for a, b in zip(totals.get(source, [0] * len(line)), line)]
+    for origin, line in ledger_lines(state):
+        totals[origin] = [a + b for a, b in zip(totals.get(origin, [0] * len(line)), line)]
     figures = {}
-    for source in [s for s in SOURCES if s in totals]:
-        count, downloaded, uploaded, week_downloaded, week_uploaded, zen = totals[source]
-        figures[source] = {
+    for origin, (count, downloaded, uploaded, week_downloaded, week_uploaded, zen) in totals.items():
+        figures[origin] = {
             "torrents": count,
             "downloaded_gb": gigabytes(downloaded),
             "uploaded_gb": gigabytes(uploaded),
@@ -687,11 +684,11 @@ def shown(ratio):
 def report(state, now):
     if now - state["report"].get("at", 0) < DAY:
         return
-    figures = figures_by_source(state)
-    state["report"] = {"at": now, "sources": figures}
-    for source, f in figures.items():
+    figures = figures_by_origin(state)
+    state["report"] = {"at": now, "origins": [{"origin": o, "tracker": t, **f} for (o, t), f in figures.items()]}
+    for (origin, tracker), f in figures.items():
         print(
-            f"Source {source}: {f['torrents']} torrents, {f['downloaded_gb']:.1f} GB down, "
+            f"Origin {origin} {tracker}: {f['torrents']} torrents, {f['downloaded_gb']:.1f} GB down, "
             f"{f['uploaded_gb']:.1f} GB up, ratio {shown(f['ratio'])}, last 7 days {f['week_downloaded_gb']:.1f} GB down, "
             f"{f['week_uploaded_gb']:.1f} GB up, ratio {shown(f['week_ratio'])}, {f['farm_days']:.1f} days in the Farm"
         )
@@ -934,10 +931,9 @@ def use_prowlarr(state, now, step, always=False):
         print(f"Prowlarr {why}, ratio leaves it alone for {throttled.retry_after // 60:g} minutes")
 
 
-def take(qbt, state, budget, known, release, torrent, source, via):
+def take(qbt, budget, known, release, torrent, via):
     qbt.add(torrent, FARM)
     known.add(release["infohash"])
-    state["sources"][release["infohash"]] = source
     budget[FARM] -= release["size"]
     budget["slots"] -= 1
     print(
@@ -968,7 +964,7 @@ def grab_twins(qbt, prowlarr, c411, settings, state, releases, known, budget, no
         try:
             twin = find_twin(prowlarr, c411, settings, release, now, searches)
             if twin:
-                take(qbt, state, budget, known, release, twin["torrent"], "free", f"its public twin {twin['title']}")
+                take(qbt, budget, known, release, twin["torrent"], f"its public twin {twin['title']}")
                 state["twins"][twin["infohash"]] = [release["infohash"], FARM, now, ""]
         except (Throttled, OutOfCalls):
             raise
@@ -976,9 +972,9 @@ def grab_twins(qbt, prowlarr, c411, settings, state, releases, known, budget, no
             print(f"Cannot look for a twin of {release['title']}: {error}")
 
 
-def take_from_c411(qbt, c411, state, budget, known, release, source, via):
+def take_from_c411(qbt, c411, state, budget, known, release, via):
     try:
-        take(qbt, state, budget, known, release, c411.download(release["infohash"]), source, via)
+        take(qbt, budget, known, release, c411.download(release["infohash"]), via)
     except OutOfCalls:
         raise
     except FAILURES as error:
@@ -989,10 +985,10 @@ def take_from_c411(qbt, c411, state, budget, known, release, source, via):
     return True
 
 
-def take_paid(qbt, c411, state, budget, known, release, source, now):
+def take_paid(qbt, c411, state, budget, known, release, now):
     free = release["free"]
     via = "C411, freeleech" if free else "C411"
-    if not take_from_c411(qbt, c411, state, budget, known, release, "free" if free else source, via):
+    if not take_from_c411(qbt, c411, state, budget, known, release, via):
         return False
     if free:
         state["free"][release["infohash"]] = now
@@ -1012,7 +1008,7 @@ def grab_free(qbt, c411, settings, state, releases, known, budget, now):
             return
         if release["infohash"] in known or release["size"] > budget[FARM]:
             continue
-        take_paid(qbt, c411, state, budget, known, release, "free", now)
+        take_paid(qbt, c411, state, budget, known, release, now)
 
 
 def grab_paid(qbt, c411, settings, state, releases, known, budget, now):
@@ -1021,14 +1017,14 @@ def grab_paid(qbt, c411, settings, state, releases, known, budget, now):
             return
         if release["infohash"] in known or not affordable(release, budget):
             continue
-        take_paid(qbt, c411, state, budget, known, release, "paid", now)
+        take_paid(qbt, c411, state, budget, known, release, now)
 
 
-def pending(state, torrents):
+def pending(state, settings, torrents):
     return sum(
         t["size"] * (1 - t["progress"])
         for t in torrents.values()
-        if t["hash"] in state["transfers"] and t["hash"] not in state["free"] and t["progress"] < 1
+        if is_c411(state, settings, t) and t["hash"] not in state["free"] and t["progress"] < 1
     )
 
 
@@ -1039,7 +1035,7 @@ def grab(qbt, prowlarr, c411, settings, switches, state, torrents, account, now)
         "slots": settings["max_downloading"] - downloading,
         FARM: settings["farm_size"] - size_of(torrents, FARM),
         "download": 0 if state["paused"] or account is None else max(
-            min(download_left(account, settings) - pending(state, torrents), settings["daily"] - spent), 0
+            min(download_left(account, settings) - pending(state, settings, torrents), settings["daily"] - spent), 0
         ),
     }
     if budget["slots"] <= 0 or budget[FARM] <= 0:
@@ -1180,12 +1176,11 @@ def account_board(account, state, settings):
 
 
 def board_of(state, settings, controls, torrents, seeds, account, now):
-    farm = [t for t in torrents.values() if t["category"] == FARM]
     slices = {}
-    for t in farm:
-        source = state["sources"].get(t["hash"]) if is_c411(state, settings, t) else PUBLIC
-        source = source if source in SOURCES or source == PUBLIC else "unknown"
-        slices[source] = slices.get(source, 0) + t["size"]
+    for t in torrents.values():
+        if t["category"] == FARM:
+            key = (origin_of(t), tracker_of(state, settings, t))
+            slices[key] = slices.get(key, 0) + t["size"]
     return {
         "updated_at": datetime.datetime.fromtimestamp(now, datetime.UTC).isoformat(),
         "account": account_board(account, state, settings),
@@ -1195,10 +1190,13 @@ def board_of(state, settings, controls, torrents, seeds, account, now):
         "controls": controls,
         "farm": {
             "budget_gb": gigabytes(settings["farm_size"]),
-            "slices": [{"source": s, "gb": gigabytes(size)} for s, size in sorted(slices.items(), key=lambda i: -i[1])],
+            "slices": [
+                {"origin": o, "tracker": t, "gb": gigabytes(size)} for (o, t), size in sorted(slices.items(), key=lambda i: -i[1])
+            ],
         },
-        "sources": [
-            {"source": s, **f} for s, f in sorted(figures_by_source(state).items(), key=lambda i: -i[1]["uploaded_gb"])
+        "origins": [
+            {"origin": o, "tracker": t, **f}
+            for (o, t), f in sorted(figures_by_origin(state).items(), key=lambda i: -i[1]["uploaded_gb"])
         ],
     }
 
@@ -1207,7 +1205,7 @@ def waiting_board(state, settings, controls):
     return {
         "updated_at": None, "account": {"ratio": None, "floor": settings["floor"], "paused": True, "allowed": None},
         "tiers": tiers_of(None, settings), "history": [dict(e) for e in state["daily"]], "seeds": None, "controls": controls,
-        "farm": {"budget_gb": gigabytes(settings["farm_size"]), "slices": []}, "sources": [],
+        "farm": {"budget_gb": gigabytes(settings["farm_size"]), "slices": []}, "origins": [],
     }
 
 
