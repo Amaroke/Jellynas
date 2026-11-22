@@ -652,6 +652,10 @@ def record(qbt, state, torrents, settings, now):
         del state["given_up"][infohash]
     for infohash in [h for h, at in state["checked"].items() if at < now - 2 * DAY]:
         del state["checked"][infohash]
+    if torrents:
+        for book in ("transfers", "history", "zen"):
+            for infohash in [h for h in state[book] if h not in torrents]:
+                del state[book][infohash]
     record_origins(qbt, state, settings, torrents)
     record_history(state, torrents, fresh, now)
     record_zen(state, torrents)
