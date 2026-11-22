@@ -54,7 +54,7 @@ section.folded > .native { display: none; }
 .table h3 small { color: var(--muted); font-weight: 400; font-size: 12px; }
 .table h3 small.look { color: var(--unhealthy); }
 .service { border-top: 1px solid var(--line); }
-.service .line { display: grid; grid-template-columns: 8px 24px minmax(150px, 1.1fr) minmax(0, 2fr) 92px 92px 132px 92px; align-items: center; gap: 12px; padding: 8px 16px; font-size: 13px; }
+.service .line { display: grid; grid-template-columns: 8px 24px minmax(150px, 1.1fr) minmax(0, 2fr) 92px 92px 120px 132px 92px; align-items: center; gap: 12px; padding: 8px 16px; font-size: 13px; }
 .service[data-state="running"] { --state: var(--running); }
 .service[data-state="stopped"] { --state: var(--stopped); }
 .service[data-state="unhealthy"] { --state: var(--unhealthy); }
@@ -72,6 +72,7 @@ section.folded > .native { display: none; }
 .service .facts .failed { color: var(--unhealthy); }
 .service .meter { display: grid; gap: 2px; font-size: 12px; color: var(--muted); min-width: 0; }
 .service .meter b { color: var(--text); font-weight: 500; }
+.service .net > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-level="0"] { --level: var(--running); }
 [data-level="1"] { --level: color-mix(in srgb, var(--running) 50%, var(--restarting)); }
 [data-level="2"] { --level: var(--restarting); }
@@ -505,6 +506,21 @@ function meter(label, points, shown, steps) {
   return element("span", { class: "meter", "data-level": level(last, steps) }, element("span", {}, `${label} `, element("b", {}, shown(last))), plot([[points, "var(--level)"]]));
 }
 
+function rate(value) {
+  return bytes(value).replace("iB", "");
+}
+
+function traffic(series) {
+  const down = series.received || series.download || [];
+  const up = series.sent || series.upload || [];
+  const label = down.length && up.length
+    ? [element("span", { style: "color: var(--downloads)" }, "↓ ", element("b", {}, rate(down.at(-1)))), " ", element("span", { style: "color: var(--watch)" }, "↑ ", element("b", {}, rate(up.at(-1))))]
+    : ["Net ", element("b", {}, "—")];
+  const node = element("span", { class: "meter net" }, element("span", {}, ...label), plot([[down, "var(--downloads)"], [up, "var(--watch)"]]));
+  if (down.length && up.length) node.title = `Down ${bytes(down.at(-1))}/s, up ${bytes(up.at(-1))}/s`;
+  return node;
+}
+
 function uptime(name) {
   const found = (board.uptime || {})[name] || {};
   const node = element("span", { class: "up" });
@@ -564,6 +580,7 @@ function row(service) {
     element("span", { class: "dot", title: stateOf(service) }), icon(service), who, facts(service),
     meter("CPU", series.cpu || [], value => `${value.toFixed(1)}%`, CPU_STEPS),
     meter("RAM", series.memory || [], bytes, RAM_STEPS),
+    traffic(series),
     uptime(service.name),
     actions(service));
   if (errors.has(service.service)) line.append(element("span", { class: "error" }, errors.get(service.service)));
