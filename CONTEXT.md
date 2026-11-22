@@ -129,9 +129,10 @@ _Avoid_: mirror, duplicate
 
 **Origin**:
 What added a torrent to qBittorrent, radarr, sonarr or lazylibrarian for the
-Library, farm for the Farm, or cross-seed, with the tracker it seeds on, c411,
-nyaa or other. It follows the category of the torrent, so a Library torrent
-moved to the Farm counts for the Farm.
+Library, farm for the Farm, or cross-seed. A Library torrent also names the
+tracker it came from, c411, nyaa or other, read from its whole tracker list. It
+follows the category of the torrent, so a Library torrent moved to the Farm
+counts for the Farm.
 _Avoid_: source, kind, pool
 
 **Ledger**:

@@ -137,6 +137,10 @@ class FakeQBittorrent:
     def tags(self):
         return list(self.tag_names)
 
+    def trackers(self, infohash):
+        t = next(t for t in self.list if t["hash"] == infohash)
+        return t.get("trackers", [t["tracker"]])
+
     def delete_tags(self, names):
         self.dropped_tags += names
 
@@ -803,17 +807,33 @@ class Origins(unittest.TestCase):
             "down": ["unknown", "other"], "gone": ["radarr", "c411"],
         })
 
-    def test_a_torrent_whose_tracker_goes_down_keeps_its_tracker(self):
-        state = run(FakeQBittorrent([torrent("public", category="movies", tracker=PUBLIC)]))
-        run(FakeQBittorrent([torrent("public", category="movies", tracker="")]), state=state, now=NOW + 600)
-        self.assertEqual(state["origins"]["public"], ["radarr", "nyaa"])
+    def test_a_torrent_announcing_on_nyaa_among_other_trackers_counts_for_nyaa(self):
+        stealth = "udp://open.stealth.si:80/announce"
+        public = {**torrent("public", category="movies", tracker=stealth), "trackers": [stealth, PUBLIC]}
+        down = {**torrent("down", category="shows", tracker=""), "trackers": [PUBLIC]}
+        state = run(FakeQBittorrent([public, down]))
+        self.assertEqual(state["origins"], {"public": ["radarr", "nyaa"], "down": ["sonarr", "nyaa"]})
+
+    def test_only_the_library_tells_its_tracker(self):
+        qbt = FakeQBittorrent([
+            torrent("movie", category="movies", seeders=100),
+            torrent("anime", category="shows", tracker=PUBLIC),
+            torrent("grab"),
+            torrent("twin", tracker=PUBLIC, seeding_days=1),
+            torrent("seed", save_path="/data/torrents/cross-seed/C411"),
+        ])
+        board, _ = run_board(qbt)
+        self.assertEqual(
+            sorted((o["origin"], o["tracker"] or "") for o in board["origins"]),
+            [("cross-seed", ""), ("farm", ""), ("radarr", "c411"), ("sonarr", "nyaa")],
+        )
 
     def test_a_removed_torrent_keeps_its_origin(self):
         state = empty_state()
         run(FakeQBittorrent([torrent("grab", downloaded_gb=3, uploaded_gb=1)]), state=state)
         run(FakeQBittorrent(), state=state, now=NOW + 2 * DAY)
         self.assertEqual(state["origins"], {"grab": ["farm", "c411"]})
-        self.assertEqual(report_of(state, "farm")["torrents"], 1)
+        self.assertEqual(report_of(state, "farm", None)["torrents"], 1)
 
     def test_an_origin_out_of_the_ledger_is_forgotten(self):
         state = run(FakeQBittorrent(), state=empty_state(origins={"lost": ["farm", "c411"]}))
@@ -834,6 +854,7 @@ class Report(unittest.TestCase):
         lines = self.run_quietly(qbt, state, NOW)
         self.assertEqual(len(lines), 1)
         self.assertIn("Origin radarr c411:", lines[0])
+        self.assertTrue(all(":" in line for line in lines))
         self.assertEqual(report_of(state, "radarr")["ratio"], 0.5)
         self.assertEqual(self.run_quietly(qbt, state, NOW + 600), [])
         self.assertEqual(len(self.run_quietly(qbt, state, NOW + DAY)), 1)
@@ -860,7 +881,7 @@ class Report(unittest.TestCase):
         self.run_quietly(FakeQBittorrent([torrent("kept", category="movies", size_gb=200, seeding_days=10)]), state, NOW)
         self.run_quietly(FakeQBittorrent([torrent("kept", seeding_days=13)]), state, NOW + 3 * DAY)
         self.run_quietly(FakeQBittorrent([torrent("kept", seeding_days=16)]), state, NOW + 6 * DAY)
-        self.assertEqual(report_of(state, "farm")["farm_days"], 3)
+        self.assertEqual(report_of(state, "farm", None)["farm_days"], 3)
 
 
 def day(now):
@@ -941,10 +962,7 @@ class Board(unittest.TestCase):
         board, _ = run_board(qbt)
         self.assertEqual(board["farm"], {
             "budget_gb": 100,
-            "slices": [
-                {"origin": "farm", "tracker": "nyaa", "gb": 4}, {"origin": "farm", "tracker": "c411", "gb": 3},
-                {"origin": "cross-seed", "tracker": "c411", "gb": 0.5},
-            ],
+            "slices": [{"origin": "farm", "tracker": None, "gb": 7}, {"origin": "cross-seed", "tracker": None, "gb": 0.5}],
         })
 
     def test_the_board_carries_the_account_the_seeds_and_the_controls(self):
@@ -964,7 +982,7 @@ class Board(unittest.TestCase):
         board, _ = run_board(qbt)
         self.assertEqual(
             [(o["origin"], o["tracker"]) for o in board["origins"]],
-            [("sonarr", "c411"), ("sonarr", "nyaa"), ("farm", "c411"), ("radarr", "c411")],
+            [("sonarr", "c411"), ("sonarr", "nyaa"), ("farm", None), ("radarr", "c411")],
         )
 
 

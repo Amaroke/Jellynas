@@ -36,6 +36,7 @@ UNKNOWN = "unknown"
 ON_C411 = "c411"
 NYAA = "nyaa"
 OTHER = "other"
+LIBRARY_ORIGINS = {"radarr", "sonarr", "lazylibrarian"}
 FARM_SOURCES = {"paid", "free", "quest", "zen-hunt", "volume-hunt", "twin", "freeleech", "cross-seed"}
 C411_URL = "https://c411.org"
 BLOCKED = 0.8
@@ -141,6 +142,9 @@ class QBittorrent:
 
     def tags(self):
         return json.loads(self.send("/api/v2/torrents/tags"))
+
+    def trackers(self, infohash):
+        return [t["url"] for t in json.loads(self.send(f"/api/v2/torrents/trackers?hash={infohash}"))]
 
     def delete_tags(self, names):
         self.post("/api/v2/torrents/deleteTags", {"tags": ",".join(names)})
@@ -545,13 +549,23 @@ def prepare(qbt, settings):
 
 
 def tracker_of(state, settings, t):
-    url = t["tracker"].lower()
     known = state["origins"].get(t["hash"], [None, None])[1]
-    if known == ON_C411 or settings["tracker"] in url:
+    if known == ON_C411 or settings["tracker"] in t["tracker"].lower():
         return ON_C411
-    if NYAA in url:
-        return NYAA
     return known or OTHER
+
+
+def tracker_listed(qbt, settings, t):
+    urls = [u.lower() for u in [t["tracker"], *qbt.trackers(t["hash"])]]
+    if any(settings["tracker"] in u for u in urls):
+        return ON_C411
+    if any(NYAA in u for u in urls):
+        return NYAA
+    return OTHER
+
+
+def shown_tracker(origin, tracker):
+    return tracker if origin in LIBRARY_ORIGINS else None
 
 
 def is_c411(state, settings, t):
@@ -578,11 +592,12 @@ def twin_copies(state):
     return {entry[0] for entry in state["twins"].values()}
 
 
-def record_origins(state, settings, torrents):
+def record_origins(qbt, state, settings, torrents):
     for infohash in state["transfers"]:
         t = torrents.get(infohash)
         if t is not None:
-            state["origins"][infohash] = [origin_of(t) or UNKNOWN, tracker_of(state, settings, t)]
+            c411 = tracker_of(state, settings, t) == ON_C411
+            state["origins"][infohash] = [origin_of(t) or UNKNOWN, ON_C411 if c411 else tracker_listed(qbt, settings, t)]
         else:
             state["origins"].setdefault(infohash, [UNKNOWN, OTHER])
     for infohash in [h for h in state["origins"] if h not in state["transfers"]]:
@@ -622,7 +637,7 @@ def record_zen(state, torrents):
         entry[0] = seeding
 
 
-def record(state, torrents, settings, now):
+def record(qbt, state, torrents, settings, now):
     fresh = set()
     for t in torrents.values():
         if t["hash"] not in state["transfers"]:
@@ -637,7 +652,7 @@ def record(state, torrents, settings, now):
         del state["given_up"][infohash]
     for infohash in [h for h, at in state["checked"].items() if at < now - 2 * DAY]:
         del state["checked"][infohash]
-    record_origins(state, settings, torrents)
+    record_origins(qbt, state, settings, torrents)
     record_history(state, torrents, fresh, now)
     record_zen(state, torrents)
 
@@ -655,7 +670,8 @@ def ledger_lines(state):
         samples = state["history"].get(infohash)
         _, downloaded_before, uploaded_before = samples[0] if samples else [0, downloaded, uploaded]
         zen = state["zen"].get(infohash, [0, 0])[1]
-        yield tuple(state["origins"].get(infohash, [UNKNOWN, OTHER])), [1, downloaded, uploaded, downloaded - downloaded_before, uploaded - uploaded_before, zen]
+        origin, tracker = state["origins"].get(infohash, [UNKNOWN, OTHER])
+        yield (origin, shown_tracker(origin, tracker)), [1, downloaded, uploaded, downloaded - downloaded_before, uploaded - uploaded_before, zen]
 
 
 def figures_by_origin(state):
@@ -688,7 +704,7 @@ def report(state, now):
     state["report"] = {"at": now, "origins": [{"origin": o, "tracker": t, **f} for (o, t), f in figures.items()]}
     for (origin, tracker), f in figures.items():
         print(
-            f"Origin {origin} {tracker}: {f['torrents']} torrents, {f['downloaded_gb']:.1f} GB down, "
+            f"Origin {' '.join(filter(None, (origin, tracker)))}: {f['torrents']} torrents, {f['downloaded_gb']:.1f} GB down, "
             f"{f['uploaded_gb']:.1f} GB up, ratio {shown(f['ratio'])}, last 7 days {f['week_downloaded_gb']:.1f} GB down, "
             f"{f['week_uploaded_gb']:.1f} GB up, ratio {shown(f['week_ratio'])}, {f['farm_days']:.1f} days in the Farm"
         )
@@ -1179,7 +1195,8 @@ def board_of(state, settings, controls, torrents, seeds, account, now):
     slices = {}
     for t in torrents.values():
         if t["category"] == FARM:
-            key = (origin_of(t), tracker_of(state, settings, t))
+            origin = origin_of(t) or UNKNOWN
+            key = (origin, shown_tracker(origin, tracker_of(state, settings, t)))
             slices[key] = slices.get(key, 0) + t["size"]
     return {
         "updated_at": datetime.datetime.fromtimestamp(now, datetime.UTC).isoformat(),
@@ -1225,7 +1242,7 @@ def run_once(qbt, prowlarr, c411, settings, controls, state, now, notify=tell_bo
     account = read_account(c411, state, now)
     weigh_floor(state, account, settings)
     torrents = {t["hash"].lower(): {**t, "hash": t["hash"].lower()} for t in qbt.torrents()}
-    record(state, torrents, settings, now)
+    record(qbt, state, torrents, settings, now)
     report(state, now)
     use_prowlarr(state, now, lambda: hold_c411(prowlarr, settings, state, state["paused"] and switches["hold"]), always=True)
     if switches["adopt"]:

@@ -1,7 +1,7 @@
 const DAYS = 30;
-const FADE = { c411: "", nyaa: "99", other: "55" };
-const colorOf = item => (ORIGINS[item.origin] || ORIGINS.unknown) + (FADE[item.tracker] ?? FADE.other);
-const nameOf = item => `${item.origin} · ${item.tracker}`;
+const FADE = { nyaa: "99", other: "55" };
+const colorOf = item => (ORIGINS[item.origin] || ORIGINS.unknown) + (FADE[item.tracker] ?? "");
+const nameOf = item => item.tracker ? `${item.origin} · ${item.tracker}` : item.origin;
 const ORIGINS = {
   radarr: "#fbbf24", sonarr: "#38bdf8", lazylibrarian: "#a78bfa", farm: "#34d399", "cross-seed": "#f472b6", unknown: "#94a3b8",
 };
