@@ -26,8 +26,6 @@ services:
       dashboard.icon: discord.svg
       dashboard.widget: music-bot
       dashboard.switchable: "true"
-    volumes:
-      - ${DATA_ROOT}/media/music:/data/media/music:ro
     healthcheck:
       test:
         - "CMD"

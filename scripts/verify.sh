@@ -549,15 +549,14 @@ check_no_torrents_mount jellyfin
 check_no_media_tree qbittorrent
 check_mounts_only slskd media/aurral torrents/soulseek
 check_read_only slskd /data/media/aurral
-check_mounts_only music-bot media/music
-check_read_only music-bot /data/media/music
+check_no_media_mount music-bot
 check_slskd_port
 check_mounts_only lazylibrarian media/books torrents
 check_mounts_only suwayomi media/manga
 check_no_media_mount seerr
 check_no_media_mount lldap
 check_no_media_mount authelia
-check_mounts_only aurral media/music media/aurral torrents/soulseek
+check_mounts_only aurral media/aurral torrents/soulseek
 check_no_media_mount prowlarr
 check_no_media_mount flaresolverr
 check_no_media_mount recyclarr

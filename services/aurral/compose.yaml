@@ -47,7 +47,6 @@ services:
       dashboard.switchable: "true"
     volumes:
       - ${APPDATA_ROOT}/aurral:/config
-      - ${DATA_ROOT}/media/music:/data/media/music
       - ${DATA_ROOT}/media/aurral:/data/media/aurral
       - ${DATA_ROOT}/torrents/soulseek:/data/torrents/soulseek
     healthcheck:
