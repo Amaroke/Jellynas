@@ -43,6 +43,43 @@ pub fn duration(seconds: u64) -> String {
     }
 }
 
+const WEEKDAYS: [&str; 7] = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
+const MONTHS: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+fn civil(days: i64) -> (i64, i64, i64) {
+    let shifted = days + 719_468;
+    let era = shifted.div_euclid(146_097);
+    let of_era = shifted - era * 146_097;
+    let of_cycle = (of_era - of_era / 1460 + of_era / 36524 - of_era / 146_096) / 365;
+    let of_year = of_era - (365 * of_cycle + of_cycle / 4 - of_cycle / 100);
+    let shifted_month = (5 * of_year + 2) / 153;
+    let day = of_year - (153 * shifted_month + 2) / 5 + 1;
+    let month = if shifted_month < 10 {
+        shifted_month + 3
+    } else {
+        shifted_month - 9
+    };
+    let year = of_cycle + era * 400 + i64::from(month <= 2);
+    (year, month, day)
+}
+
+pub fn date(seconds: u64) -> String {
+    let (year, month, day) = civil((seconds / 86400) as i64);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+pub fn day(text: &str) -> Option<String> {
+    let days = (epoch(&format!("{}T00:00:00Z", text.get(..10)?))? / 86400) as i64;
+    let (_, month, day) = civil(days);
+    Some(format!(
+        "{} {day} {}",
+        WEEKDAYS[days.rem_euclid(7) as usize],
+        MONTHS[(month - 1) as usize]
+    ))
+}
+
 pub fn epoch(text: &str) -> Option<u64> {
     let number = |range: std::ops::Range<usize>| text.get(range)?.parse::<i64>().ok();
     let (year, month, day) = (number(0..4)?, number(5..7)?, number(8..10)?);
@@ -116,5 +153,15 @@ mod tests {
         assert_eq!(Some(1_795_314_701), epoch("2026-11-22T03:31:41.565+01:00"));
         assert_eq!(Some(1_709_210_096), epoch("2024-02-29T12:34:56Z"));
         assert_eq!(None, epoch("yesterday"));
+    }
+
+    #[test]
+    fn days_read_and_write_calendar_dates() {
+        assert_eq!(Some("Sun 22 Nov".to_string()), day("2026-11-22"));
+        assert_eq!(Some("Thu 1 Jan".to_string()), day("1970-01-01T00:00:00Z"));
+        assert_eq!(Some("Thu 29 Feb".to_string()), day("2024-02-29"));
+        assert_eq!(None, day("soon"));
+        assert_eq!("2026-11-22", date(1_795_350_000));
+        assert_eq!("2024-03-01", date(1_709_251_200));
     }
 }

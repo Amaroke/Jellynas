@@ -37,6 +37,7 @@ pub struct Reading {
     pub figures: Vec<Figure>,
     pub rows: Vec<Row>,
     pub posters: Vec<Poster>,
+    pub shelf: Option<String>,
     pub idle: Option<String>,
     #[serde(skip)]
     pub metrics: Vec<(&'static str, f64)>,
@@ -107,6 +108,7 @@ mod tests {
             }],
             rows: vec![],
             posters: vec![],
+            shelf: None,
             idle: None,
             metrics: vec![],
         }
