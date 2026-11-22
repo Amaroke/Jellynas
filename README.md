@@ -134,8 +134,9 @@ space. `.env` is ignored by git and must never be committed.
 Both roots live outside the repo, at the paths set in `DATA_ROOT` and
 `APPDATA_ROOT`, and so do the archives of the appdata, at `BACKUP_ROOT`. The
 data root holds a single tree, so that one folder holds every download and the
-whole Library. Radarr, Sonarr and LazyLibrarian download into the qBittorrent
-categories `movies`, `shows` and `books`, and ratio into `farm`. qBittorrent
+whole Library. Radarr and Sonarr download into the qBittorrent
+categories `movies` and `shows`, ratio into `farm`, and LazyLibrarian, once back
+from [On hold](#on-hold), into `books`. qBittorrent
 creates the folder of a category the first time a torrent lands in it.
 cross-seed hardlinks its matches into `cross-seed`, and slskd downloads into
 `soulseek`:
@@ -211,16 +212,16 @@ networks:
 | `identity-zone` | Caddy, Authelia, lldap                                     |
 | `internal-zone` | every other service, plus Caddy, Radarr, Sonarr, Gluetun   |
 
-qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal
-zone, and the Beszel agent the network of the Host. A service that needs
-Jellyfin, Seerr, Aurral or Authelia from another zone, such as the Dashboard,
-Uptime Kuma, the Music bot, or Aurral signing in with Authelia, reaches it
-through Caddy at its public name, so the zones only open towards the public
-services, never from them. lldap speaks LDAP, which Caddy cannot carry, so it
-sits in the zones of Jellyfin and of Authelia, the only two services that read
-the Accounts, and has no public name. The zones hand out IPv6 addresses too, and
-Jellyfin tries them first, so lldap listens on `::`. `python3 -m unittest`
-checks the members of each zone.
+qBittorrent and slskd share the network of Gluetun, in the internal zone, as
+Suwayomi does once back from [On hold](#on-hold), and the Beszel agent the
+network of the Host. A service that needs Jellyfin, Seerr, Aurral or Authelia
+from another zone, such as the Dashboard, Uptime Kuma, the Music bot, or Aurral
+signing in with Authelia, reaches it through Caddy at its public name, so the
+zones only open towards the public services, never from them. lldap speaks LDAP,
+which Caddy cannot carry, so it sits in the zones of Jellyfin and of Authelia,
+the only two services that read the Accounts, and has no public name. The zones
+hand out IPv6 addresses too, and Jellyfin tries them first, so lldap listens on
+`::`. `python3 -m unittest` checks the members of each zone.
 
 Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS
 provider, swap the `caddy-dns/ovh` module in `services/caddy/Dockerfile` for its
@@ -293,10 +294,6 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with
 | Radarr        | `https://radarr.lan.<DOMAIN>`          | Local network |
 | Sonarr        | `https://sonarr.lan.<DOMAIN>`          | Local network |
 | slskd         | `https://slskd.lan.<DOMAIN>`           | Local network |
-| LazyLibrarian | `https://lazylibrarian.lan.<DOMAIN>`   | Local network |
-| Suwayomi      | `https://suwayomi.lan.<DOMAIN>`        | Local network |
-| Bazarr        | `https://bazarr.lan.<DOMAIN>`          | Local network |
-| Tdarr         | `https://tdarr.lan.<DOMAIN>`           | Local network |
 | Indexarr      | `https://indexarr.lan.<DOMAIN>`        | Local network |
 | autobrr       | `https://autobrr.lan.<DOMAIN>`         | Local network |
 | ratio         | `https://ratio.lan.<DOMAIN>/graphs`    | Local network |
@@ -1300,7 +1297,8 @@ It keeps the settings listed in
 [Rules of the server and the Accounts](#rules-of-the-server-and-the-accounts),
 [Settings kept by policy](#settings-kept-by-policy),
 [Settings of Sonarr kept by policy](#settings-of-sonarr-kept-by-policy),
-[Settings of Aurral kept by policy](#settings-of-aurral-kept-by-policy),
+[Settings of Aurral kept by policy](#settings-of-aurral-kept-by-policy), and,
+once they are back from [On hold](#on-hold),
 [Settings of LazyLibrarian kept by policy](#settings-of-lazylibrarian-kept-by-policy)
 and
 [Settings of Suwayomi kept by policy](#settings-of-suwayomi-kept-by-policy).
@@ -1327,7 +1325,7 @@ format, its lints and its tests.
 Requires [Radarr](#radarr) and [Sonarr](#sonarr).
 
 Recyclarr creates the quality profiles of Radarr and Sonarr, so that most
-downloads already match the Library format and Tdarr rarely has to re-encode. It
+downloads already come in a compact format that most devices play directly. It
 sees no media file and only talks to the Radarr and Sonarr APIs, with the
 `RADARR_API_KEY` and `SONARR_API_KEY` already in `.env`. Profilarr can replace
 it, or the profiles of the [TRaSH Guides](https://trash-guides.info/) copied by
@@ -1342,11 +1340,11 @@ Guides](https://trash-guides.info/Radarr/radarr-setup-quality-profiles-french-en
 - **Anime 1080p**, for anime: a `MULTi` with French subtitles first, then a
   VOSTFR, then any other `MULTi`.
 
-The profiles favour releases already in the Library format, so Tdarr rarely
-re-encodes, and refuse what Tdarr cannot fix: a missing French audio track.
-Quality always ranks before score, and H265 outweighs the release group, since
-it saves a lossy Tdarr pass. Change a rule in the config, never in Radarr or
-Sonarr, since each sync overwrites the profiles.
+The profiles favour MKV H265 releases and refuse a release without a French
+audio track. Quality always ranks before score, and H265 outweighs the release
+group, since it makes much smaller files without a lossy re-encode. Change a
+rule in the config, never in Radarr or Sonarr, since each sync overwrites the
+profiles.
 
 ### Sync
 
@@ -2368,7 +2366,7 @@ restart and a power button, through its own socket proxy. A service shut down
 stays off through deploys and reboots: its `cd.doco.deployment.autostart` label
 tells doco-cd to leave it as it is, and the Dashboard starts any switchable
 service a deploy creates without starting. A row with a list, such as the
-missing subtitles of Bazarr or the next days of Sonarr, unfolds. The rail on the
+next days of Sonarr, unfolds. The rail on the
 right shows what plays on Jellyfin and its latest additions, the Requests
 waiting in Seerr with buttons to approve or decline them, the torrents of
 qBittorrent, the downloads of Aurral with a switch to pause them, each indexer,
@@ -2405,13 +2403,13 @@ others, then restart doco-cd to apply `.env`:
 - Radarr, `RADARR_API_KEY`: set in [Radarr](#radarr)
 - Sonarr, `SONARR_API_KEY`: set in [Sonarr](#sonarr)
 - slskd, `SLSKD_API_KEY`: set in [slskd](#slskd)
-- Suwayomi, `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD`: set in
-  [Suwayomi](#suwayomi)
-- Bazarr, `BAZARR_API_KEY`: Settings > General > Security, "API Key"
 - Aurral, `AURRAL_API_KEY`: already set for [policy](#policy)
-- Tdarr, `TDARR_API_KEY`: set in [Tdarr](#tdarr)
 - autobrr, `AUTOBRR_API_KEY`: Settings > API Keys, click "Add new", name it
   `Dashboard` and give it read access on Filters and Releases
+- Suwayomi, Bazarr and Tdarr, left empty while they are [On hold](#on-hold).
+  Once back: `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD` as set in
+  [Suwayomi](#suwayomi), `BAZARR_API_KEY` from Settings > General > Security in
+  Bazarr, and `TDARR_API_KEY` as set in [Tdarr](#tdarr)
 - Beszel, `BESZEL_EMAIL` and `BESZEL_PASSWORD`: set in [Beszel](#beszel)
 - TrueNAS, `TRUENAS_API_KEY`: in Credentials >
   Users, add a user `dashboard` with the password disabled in the group
@@ -2538,9 +2536,9 @@ Run the verification script from the Clone:
 
 It checks the NAS from the outside and prints one line per promise, for the
 services `compose.yaml` includes. To prove the kill switch, it cuts the VPN for
-a few seconds and then restarts Gluetun, qBittorrent, slskd and Suwayomi. A
-failing line names the service that broke it, and the script exits with an error
-if any check fails.
+a few seconds and then restarts Gluetun, qBittorrent, slskd, and Suwayomi when
+it runs. A failing line names the service that broke it, and the script exits
+with an error if any check fails.
 
 The script ends with the public addresses to test yourself. Open each one on a
 phone on 4G with wifi off: it must load over HTTPS without a certificate
@@ -2553,12 +2551,20 @@ until it has a use for them. Their lines are commented out in `compose.yaml`,
 their keys sit empty at the end of `.env`, so policy and the Dashboard leave
 them alone, and the [Architecture](#architecture) draws them dashed.
 
+Their lan names stay in Caddy: `lazylibrarian`, `suwayomi`, `bazarr` and
+`tdarr`, under `.lan.<DOMAIN>`, so each one is reachable again as soon as it
+runs. In Prowlarr, Settings > Apps, LazyLibrarian keeps its "Sync Level" on
+"Disabled" while it is on hold.
+
 To bring one back, uncomment its line in `compose.yaml`, fill its keys in
-`.env`, restart doco-cd, and follow its section below:
+`.env`, and restart doco-cd:
 
 ```sh
 docker restart doco-cd
 ```
+
+Then follow its section below. For LazyLibrarian, set its "Sync Level" back to
+"Full Sync" in Prowlarr, Settings > Apps.
 
 ### LazyLibrarian
 
