@@ -293,7 +293,6 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with
 | Radarr        | `https://radarr.lan.<DOMAIN>`          | Local network |
 | Sonarr        | `https://sonarr.lan.<DOMAIN>`          | Local network |
 | slskd         | `https://slskd.lan.<DOMAIN>`           | Local network |
-| autobrr       | `https://autobrr.lan.<DOMAIN>`         | Local network |
 | ratio         | `https://ratio.lan.<DOMAIN>/graphs`    | Local network |
 | Actions       | `https://actions.lan.<DOMAIN>/actions` | Local network |
 | PR radar      | `https://prs.lan.<DOMAIN>/pulls`       | Local network |
@@ -1593,7 +1592,7 @@ flowchart LR
     class Torrents,Library dataNode
 
     classDef onHold stroke-dasharray:5 5
-    class LazyLibrarian,Suwayomi,Bazarr,Tdarr,Manga onHold
+    class LazyLibrarian,Suwayomi,Bazarr,Tdarr,Manga,autobrr onHold
     style data fill:#eceff1,stroke:#78909c,stroke-width:2px,color:#1f2937
 ```
 
@@ -1820,11 +1819,12 @@ own with the rest:
 - cross-seed finds the torrents of qBittorrent on C411 and seeds them there too,
   from hardlinks in `/data/torrents/cross-seed`, without downloading them again.
   qBittorrent tells it about every finished torrent.
-- autobrr stays available for a tracker that announces on IRC. C411 does not.
+- autobrr, [On hold](#on-hold), would grab from a tracker that announces on
+  IRC. C411 does not.
 
 Radarr and Sonarr only import their own category, so a torrent of the Farm never
-reaches the Library. None of these tools sees the media tree. autobrr, ratio and
-farm-board see no folder at all, cross-seed sees only the torrents tree.
+reaches the Library. None of these tools sees the media tree. ratio and farm-board
+see no folder at all, cross-seed sees only the torrents tree.
 
 ### Risks
 
@@ -1852,7 +1852,7 @@ prefer it, and ratio looks there for Twins. Nyaa, a public anime tracker, is the
 one used here, since French anime groups post there and on C411 alike.
 
 1. In Prowlarr, Indexers, click "Add Indexer", pick Nyaa.si, set "Indexer
-   Priority" to `10`, click "Test", then "Save".
+   Priority" to `1`, the highest, click "Test", then "Save".
 2. Edit the C411 indexer, click "Show Advanced", and set "Indexer Priority" to
    `25`. At equal quality and score, Radarr and Sonarr then take Nyaa. A better
    release on C411 still wins, as the profiles of [Recyclarr](#recyclarr) rank
@@ -1862,41 +1862,6 @@ one used here, since French anime groups post there and on C411 alike.
 
 Prowlarr syncs Nyaa to Radarr and Sonarr like any indexer. It returns almost
 only anime, so it costs nothing to search it for the other works.
-
-### autobrr
-
-autobrr joins the IRC announce channel of each tracker and grabs a release the
-moment it is announced. C411 announces on no channel autobrr knows, so it grabs
-nothing until another tracker joins.
-
-1. Open `https://autobrr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and create the login
-   at the first visit, with its own username and a strong password stored in
-   your password manager.
-2. In Settings > Clients, click "Add new", pick qBittorrent, enter
-   `http://gluetun:8080` as the host and the qBittorrent login. Under "Rules",
-   check "Enabled" and set "Max active downloads" to `2`, so autobrr never fills
-   the queue of Radarr and Sonarr. Save.
-3. In Settings > Indexers, click "Add new", pick the tracker, and fill in its
-   passkey or API key and your IRC nick. autobrr adds its IRC network in
-   Settings > IRC with the channel and the invite command of the tracker. Wait
-   for the network to show as connected, some trackers need an IRC password or a
-   NickServ registration first.
-4. In Filters, click "Add new" once per tracker, name it after the tracker, and
-   pick the indexer. Set:
-
-   - General > Size: Min `1 GB`, max `30 GB`, so one grab never takes most of
-     the Farm
-   - General > Max downloads: `5` per day
-   - Advanced > Freeleech: Checked, so a grab never costs ratio
-   - Actions > Action: qBittorrent, the client above, with `farm` as the
-     category
-
-5. Save, and leave the filter enabled. A matching announce then shows up in
-   qBittorrent in the `farm` category within seconds, and in the Releases page
-   of autobrr.
-
-autobrr reaches IRC and the tracker from the home IP. Only qBittorrent goes
-through the VPN, as for Radarr and Sonarr.
 
 ### cross-seed
 
@@ -1924,10 +1889,11 @@ which reads every value from `.env`.
 ratio sets "Run external program on torrent finished" in qBittorrent, Tools >
 Options > Downloads, to a `curl` that sends the hash of each finished torrent to
 cross-seed, single episodes included. cross-seed then searches C411 at once,
-while its swarm is still hungry, and adds each match in the `farm` category. It
-also searches every torrent of qBittorrent again, however old, music and books
-included, each at most once every 3 days. Leave public indexers out of
-`CROSS_SEED_INDEXER_IDS`, a public torrent brings no ratio.
+while its swarm is still hungry, and adds each match in the `farm` category.
+Once a day, it also searches again every torrent of qBittorrent it first saw
+less than 15 days ago, music and books included, each at most once every 3 days.
+Leave public indexers out of `CROSS_SEED_INDEXER_IDS`, a public torrent brings
+no ratio.
 
 To check the hook, open View > Log in qBittorrent once a torrent finishes: it
 shows the `curl` command it ran. cross-seed then names the torrent in its logs.
@@ -1980,7 +1946,7 @@ the Dashboard, see [Farm board](#farm-board).
    one of the five categories leaves after 14 days of seeding, or once a C411
    torrent seeds the same files, at least 6 hours after it finished.
 8. **Files every torrent.** qBittorrent holds five categories: `movies`,
-   `shows` and `books` for Radarr, Sonarr and LazyLibrarian, `music`, which
+   `shows` and `books` for Radarr, Sonarr and LazyLibrarian, on hold, `music`, which
    nothing uses since Aurral downloads from Soulseek, and `farm` for the grabs
    of ratio and the cross-seeds. The Library stays in
    its categories. The "Adopt the Library" switch, off by default, moves a C411
@@ -2338,12 +2304,12 @@ others, then restart doco-cd to apply `.env`:
 - Sonarr, `SONARR_API_KEY`: set in [Sonarr](#sonarr)
 - slskd, `SLSKD_API_KEY`: set in [slskd](#slskd)
 - Aurral, `AURRAL_API_KEY`: already set for [policy](#policy)
-- autobrr, `AUTOBRR_API_KEY`: Settings > API Keys, click "Add new", name it
-  `Dashboard` and give it read access on Filters and Releases
-- Suwayomi, Bazarr and Tdarr, left empty while they are [On hold](#on-hold).
-  Once back: `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD` as set in
-  [Suwayomi](#suwayomi), `BAZARR_API_KEY` from Settings > General > Security in
-  Bazarr, and `TDARR_API_KEY` as set in [Tdarr](#tdarr)
+- Suwayomi, Bazarr, Tdarr and autobrr, left empty while they are [On
+  hold](#on-hold). Once back: `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD` as set
+  in [Suwayomi](#suwayomi), `BAZARR_API_KEY` from Settings > General > Security
+  in Bazarr, `TDARR_API_KEY` as set in [Tdarr](#tdarr), and `AUTOBRR_API_KEY`
+  from Settings > API Keys in autobrr, named `Dashboard` with read access on
+  Filters and Releases
 - Beszel, `BESZEL_EMAIL` and `BESZEL_PASSWORD`: set in [Beszel](#beszel)
 - TrueNAS, `TRUENAS_API_KEY`: in Credentials >
   Users, add a user `dashboard` with the password disabled in the group
@@ -2485,9 +2451,9 @@ until it has a use for them. Their lines are commented out in `compose.yaml`,
 their keys sit empty at the end of `.env`, so policy and the Dashboard leave
 them alone, and the [Architecture](#architecture) draws them dashed.
 
-Their lan names stay in Caddy: `lazylibrarian`, `suwayomi`, `bazarr` and
-`tdarr`, under `.lan.<DOMAIN>`, so each one is reachable again as soon as it
-runs. In Prowlarr, Settings > Apps, LazyLibrarian keeps its "Sync Level" on
+Their lan names stay in Caddy: `lazylibrarian`, `suwayomi`, `bazarr`, `tdarr`
+and `autobrr`, under `.lan.<DOMAIN>`, so each one is reachable again as soon as
+it runs. In Prowlarr, Settings > Apps, LazyLibrarian keeps its "Sync Level" on
 "Disabled" while it is on hold.
 
 To bring one back, uncomment its line in `compose.yaml`, fill its keys in
@@ -2814,6 +2780,43 @@ with `services/bazarr/tdarr_requeue.py`, which reads `TDARR_API_KEY` from
 4. Save.
 
 Bazarr writes the outcome of each command in System > Logs.
+
+### autobrr
+
+Requires [Private tracker ratio](#private-tracker-ratio).
+
+autobrr joins the IRC announce channel of each tracker and grabs a release the
+moment it is announced. C411 announces on no channel autobrr knows, so it grabs
+nothing until another tracker joins.
+
+1. Open `https://autobrr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and create the login
+   at the first visit, with its own username and a strong password stored in
+   your password manager.
+2. In Settings > Clients, click "Add new", pick qBittorrent, enter
+   `http://gluetun:8080` as the host and the qBittorrent login. Under "Rules",
+   check "Enabled" and set "Max active downloads" to `2`, so autobrr never fills
+   the queue of Radarr and Sonarr. Save.
+3. In Settings > Indexers, click "Add new", pick the tracker, and fill in its
+   passkey or API key and your IRC nick. autobrr adds its IRC network in
+   Settings > IRC with the channel and the invite command of the tracker. Wait
+   for the network to show as connected, some trackers need an IRC password or a
+   NickServ registration first.
+4. In Filters, click "Add new" once per tracker, name it after the tracker, and
+   pick the indexer. Set:
+
+   - General > Size: Min `1 GB`, max `30 GB`, so one grab never takes most of
+     the Farm
+   - General > Max downloads: `5` per day
+   - Advanced > Freeleech: Checked, so a grab never costs ratio
+   - Actions > Action: qBittorrent, the client above, with `farm` as the
+     category
+
+5. Save, and leave the filter enabled. A matching announce then shows up in
+   qBittorrent in the `farm` category within seconds, and in the Releases page
+   of autobrr.
+
+autobrr reaches IRC and the tracker from the home IP. Only qBittorrent goes
+through the VPN, as for Radarr and Sonarr.
 
 ## Contributing
 
