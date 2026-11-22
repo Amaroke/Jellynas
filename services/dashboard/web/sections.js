@@ -1,26 +1,19 @@
 const DAYS = 30;
-const SOURCES = { paid: "#f472b6", free: "#34d399", library: "#38bdf8", quest: "#fb923c", unknown: "#94a3b8", public: "#64748b" };
+const SOURCES = { paid: "#f472b6", free: "#34d399", library: "#38bdf8", unknown: "#94a3b8", public: "#64748b" };
 const TIERS = ["#fb7185", "#fbbf24", "#facc15", "#34d399", "#a78bfa"];
 const BEHAVIOURS = ["free", "twins", "paid", "clean_public", "drop_twins", "hold", "adopt"];
 const NUMBERS = {
   farm_size_gb: { step: "1", min: 1, max: 100000 },
   floor: { step: "0.05", min: 0.5, max: 5 },
   daily_gb: { step: "0.5", min: 0, max: 1000 },
-  max_size_gb: { step: "0.01", min: 0.01, max: 1000 },
 };
-const ALL_CATEGORIES = "volume:all";
 const WORDS = {
   tierNames: { blocked: "blocked", even: "even", floor: "floor", goal: "goal" },
-  voie: { seed: "Seed path", specialization: "Specialization path" },
-  names: {
-    quantity_seed: "Seed count", duration_seed: "Seeding time", vtr_min: "Seed note",
-    category_volume_seed: "Category volume", category_diversity_seed: "Diversity",
-  },
   switches: {
     free: "Freeleech", twins: "Twins", paid: "Fresh paid grabs", clean_public: "Clean Public torrents",
     drop_twins: "Drop Twins", hold: "Hold Prowlarr under the floor", adopt: "Adopt the Library",
   },
-  numbers: { farm_size_gb: "Farm budget (GB)", floor: "Ratio floor", daily_gb: "Paid download per day (GB)", max_size_gb: "Quest grab size (GB)" },
+  numbers: { farm_size_gb: "Farm budget (GB)", floor: "Ratio floor", daily_gb: "Paid download per day (GB)" },
   explainSwitches: {
     free: "Grabs the freeleech releases of C411 up to 5 GB, the most wanted first. Their download is not counted, their upload is.",
     twins: "For each fresh episode of C411, downloads the same release from Nyaa. cross-seed then adds the C411 copy without any counted download.",
@@ -33,12 +26,11 @@ const WORDS = {
   explainNumbers: {
     farm_size_gb: "Disk the Farm may fill. Once full, nothing more is grabbed and nothing is removed.",
     floor: "Account ratio under which no paid download happens on C411, not even for the Library. Freeleech and Twins go on.",
-    daily_gb: "Paid download allowed over the last 24 hours, shared by fresh grabs and Quests.",
-    max_size_gb: "Largest torrent grabbed for a Quest. The smallest go first.",
+    daily_gb: "Paid download allowed over the last 24 hours for fresh grabs.",
   },
   explainSources: {
     paid: "Fresh release bought with download", free: "No download counted on C411",
-    library: "Movie or show of the Library", quest: "Grabbed for a Quest",
+    library: "Movie or show of the Library",
     public: "Public tracker copy, leaves within two weeks", unknown: "Source not recorded",
   },
 };
@@ -201,61 +193,6 @@ function trends(board, draws) {
   return tag("div", { class: "charts" }, zen, transfer);
 }
 
-function bar(current, target, done) {
-  const share = target ? Math.min(100 * (current || 0) / target, 100) : 100;
-  return tag("div", { class: `bar${done ? " done" : ""}` }, tag("span", { style: `width:${share}%` }));
-}
-
-function steps(list) {
-  const first = list.find(step => !step.done && step.current < step.target);
-  return tag("div", { class: "steps" }, ...list.map(step => {
-    const state = step.done ? "done" : step.current >= step.target ? "reached" : step === first ? "next" : "later";
-    return tag("div", { class: `step ${state}` }, bar(step.current, step.target), tag("span", { class: "goal" }, String(step.target)));
-  }));
-}
-
-function categories(board, switches) {
-  const open = (board.categories || []).filter(category => !category.complete);
-  const rows = [];
-  if (open.length) {
-    const on = open.every(category => switches[category.switch]);
-    rows.push(tag("div", { class: "row all" }, tag("span", { class: "title" }, "Every category"), tag("span", { class: "side" }, toggle(ALL_CATEGORIES, on))));
-  }
-  for (const category of board.categories || []) {
-    const side = category.complete ? tag("span", { class: "tag complete" }, "completed") : toggle(category.switch, Boolean(switches[category.switch]));
-    rows.push(tag("div", { class: "row" },
-      tag("span", { class: "title" }, category.name),
-      tag("span", { class: "side" }, tag("span", { class: "count" }, `${category.count} / ${category.target}`), side),
-      bar(category.count, category.target, category.count >= category.target)));
-  }
-  return tag("div", { class: "cats" }, ...rows);
-}
-
-function quests(board) {
-  const switches = (board.controls || {}).switches || {};
-  const challenges = board.challenges || [];
-  const cards = challenges.map(challenge => {
-    const level = challenge.done ? "every level done" : `level ${challenge.level} of ${challenge.levels}`;
-    const voie = WORDS.voie[challenge.voie] || challenge.voie || "";
-    let side = tag("span", { class: "tag" }, "indicator");
-    if (challenge.done) side = tag("span", { class: "tag complete" }, "completed");
-    else if (challenge.switch) side = toggle(challenge.switch, Boolean(switches[challenge.switch]));
-    const hint = tag("div", { class: "hint" }, `${voie}, ${level}, ${challenge.description}`);
-    if (!challenge.done && challenge.current >= challenge.target) hint.append(", ", tag("span", { class: "reached" }, "reached, waiting for C411 to count it"));
-    return tag("figure", { class: "panel challenge" },
-      tag("div", { class: "head" },
-        tag("span", { class: "title" }, WORDS.names[challenge.key] || challenge.key),
-        tag("span", { class: "side" }, challenge.done ? null : tag("span", { class: "count" }, `${challenge.current} / ${challenge.target}`), side),
-        hint),
-      challenge.steps && challenge.steps.length ? steps(challenge.steps) : bar(challenge.current, challenge.target, challenge.done),
-      challenge.key === "category_volume_seed" ? categories(board, switches) : null);
-  });
-  if ((board.categories || []).length && !challenges.some(challenge => challenge.key === "category_volume_seed")) {
-    cards.push(tag("figure", { class: "panel" }, tag("figcaption", {}, "Category volume, a badge at 50 seeds"), categories(board, switches)));
-  }
-  return tag("div", { class: "quests" }, ...cards);
-}
-
 function setting(title, hint, control) {
   return tag("div", { class: "setting" }, tag("div", {}, tag("div", { class: "title" }, title), tag("div", { class: "hint" }, hint)), control);
 }
@@ -348,7 +285,7 @@ function farmBlock(panel, draws) {
     return tag("div", { class: "native" }, note(panel), tag("p", { class: "empty" }, "No history yet, ratio records its first day after its first run."));
   }
   const failures = [...unsaved.values()].map(text => tag("p", { class: "note failed" }, text));
-  return tag("div", { class: "native farm" }, note(panel), ...failures, kpis(board), gauge(board), trends(board, draws), quests(board), settings(board),
+  return tag("div", { class: "native farm" }, note(panel), ...failures, kpis(board), gauge(board), trends(board, draws), settings(board),
     tag("div", { class: "pair" }, donut(board.farm), earned(board.sources || [])));
 }
 

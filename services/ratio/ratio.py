@@ -31,90 +31,32 @@ PUBLIC = "public"
 SEEDING = ("uploading", "stalledUP", "queuedUP", "forcedUP")
 SHARE_LIMITS = ("max_ratio_enabled", "max_seeding_time_enabled", "max_inactive_seeding_time_enabled")
 HISTORY_DAYS = 30
-SOURCES = ("paid", "free", "library", "quest", "unknown")
+SOURCES = ("paid", "free", "library", "unknown")
 RETIRED_SOURCES = {
-    "zen-hunt": "quest", "volume-hunt": "quest", "twin": "free", "freeleech": "free", "cross-seed": "free",
+    "quest": "paid", "zen-hunt": "paid", "volume-hunt": "paid", "twin": "free", "freeleech": "free", "cross-seed": "free",
 }
 C411_URL = "https://c411.org"
-C411_CATEGORIES = {
-    "films-videos": (1, "Films & Vidéos"),
-    "ebook": (2, "Ebook"),
-    "audio": (3, "Audio"),
-    "applications": (4, "Applications"),
-    "jeux-video": (5, "Jeux Vidéo"),
-    "emulation": (6, "Emulation"),
-    "gps": (7, "GPS"),
-    "xxx": (8, "XXX"),
-    "nulled": (9, "Nulled"),
-    "imprimante-3d": (10, "Imprimante 3D"),
-}
-RETIRED_KINDS = {"Films & Vidéos": "films-videos", "Ebook": "ebook", "Audio": "audio", "Imprimante 3D": "imprimante-3d"}
-SPECIALIZATION = "films-videos"
-BADGE_SEEDS = 50
-DEFAULT_SCALES = {"duration": [[7, 0.1], [30, 0.25], [90, 0.35], [180, 0.5]], "rare": []}
 BLOCKED = 0.8
 TIERS = (("blocked", BLOCKED), ("even", 1.0), ("floor", None), ("goal", 2.0))
 ZEN_PACK = (1000, 1024)
 
 
-def quest(id, voie, challenge, level, description, **criteria):
-    return {"id": id, "voie": voie, "challenge": challenge, "level": level, "description": description, "criteria": criteria}
-
-
-QUESTS = (
-    quest(42, "seed", "quantity_seed", 1, "100 seeds", threshold=100),
-    quest(43, "seed", "quantity_seed", 2, "150 seeds", threshold=150),
-    quest(44, "seed", "quantity_seed", 3, "200 seeds", threshold=200),
-    quest(45, "seed", "quantity_seed", 4, "250 seeds", threshold=250),
-    quest(46, "seed", "quantity_seed", 5, "300 seeds", threshold=300),
-    quest(47, "seed", "quantity_seed", 99, "Tous niveaux quantity_seed validés", all_levels=True),
-    quest(48, "seed", "vtr_min", 1, "50 seeds à 62,5 % de leur note maximale", min_seeds=50, min_share_pct=62.5),
-    quest(49, "seed", "vtr_min", 2, "100 seeds à 75 % de leur note maximale", min_seeds=100, min_share_pct=75),
-    quest(50, "seed", "vtr_min", 3, "150 seeds à leur note maximale", min_seeds=150, min_share_pct=100),
-    quest(51, "seed", "vtr_min", 4, "200 seeds à leur note maximale", min_seeds=200, min_share_pct=100),
-    quest(52, "seed", "vtr_min", 5, "250 seeds à leur note maximale", min_seeds=250, min_share_pct=100),
-    quest(53, "seed", "vtr_min", 6, "300 seeds à leur note maximale", min_seeds=300, min_share_pct=100),
-    quest(54, "seed", "vtr_min", 99, "Tous les niveaux de ce défi validés", all_levels=True),
-    quest(55, "seed", "duration_seed", 1, "25 seeds pendant 7 jours", min_seeds=25, min_days=7),
-    quest(56, "seed", "duration_seed", 2, "100 seeds pendant 30 jours", min_seeds=100, min_days=30),
-    quest(57, "seed", "duration_seed", 3, "150 seeds pendant 90 jours", min_seeds=150, min_days=90),
-    quest(58, "seed", "duration_seed", 4, "250 seeds pendant 180 jours", min_seeds=250, min_days=180),
-    quest(59, "seed", "duration_seed", 5, "300 seeds pendant 365 jours", min_seeds=300, min_days=365),
-    quest(60, "seed", "duration_seed", 99, "Tous niveaux duration_seed validés", all_levels=True),
-    quest(67, "specialization", "category_diversity_seed", 1, "25 seeds dans 1 catégorie", min_categories=1, min_seeds_per_cat=25),
-    quest(68, "specialization", "category_diversity_seed", 2, "25 seeds dans 2 catégories", min_categories=2, min_seeds_per_cat=25),
-    quest(69, "specialization", "category_diversity_seed", 3, "25 seeds dans 3 catégories", min_categories=3, min_seeds_per_cat=25),
-    quest(70, "specialization", "category_diversity_seed", 4, "25 seeds dans 4 catégories", min_categories=4, min_seeds_per_cat=25),
-    quest(71, "specialization", "category_diversity_seed", 5, "25 seeds dans 5 catégories", min_categories=5, min_seeds_per_cat=25),
-    quest(72, "specialization", "category_volume_seed", 1, "50 seeds dans la même catégorie", min_seeds_same_cat=50),
-    quest(73, "specialization", "category_volume_seed", 2, "100 seeds dans la même catégorie", min_seeds_same_cat=100),
-    quest(74, "specialization", "category_volume_seed", 3, "250 seeds dans la spécialisation", min_seeds_same_cat=250, in_specialization=True),
-    quest(75, "specialization", "category_volume_seed", 4, "500 seeds dans la spécialisation", min_seeds_same_cat=500, in_specialization=True),
-)
-DONE_AT_START = (42, 43, 48, 67, 68, 69, 70, 71, 72)
-CHALLENGES = ("quantity_seed", "category_volume_seed", "category_diversity_seed", "vtr_min", "duration_seed")
-VOIES = ("seed", "specialization")
 SWITCHES = {
     "free": False,
     "twins": False,
     "paid": False,
-    "quantity_seed": False,
     "clean_public": True,
     "drop_twins": True,
     "hold": True,
     "adopt": False,
-    **{f"volume:{slug}": False for slug in C411_CATEGORIES},
 }
 NUMBERS = {
     "farm_size_gb": ("farm_size", GB, 1, 100000),
     "floor": ("floor", 1, 0.5, 5),
     "daily_gb": ("daily", GB, 0, 1000),
-    "max_size_gb": ("max_size", GB, 0.01, 1000),
 }
 TWIN_ATTEMPTS = 3
 TORZNAB = "{http://torznab.com/schemas/2015/feed}attr"
-TORZNAB_XXX = 6000
-TORZNAB_PAGE = 100
 
 FAILURES = (OSError, ValueError, KeyError, TypeError, RuntimeError, http.client.HTTPException, ET.ParseError)
 
@@ -342,7 +284,6 @@ def iso_time(text):
 
 
 def release_of(item, now):
-    category = item.get("category") or {}
     return {
         "infohash": item["infoHash"].lower(),
         "title": item["name"],
@@ -353,30 +294,7 @@ def release_of(item, now):
         "leechers": int(item.get("leechers") or 0),
         "age_hours": (now - iso_time(item["createdAt"])) / 3600,
         "free": bool(item.get("isFreeleech")),
-        "category": category.get("slug", ""),
     }
-
-
-def bucket_bounds(text):
-    if text.startswith("<"):
-        return float(text[1:])
-    if text.startswith(">"):
-        return float("inf")
-    return float(text.split("-")[1])
-
-
-def scales_of(definition):
-    tiers = definition.get("bonusTiers") or {}
-    duration = sorted([int(t["bucket"]), t["coef"]] for t in tiers.get("seed_duration", []))
-    found = [(t["bucket"].split("|"), t["coef"]) for t in tiers.get("seeders_weight", []) if "|" in t["bucket"]]
-    highs = sorted({bucket_bounds(size) for (size, _), _ in found})
-    rare = []
-    for (size, seeders), coef in found:
-        high = bucket_bounds(size)
-        low = max([h for h in highs if h < high], default=0)
-        first, _, last = seeders.partition("-")
-        rare.append([low, high, int(first), int(last or first), coef])
-    return {"duration": duration or DEFAULT_SCALES["duration"], "rare": sorted(rare)}
 
 
 class C411:
@@ -426,38 +344,15 @@ class C411:
             "earned": profile["zen"].get("totalEarned"),
             "class": kind.get("slug"),
             "grade": [grade.get("tier"), grade.get("level")] if grade else None,
-            "voies": {name: v.get("questsCompleted", 0) for name, v in (kind.get("voies") or {}).items()},
             "allowed": (profile.get("download") or {}).get("allowed", True),
         }
 
-    def catalog(self, now, category=None, sort="createdAt", order="desc", page=1):
-        if category == "xxx":
-            return self.torznab_catalog(now, category, page)
-        query ={"sortBy": sort, "sortOrder": order, "perPage": 50, "page": page}
-        if category:
-            query["category"] = C411_CATEGORIES[category][0]
-        answer = self.json("/api/torrents", self.profile_key, query)
-        return [release_of(item, now) for item in answer.get("data", [])], (answer.get("meta") or {}).get("totalPages", 0)
-
-    def torznab_catalog(self, now, category, page):
-        query = {"t": "search", "cat": TORZNAB_XXX, "limit": TORZNAB_PAGE, "offset": (page - 1) * TORZNAB_PAGE, "apikey": self.torznab_key}
-        releases = [{**r, "category": category} for r in parse_torznab(self.get("/api", self.torznab_key, query), now)]
-        return releases, page + 1 if len(releases) >= TORZNAB_PAGE else page
-
-    def category(self, infohash):
-        answer = self.json(f"/api/torrents/{infohash}", self.profile_key)
-        item = answer.get("data", answer) if isinstance(answer, dict) else {}
-        category = item.get("category") or {}
-        return category.get("slug") or next((s for s, (i, _) in C411_CATEGORIES.items() if i == category.get("id")), "")
+    def catalog(self, now):
+        answer = self.json("/api/torrents", self.profile_key, {"sortBy": "createdAt", "sortOrder": "desc", "perPage": 50, "page": 1})
+        return [release_of(item, now) for item in answer.get("data", [])]
 
     def download(self, infohash):
         return self.get("/api", self.torznab_key, {"t": "get", "id": infohash, "apikey": self.torznab_key})
-
-    def scales(self, slug):
-        classes = self.json("/api/classes", self.profile_key).get("classes", [])
-        found = next((c for c in classes if slug in (c.get("slug"), c.get("canonicalSlug"))), None)
-        return scales_of(found) if found else dict(DEFAULT_SCALES)
-
 
 def parse_torznab(xml_bytes, now):
     releases = []
@@ -511,36 +406,9 @@ def file_lengths(torrent):
     return [info[b"length"]]
 
 
-def rare_coef(size, seeders, scales):
-    size_gb = size / GB
-    return next(
-        (coef for low, high, first, last, coef in scales["rare"] if low <= size_gb < high and first <= seeders <= last),
-        0,
-    )
-
-
-def note_of(t, scales):
-    days = t["seeding_time"] / DAY
-    duration = max([coef for at, coef in scales["duration"] if days >= at], default=0)
-    return 1 + duration + rare_coef(t["size"], t["num_complete"], scales)
-
-
-def top_note(scales):
-    return 1 + max([c for _, c in scales["duration"]], default=0) + max([r[4] for r in scales["rare"]], default=0)
-
-
-def cost_of(release):
-    return 0 if release["free"] else release["size"]
-
-
 def pick_free(releases, known, max_size):
     free = [r for r in releases if r["free"] and r["infohash"] not in known and r["seeders"] >= 1 and r["size"] <= max_size]
     return sorted(free, key=lambda r: -r["leechers"])
-
-
-def pick_small(releases, known, max_size, scales):
-    small = [r for r in releases if r["infohash"] not in known and r["size"] <= max_size and r["seeders"] >= 1]
-    return sorted(small, key=lambda r: (cost_of(r), -rare_coef(r["size"], r["seeders"], scales), r["size"]))
 
 
 def pick_paid(releases, known, settings):
@@ -567,7 +435,6 @@ def load_state(path):
             state = json.load(file)
     except FileNotFoundError:
         state = {}
-    kinds = state.get("kinds", {})
     return {
         "transfers": state.get("transfers", {}),
         "hunted": state.get("hunted", {}),
@@ -587,11 +454,7 @@ def load_state(path):
         "stuck": state.get("stuck", {}),
         "given_up": state.get("given_up", {}),
         "restore": state.get("restore", {}),
-        "categories": state.get("categories") or {h: RETIRED_KINDS[k] for h, k in kinds.items() if k in RETIRED_KINDS},
-        "pages": state.get("pages", {}),
         "daily": state.get("daily", []),
-        "done": state.get("done") or list(DONE_AT_START),
-        "scales": state.get("scales"),
         "tier": state.get("tier"),
     }
 
@@ -766,44 +629,9 @@ def record(state, torrents, settings, now):
         del state["given_up"][infohash]
     for infohash in [h for h, at in state["checked"].items() if at < now - 2 * DAY]:
         del state["checked"][infohash]
-    copies = twin_copies(state)
-    for infohash in [h for h in state["categories"] if h not in torrents and h not in copies]:
-        del state["categories"][infohash]
     record_sources(state, torrents, settings)
     record_history(state, torrents, fresh, now)
     record_zen(state, torrents)
-
-
-def learn_categories(c411, state, settings, torrents):
-    for t in torrents.values():
-        if t["hash"] in state["categories"] or not is_c411(state, settings, t):
-            continue
-        try:
-            state["categories"][t["hash"]] = c411.category(t["hash"])
-        except urllib.error.HTTPError as error:
-            if error.code != 404:
-                print(f"Cannot read the C411 category of {t['name']}: {error}")
-                return
-            state["categories"][t["hash"]] = ""
-        except FAILURES as error:
-            print(f"Cannot read the C411 category of {t['name']}: {error}")
-            return
-
-
-def refresh_scales(c411, state, account, now):
-    scales = state["scales"]
-    slug = (account or {}).get("class")
-    if not slug or (scales and scales.get("class") == slug and now - scales.get("at", 0) < DAY):
-        return
-    try:
-        state["scales"] = {**c411.scales(slug), "class": slug, "at": now}
-    except FAILURES as error:
-        print(f"Cannot read the bonus scales of the C411 class {slug}: {error}")
-
-
-def scales_in(state):
-    found = state["scales"] or DEFAULT_SCALES
-    return {"duration": found["duration"], "rare": found["rare"]}
 
 
 def gigabytes(size):
@@ -863,89 +691,6 @@ def report(state, now):
 
 def seeded_on_c411(state, settings, torrents):
     return [t for t in torrents.values() if is_c411(state, settings, t) and is_seeding(t)]
-
-
-def category_counts(state, seeds):
-    counts = dict.fromkeys(C411_CATEGORIES, 0)
-    for t in seeds:
-        slug = state["categories"].get(t["hash"])
-        if slug in counts:
-            counts[slug] += 1
-    return counts
-
-
-def levels_of(challenge):
-    return [q for q in QUESTS if q["challenge"] == challenge and q["level"] < 99]
-
-
-def progress_of(q, seeds, counts, scales, done):
-    c = q["criteria"]
-    if c.get("all_levels"):
-        levels = levels_of(q["challenge"])
-        return sum(1 for x in levels if x["id"] in done), len(levels)
-    challenge = q["challenge"]
-    if challenge == "quantity_seed":
-        return len(seeds), c["threshold"]
-    if challenge == "duration_seed":
-        return sum(1 for t in seeds if t["seeding_time"] >= c["min_days"] * DAY), c["min_seeds"]
-    if challenge == "vtr_min":
-        top = top_note(scales)
-        return sum(1 for t in seeds if note_of(t, scales) >= top * c["min_share_pct"] / 100 - 1e-9), c["min_seeds"]
-    if challenge == "category_volume_seed":
-        current = counts[SPECIALIZATION] if c.get("in_specialization") else max(counts.values())
-        return current, c["min_seeds_same_cat"]
-    return sum(1 for n in counts.values() if n >= c["min_seeds_per_cat"]), c["min_categories"]
-
-
-def next_level(challenge, done):
-    return next((q for q in levels_of(challenge) if q["id"] not in done), None)
-
-
-def validate_quests(state, account, seeds, counts, scales):
-    if account is None:
-        return
-    done = set(state["done"])
-    for voie in VOIES:
-        seen = account["voies"].get(voie)
-        if seen is None:
-            continue
-        mine = [q for q in QUESTS if q["voie"] == voie]
-        missing = seen - sum(1 for q in mine if q["id"] in done)
-        for q in sorted((q for q in mine if q["id"] not in done), key=lambda q: (q["level"] == 99, CHALLENGES.index(q["challenge"]), q["level"])):
-            if missing <= 0:
-                break
-            current, target = progress_of(q, seeds, counts, scales, done)
-            if current >= target:
-                done.add(q["id"])
-                missing -= 1
-                print(f"C411 validated the quest {q['description']}")
-    state["done"] = sorted(done)
-
-
-def category_target(slug, done):
-    if slug != SPECIALIZATION:
-        return BADGE_SEEDS
-    level = next_level("category_volume_seed", done)
-    return level["criteria"]["min_seeds_same_cat"] if level else BADGE_SEEDS
-
-
-def category_complete(slug, count, done):
-    if slug == SPECIALIZATION:
-        return next_level("category_volume_seed", done) is None
-    return count >= BADGE_SEEDS
-
-
-def wanted_hunts(switches, state, seeds, counts):
-    done = set(state["done"])
-    hunts = []
-    for slug in C411_CATEGORIES:
-        target = category_target(slug, done)
-        if switches[f"volume:{slug}"] and counts[slug] < target:
-            hunts.append((slug, target - counts[slug]))
-    level = next_level("quantity_seed", done)
-    if switches["quantity_seed"] and level and len(seeds) < level["criteria"]["threshold"]:
-        hunts.append((None, level["criteria"]["threshold"] - len(seeds)))
-    return hunts
 
 
 def drop_twins(qbt, state, torrents):
@@ -1181,8 +926,6 @@ def take(qbt, state, budget, known, release, torrent, source, via):
     qbt.add(torrent, FARM)
     known.add(release["infohash"])
     state["sources"][release["infohash"]] = source
-    if release.get("category"):
-        state["categories"][release["infohash"]] = release["category"]
     budget[FARM] -= release["size"]
     budget["slots"] -= 1
     print(
@@ -1269,27 +1012,6 @@ def grab_paid(qbt, c411, settings, state, releases, known, budget, now):
         take_paid(qbt, c411, state, budget, known, release, "paid", now)
 
 
-def hunt_quests(qbt, c411, settings, state, hunts, known, budget, now):
-    scales = scales_in(state)
-    for slug, missing in hunts:
-        if budget["slots"] <= 0:
-            return
-        key = slug or "all"
-        page = state["pages"].get(key, 1)
-        releases, pages = c411.catalog(now, slug, "size", "asc", page)
-        picks = [r for r in pick_small(releases, known, settings["max_size"], scales) if affordable(r, budget)]
-        if not picks:
-            state["pages"][key] = page + 1 if page < pages else 1
-            continue
-        for release in picks:
-            if missing <= 0 or budget["slots"] <= 0:
-                break
-            if release["infohash"] in known or not affordable(release, budget):
-                continue
-            if take_paid(qbt, c411, state, budget, known, release, "quest", now):
-                missing -= 1
-
-
 def pending(state, torrents):
     return sum(
         t["size"] * (1 - t["progress"])
@@ -1298,7 +1020,7 @@ def pending(state, torrents):
     )
 
 
-def grab(qbt, prowlarr, c411, settings, switches, state, torrents, account, hunts, now):
+def grab(qbt, prowlarr, c411, settings, switches, state, torrents, account, now):
     downloading = sum(1 for t in torrents.values() if t["category"] == FARM and t["progress"] < 1)
     spent = sum(size for _, size in state["hunted"].values())
     budget = {
@@ -1311,15 +1033,15 @@ def grab(qbt, prowlarr, c411, settings, switches, state, torrents, account, hunt
     if budget["slots"] <= 0 or budget[FARM] <= 0:
         return
     known = set(torrents) | twin_copies(state) | set(state["given_up"])
-    if switches["twins"] or switches["free"] or switches["paid"]:
-        releases, _ = c411.catalog(now)
-        if switches["twins"] and settings["twin_indexers"]:
-            use_prowlarr(state, now, lambda: grab_twins(qbt, prowlarr, c411, settings, state, releases, known, budget, now))
-        if switches["free"]:
-            grab_free(qbt, c411, settings, state, releases, known, budget, now)
-        if switches["paid"]:
-            grab_paid(qbt, c411, settings, state, releases, known, budget, now)
-    hunt_quests(qbt, c411, settings, state, hunts, known, budget, now)
+    if not (switches["twins"] or switches["free"] or switches["paid"]):
+        return
+    releases = c411.catalog(now)
+    if switches["twins"] and settings["twin_indexers"]:
+        use_prowlarr(state, now, lambda: grab_twins(qbt, prowlarr, c411, settings, state, releases, known, budget, now))
+    if switches["free"]:
+        grab_free(qbt, c411, settings, state, releases, known, budget, now)
+    if switches["paid"]:
+        grab_paid(qbt, c411, settings, state, releases, known, budget, now)
 
 
 def entry_of(day, settings):
@@ -1442,42 +1164,10 @@ def account_board(account, state, settings):
         "available_gb": left_before_block(gigabytes(account["uploaded"]) + zen_gigabytes(account["zen"]), gigabytes(account["downloaded"])),
         "class": account["class"],
         "grade": account["grade"],
-        "voies": account["voies"],
     }
 
 
-def shown_progress(q, seeds, counts, scales, done):
-    current, target = progress_of(q, seeds, counts, scales, done)
-    return (max(current, target), target) if q["id"] in done else (current, target)
-
-
-def step_of(q, seeds, counts, scales, done):
-    current, target = shown_progress(q, seeds, counts, scales, done)
-    return {"level": q["level"], "description": q["description"], "current": current, "target": target, "done": q["id"] in done}
-
-
 def board_of(state, settings, controls, torrents, seeds, account, now):
-    scales = scales_in(state)
-    counts = category_counts(state, seeds)
-    done = set(state["done"])
-    challenges = []
-    for challenge in CHALLENGES:
-        level = next_level(challenge, done)
-        levels = levels_of(challenge)
-        shown_level = level or levels[-1]
-        current, target = shown_progress(shown_level, seeds, counts, scales, done)
-        challenges.append({
-            "key": challenge,
-            "voie": shown_level["voie"],
-            "level": shown_level["level"],
-            "levels": len(levels),
-            "done": level is None,
-            "description": shown_level["description"],
-            "current": current,
-            "target": target,
-            "switch": challenge if challenge in SWITCHES else None,
-            "steps": [step_of(q, seeds, counts, scales, done) for q in levels],
-        })
     farm = [t for t in torrents.values() if t["category"] == FARM]
     slices = {}
     for t in farm:
@@ -1490,18 +1180,6 @@ def board_of(state, settings, controls, torrents, seeds, account, now):
         "tiers": tiers_of(account, settings),
         "history": [dict(e) for e in state["daily"]],
         "seeds": len(seeds),
-        "known": sum(1 for t in seeds if t["hash"] in state["categories"]),
-        "done": sorted(done),
-        "voies": {
-            voie: {"done": sum(1 for q in QUESTS if q["voie"] == voie and q["id"] in done), "total": sum(1 for q in QUESTS if q["voie"] == voie)}
-            for voie in VOIES
-        },
-        "challenges": challenges,
-        "categories": [
-            {"slug": slug, "name": name, "count": counts[slug], "target": category_target(slug, done),
-             "complete": category_complete(slug, counts[slug], done), "switch": f"volume:{slug}"}
-            for slug, (_, name) in C411_CATEGORIES.items()
-        ],
         "controls": controls,
         "farm": {
             "budget_gb": gigabytes(settings["farm_size"]),
@@ -1516,8 +1194,7 @@ def board_of(state, settings, controls, torrents, seeds, account, now):
 def waiting_board(state, settings, controls):
     return {
         "updated_at": None, "account": {"ratio": None, "floor": settings["floor"], "paused": True, "allowed": None},
-        "tiers": tiers_of(None, settings), "history": [dict(e) for e in state["daily"]], "seeds": None, "known": 0,
-        "done": list(state["done"]), "voies": {}, "challenges": [], "categories": [], "controls": controls,
+        "tiers": tiers_of(None, settings), "history": [dict(e) for e in state["daily"]], "seeds": None, "controls": controls,
         "farm": {"budget_gb": gigabytes(settings["farm_size"]), "slices": []}, "sources": [],
     }
 
@@ -1540,7 +1217,6 @@ def run_once(qbt, prowlarr, c411, settings, controls, state, now, notify=tell_bo
     torrents = {t["hash"].lower(): {**t, "hash": t["hash"].lower()} for t in qbt.torrents()}
     record(state, torrents, settings, now)
     report(state, now)
-    refresh_scales(c411, state, account, now)
     use_prowlarr(state, now, lambda: hold_c411(prowlarr, settings, state, state["paused"] and switches["hold"]), always=True)
     if switches["adopt"]:
         adopt(qbt, settings, state, torrents)
@@ -1549,13 +1225,9 @@ def run_once(qbt, prowlarr, c411, settings, controls, state, now, notify=tell_bo
     if switches["clean_public"]:
         clean_public(qbt, settings, state, torrents)
     tag(qbt, settings, state, torrents)
-    seeds = seeded_on_c411(state, settings, torrents)
-    validate_quests(state, account, seeds, category_counts(state, seeds), scales_in(state))
-    hunts = wanted_hunts(switches, state, seeds, category_counts(state, seeds))
     for step in (
-        lambda: grab(qbt, prowlarr, c411, settings, switches, state, torrents, account, hunts, now),
+        lambda: grab(qbt, prowlarr, c411, settings, switches, state, torrents, account, now),
         lambda: use_prowlarr(state, now, lambda: seed_twins(qbt, c411, settings, state, torrents, now)),
-        lambda: learn_categories(c411, state, settings, torrents),
     ):
         try:
             step()
@@ -1644,7 +1316,6 @@ def settings_from_env():
         "farm_size": positive("RATIO_MAX_SIZE_GB", 100) * GB,
         "floor": positive("RATIO_FLOOR", 1.2),
         "daily": number("RATIO_DAILY_GB", 5) * GB,
-        "max_size": GB,
         "paused_profile": "Paused",
         "free_max_size": 5 * GB,
         "paid_max_age_hours": 24,

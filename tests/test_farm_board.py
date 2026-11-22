@@ -242,7 +242,6 @@ BOARD = {
         "ratio": 1.5, "floor": 1.2, "paused": False, "allowed": True, "uploaded_gb": 60, "downloaded_gb": 40,
         "actual_gb": 10, "credit_gb": 50, "zen": 616, "class": "swarm_keeper", "grade": ["bronze", 3],
         "zen_gb": 616, "available_gb": 805,
-        "voies": {"seed": 3, "specialization": 6},
     },
     "tiers": [
         {"name": "blocked", "ratio": 0.8, "gap_gb": -35.0}, {"name": "even", "ratio": 1.0, "gap_gb": -20.0},
@@ -250,34 +249,14 @@ BOARD = {
     ],
     "history": [entry(n) for n in range(1, 31)],
     "seeds": 199,
-    "known": 190,
-    "voies": {"seed": {"done": 3, "total": 19}, "specialization": {"done": 6, "total": 9}},
-    "challenges": [
-        {"key": "quantity_seed", "voie": "seed", "level": 3, "levels": 5, "done": False, "description": "200 seeds",
-         "current": 205, "target": 200, "switch": "quantity_seed", "steps": [
-             {"level": 1, "description": "100 seeds", "current": 205, "target": 100, "done": True},
-             {"level": 2, "description": "150 seeds", "current": 205, "target": 150, "done": True},
-             {"level": 3, "description": "200 seeds", "current": 205, "target": 200, "done": False},
-             {"level": 4, "description": "250 seeds", "current": 205, "target": 250, "done": False},
-             {"level": 5, "description": "300 seeds", "current": 205, "target": 300, "done": False},
-         ]},
-        {"key": "category_volume_seed", "voie": "specialization", "level": 2, "levels": 4, "done": False,
-         "description": "100 seeds dans la même catégorie", "current": 75, "target": 100, "switch": None},
-        {"key": "duration_seed", "voie": "seed", "level": 1, "levels": 5, "done": False,
-         "description": "25 seeds pendant 7 jours", "current": 3, "target": 25, "switch": None},
-    ],
-    "categories": [
-        {"slug": "films-videos", "name": "Films & Vidéos", "count": 75, "target": 100, "switch": "volume:films-videos", "complete": False},
-        {"slug": "ebook", "name": "Ebook", "count": 36, "target": 50, "switch": "volume:ebook", "complete": False},
-    ],
     "controls": {
         "switches": {
-            "free": True, "twins": True, "paid": False, "quantity_seed": True, "clean_public": True, "drop_twins": True,
-            "hold": True, "adopt": False, "volume:films-videos": False, "volume:ebook": True,
+            "free": True, "twins": True, "paid": False, "clean_public": True, "drop_twins": True,
+            "hold": True, "adopt": False,
         },
-        "numbers": {"farm_size_gb": 100, "floor": 1.2, "daily_gb": 5, "max_size_gb": 1},
+        "numbers": {"farm_size_gb": 100, "floor": 1.2, "daily_gb": 5},
     },
-    "farm": {"budget_gb": 100, "slices": [{"source": "free", "gb": 30.5}, {"source": "quest", "gb": 9.5}]},
+    "farm": {"budget_gb": 100, "slices": [{"source": "free", "gb": 30.5}, {"source": "paid", "gb": 9.5}]},
     "sources": [
         {"source": "free", "torrents": 12, "downloaded_gb": 0, "uploaded_gb": 80.5, "ratio": None,
          "week_downloaded_gb": 0, "week_uploaded_gb": 20.25, "week_ratio": None, "farm_days": 40.5},
@@ -305,70 +284,11 @@ class PageTest(unittest.TestCase):
         self.assertEqual(page.count("<figure>"), 2)
         self.assertNotIn('action="/controls"', page)
 
-    def test_the_second_part_shows_the_quests_with_a_switch_only_where_the_farm_can_help(self):
+    def test_the_second_part_shows_the_switches_the_settings_the_disk_and_the_earnings(self):
         page = board_page(BOARD, "2", "fr")
-        self.assertIn("205 / 200", page)
-        self.assertIn("atteint, en attente de C411", page)
-        self.assertNotIn("faites ici", page)
-        self.assertEqual(page.count('class="challenge"'), 3)
-        self.assertEqual(page.count('class="step '), 5)
-        self.assertIn('class="step done"', page)
-        self.assertIn('class="step reached"', page)
-        self.assertIn('class="step next"', page)
-        self.assertIn("75 / 100", page)
-        self.assertIn('name="name" value="quantity_seed"', page)
-        self.assertIn('name="name" value="volume:ebook"', page)
-        self.assertNotIn('value="duration_seed"', page)
-        self.assertIn("indicateur", page)
-        self.assertIn('class="switch on"', page)
-        self.assertIn('name="name" value="volume:films-videos"><input type="hidden" name="value" value="on">', page)
-
-    def test_a_completed_challenge_shows_a_locked_completed_badge_instead_of_its_switch(self):
-        challenge = dict(BOARD["challenges"][0], done=True, level=5, current=305, target=300)
-        board = dict(BOARD, challenges=[challenge])
-        page = board_page(board, "2", "fr")
-        self.assertIn('<span class="tag complete">complété</span>', page)
-        self.assertNotIn('value="quantity_seed"', page)
-        self.assertIn("completed", board_page(board, "2", "en"))
-
-    def test_a_completed_challenge_shows_no_count(self):
-        challenge = dict(BOARD["challenges"][0], done=True, level=5, current=305, target=300)
-        page = board_page(dict(BOARD, challenges=[challenge], categories=[]), "2", "fr")
-        self.assertNotIn("305 / 300", page)
-        self.assertNotIn('class="count"', page)
-
-    def test_a_category_at_its_target_shows_completed_instead_of_its_switch(self):
-        categories = BOARD["categories"] + [
-            {"slug": "audio", "name": "Audio", "count": 50, "target": 50, "switch": "volume:audio", "complete": True},
-        ]
-        page = board_page(dict(BOARD, categories=categories), "2", "fr")
-        self.assertNotIn('value="volume:audio"', page)
-        self.assertEqual(page.count('<span class="tag complete">complété</span>'), 1)
-
-    def test_a_category_at_its_target_with_levels_left_keeps_its_switch(self):
-        categories = [dict(BOARD["categories"][0], count=100)]
-        page = board_page(dict(BOARD, categories=categories), "2", "fr")
-        self.assertIn('value="volume:films-videos"', page)
-        self.assertNotIn('<span class="tag complete">', page)
-
-    def test_one_switch_turns_every_open_category_on_or_off(self):
-        page = board_page(BOARD, "2", "fr")
-        self.assertIn("Toutes les catégories", page)
-        self.assertIn('name="name" value="volume:all"><input type="hidden" name="value" value="on">', page)
-        controls = dict(BOARD["controls"], switches=dict(BOARD["controls"]["switches"], **{"volume:films-videos": True}))
-        page = board_page(dict(BOARD, controls=controls), "2", "fr")
-        self.assertIn('name="name" value="volume:all"><input type="hidden" name="value" value="off">', page)
-
-    def test_no_switch_for_every_category_when_all_are_complete(self):
-        categories = [dict(c, count=c["target"], complete=True) for c in BOARD["categories"]]
-        page = board_page(dict(BOARD, categories=categories), "2", "fr")
-        self.assertNotIn('value="volume:all"', page)
-
-    def test_the_third_part_shows_the_switches_the_settings_the_disk_and_the_earnings(self):
-        page = board_page(BOARD, "3", "fr")
         for text in ("Grabs payants frais", "Pause Prowlarr sous le plancher", "Budget de la Farm (Go)", "Disque de la Farm", "Gains par Source"):
             self.assertIn(text, page)
-        self.assertEqual(page.count('class="setting"'), 11)
+        self.assertEqual(page.count('class="setting"'), 10)
         self.assertIn("Le hardlink garde les fichiers", page)
         self.assertIn('type="number" name="value" step="0.05" min="0.5" max="5" value="1.2"', page)
 
@@ -376,7 +296,8 @@ class PageTest(unittest.TestCase):
         page = board_page(BOARD)
         self.assertIn('class="standalone"', page)
         self.assertIn("Account ratio", page)
-        self.assertIn("Seed count", page)
+        self.assertIn("Farm budget (GB)", page)
+        self.assertNotIn("Quest", page)
 
     def test_a_shot_sets_the_width_of_the_board(self):
         page = board_page(BOARD, "1", "fr", 800)
@@ -418,28 +339,19 @@ class ServerTest(unittest.TestCase):
         url = self.start()
         with urllib.request.urlopen(f"{url}/graphs?lang=fr&part=2", timeout=10) as response:
             self.assertIn("form-action 'self'", response.headers["Content-Security-Policy"])
-            self.assertIn("Nombre de seeds", response.read().decode())
+            self.assertIn("Budget de la Farm", response.read().decode())
 
     def test_a_switch_goes_to_ratio_then_back_to_its_part(self):
         url = self.start()
-        answer = self.post(url, {"name": "paid", "value": "on", "part": "3", "lang": "fr"})
+        answer = self.post(url, {"name": "paid", "value": "on", "part": "2", "lang": "fr"})
         self.assertEqual(answer.code, 303)
-        self.assertEqual(answer.headers["Location"], "/graphs?lang=fr&part=3")
+        self.assertEqual(answer.headers["Location"], "/graphs?lang=fr&part=2")
         self.assertEqual(self.sent, [("paid", True)])
         self.assertTrue(self.wake.is_set())
 
-    def test_the_switch_for_every_category_leaves_the_complete_ones_alone(self):
-        categories = BOARD["categories"] + [
-            {"slug": "audio", "name": "Audio", "count": 50, "target": 50, "switch": "volume:audio", "complete": True},
-        ]
-        url = self.start(reader=lambda: dict(BOARD, categories=categories))
-        answer = self.post(url, {"name": "volume:all", "value": "off", "part": "2", "lang": "fr"}, origin=url)
-        self.assertEqual(answer.code, 303)
-        self.assertEqual(self.sent, [("volume:films-videos", False), ("volume:ebook", False)])
-
     def test_a_number_goes_to_ratio_as_a_number(self):
         url = self.start()
-        self.post(url, {"name": "floor", "value": "1,5", "part": "3"}, origin=url)
+        self.post(url, {"name": "floor", "value": "1,5", "part": "2"}, origin=url)
         self.assertEqual(self.sent, [("floor", 1.5)])
 
     def test_a_form_of_another_site_is_refused(self):
@@ -481,11 +393,6 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(204, self.post_json(url, {"name": "floor", "value": 1.5}))
         self.assertEqual(self.sent, [("paid", True), ("floor", 1.5)])
         self.assertTrue(self.wake.is_set())
-
-    def test_a_json_switch_for_every_category_reaches_each_open_one(self):
-        url = self.start()
-        self.post_json(url, {"name": "volume:all", "value": False})
-        self.assertEqual(self.sent, [("volume:films-videos", False), ("volume:ebook", False)])
 
     def test_the_page_keeps_the_last_board_while_ratio_is_down(self):
         boards = [BOARD]
