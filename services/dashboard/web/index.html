@@ -88,8 +88,8 @@ section h2::before { content: ""; width: 8px; height: 8px; border-radius: 2px; b
   .service .line { grid-template-columns: 8px 24px minmax(0, 1fr) auto; }
   .service .meter, .service .up { display: none; }
   .service .facts { grid-column: 3 / -1; order: 1; }
-  .service .facts > span:not(.stale):not(.failed) { display: none; }
-  .service .facts:not(:has(.stale, .failed)) { display: none; }
+  .service .facts > span:not(.stale):not(.failed):not(.off) { display: none; }
+  .service .facts:not(:has(.stale, .failed, .off)) { display: none; }
   .service .more-area { padding-left: 16px; }
 }
 
@@ -143,6 +143,23 @@ section h2::before { content: ""; width: 8px; height: 8px; border-radius: 2px; b
 .throughput svg { width: 100%; height: 70px; display: block; overflow: visible; border-bottom: 1px solid var(--line); }
 .throughput .keys { display: flex; flex-wrap: wrap; gap: 2px 12px; white-space: nowrap; }
 .throughput .keys span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; background: currentColor; }
+.links { display: grid; gap: 0; }
+.links .caption { margin: 8px 0 2px; }
+.links .caption:first-child { margin-top: 0; }
+.link { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; min-width: 0; }
+.links .caption + .link { border-top: none; }
+.link .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--running); }
+.link[data-state="off"] .dot, .link[data-state="unknown"] .dot { background: var(--stopped); }
+.link[data-state="paused"] .dot { background: var(--restarting); }
+.link[data-state="failing"] .dot { background: var(--unhealthy); }
+.link .what { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.link .what small { color: var(--muted); font-size: 12px; margin-left: 6px; }
+.link .says { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.link[data-state="paused"] .says { color: var(--restarting); }
+.link[data-state="failing"] .says { color: var(--unhealthy); }
+.said { margin: 0; font-size: 12px; padding: 6px 8px; border-radius: 6px; color: var(--restarting); background: color-mix(in srgb, var(--restarting) 12%, transparent); }
+.said.error { color: var(--unhealthy); background: color-mix(in srgb, var(--unhealthy) 12%, transparent); }
+.service .facts .off { color: var(--restarting); }
 svg polyline { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 </style>
 </head>
@@ -166,6 +183,8 @@ const opened = new Set();
 const busy = new Set();
 const missing = new Set();
 const RAIL = [["jellyfin", "Jellyfin"], ["music-bot", "Music bot"], ["seerr", "Requests"], ["qbittorrent", "Downloads"]];
+const LINKED = new Set(["prowlarr", "radarr", "sonarr"]);
+const KINDS = [["indexer", "Indexers"], ["proxy", "Proxies"], ["client", "Download clients"]];
 const NATIVE = new Set(["quick-actions", "pull-requests", "farm"]);
 const ARTWORK = new Set(["jellyfin", "music-bot"]);
 
@@ -355,10 +374,46 @@ function stateOf(service) {
   return service.shutdown ? "stopped" : service.state;
 }
 
+function linksOf(service) {
+  const found = board.widgets[service.service];
+  const reading = found && found.reading;
+  return { links: (reading && reading.links) || [], health: (reading && reading.health) || [] };
+}
+
 function looks(service) {
   const found = board.widgets[service.service];
   const broken = found && found.error ? 1 : 0;
-  return broken + (service.shutdown || service.state === "running" ? 0 : 1) + (errors.has(service.service) ? 1 : 0);
+  const { links, health } = linksOf(service);
+  const failing = links.filter(link => link.state === "failing").length;
+  const connections = broken ? 0 : health.length || failing;
+  return broken + connections + (service.shutdown || service.state === "running" ? 0 : 1) + (errors.has(service.service) ? 1 : 0);
+}
+
+function says(link) {
+  if (link.state === "failing") {
+    if (link.kind === "proxy") return "Unavailable";
+    if (!link.until) return "Failing";
+    const until = new Date(link.until * 1000);
+    const today = until.toDateString() === new Date().toDateString();
+    return `Failing until ${today ? "" : `${until.toLocaleDateString([], { weekday: "short" })} `}${clock(link.until)}`;
+  }
+  return { on: "On", off: "Off", paused: "Paused by ratio", unknown: "\u2014" }[link.state] || link.state;
+}
+
+function connections(service) {
+  const { links, health } = linksOf(service);
+  const node = element("div", { class: "links" });
+  for (const [kind, title] of KINDS) {
+    const own = links.filter(link => link.kind === kind);
+    if (!own.length) continue;
+    node.append(element("span", { class: "caption" }, title), ...own.map(link =>
+      element("div", { class: "link", "data-state": link.state },
+        element("span", { class: "dot", "aria-hidden": "true" }),
+        element("span", { class: "what" }, link.name, link.hint ? element("small", {}, link.hint) : ""),
+        element("span", { class: "says" }, says(link)))));
+  }
+  if (!links.length) node.append(element("span", { class: "caption" }, "No indexer nor download client read yet"));
+  return [node, ...health.map(item => element("p", { class: `said ${item.level === "error" ? "error" : ""}` }, item.message))];
 }
 
 function facts(service) {
@@ -366,6 +421,9 @@ function facts(service) {
   const node = element("span", { class: "facts" });
   const reading = found && found.reading;
   if (reading) for (const figure of reading.figures) node.append(element("span", {}, figure.label, element("b", {}, figure.value)));
+  for (const link of linksOf(service).links) {
+    if (link.state === "off" || link.state === "failing") node.append(element("span", { class: link.state === "failing" ? "failed" : "off" }, `${link.name} ${says(link).toLowerCase()}`));
+  }
   if (found && found.error) {
     node.append(reading && found.updated
       ? element("span", { class: "stale" }, `Stale since ${clock(found.updated)}`)
@@ -477,6 +535,9 @@ function rail(services) {
     const nodes = panel(board.widgets[name], service.widget);
     if (name === "qbittorrent") nodes.push(throughput(name));
     node.append(block(title, service, nodes));
+  }
+  for (const service of services.filter(item => LINKED.has(item.widget))) {
+    node.append(block(service.name, service, [...connections(service), ...trouble(board.widgets[service.service])]));
   }
   if (board.truenas) node.append(block("TrueNAS", null, panel(board.truenas), board.truenas));
   node.append(element("article", { class: "block space", style: "--accent: var(--status)" }, element("h4", {}, "Media tree"),

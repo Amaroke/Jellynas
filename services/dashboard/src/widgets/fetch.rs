@@ -48,10 +48,21 @@ fn encode(input: &str) -> String {
     output
 }
 
-fn week() -> (String, String) {
-    let now = SystemTime::now()
+const STARR: [&str; 4] = [
+    "/api/v3/indexer",
+    "/api/v3/indexerstatus",
+    "/api/v3/downloadclient",
+    "/api/v3/health",
+];
+
+fn seconds() -> u64 {
+    SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_secs());
+        .map_or(0, |elapsed| elapsed.as_secs())
+}
+
+fn week() -> (String, String) {
+    let now = seconds();
     (date(now), date(now + 7 * 86400))
 }
 
@@ -144,6 +155,41 @@ impl Client {
         sent.map(|_| ()).map_err(|error| error.to_string())
     }
 
+    fn connect<const N: usize>(
+        &self,
+        found: &mut Reading,
+        prefix: &str,
+        paths: [&str; N],
+        parse: impl FnOnce([Value; N]) -> parse::Linked,
+    ) -> Result<(), String> {
+        let auth = self.key(prefix, "X-Api-Key")?;
+        let read: Vec<Result<Value, String>> = thread::scope(|scope| {
+            let pending: Vec<_> = paths
+                .iter()
+                .map(|path| scope.spawn(|| self.fetch(prefix, path, &auth)))
+                .collect();
+            pending
+                .into_iter()
+                .map(|handle| {
+                    handle
+                        .join()
+                        .unwrap_or_else(|_| Err("the reading crashed".into()))
+                })
+                .collect()
+        });
+        let values: Vec<Value> = read
+            .into_iter()
+            .collect::<Result<_, _>>()
+            .map_err(|error| format!("cannot read the indexers and download clients: {error}"))?;
+        let values: [Value; N] = values
+            .try_into()
+            .map_err(|_| "cannot read the indexers and download clients".to_string())?;
+        let (links, health) = parse(values)?;
+        found.links = links;
+        found.health = health;
+        Ok(())
+    }
+
     pub fn widget(&self, kind: &str) -> parse::Parsed {
         let arr = |prefix| self.key(prefix, "X-Api-Key");
         match kind {
@@ -194,14 +240,38 @@ impl Client {
                     &self.fetch("AUTOBRR", "/api/release/indexers", &auth)?,
                 )
             }
-            "prowlarr" => parse::prowlarr(&self.fetch(
-                "PROWLARR",
-                "/api/v1/indexerstats",
-                &arr("PROWLARR")?,
-            )?),
+            "prowlarr" => {
+                let mut found = parse::prowlarr(&self.fetch(
+                    "PROWLARR",
+                    "/api/v1/indexerstats",
+                    &arr("PROWLARR")?,
+                )?)?;
+                self.connect(
+                    &mut found,
+                    "PROWLARR",
+                    [
+                        "/api/v1/indexer",
+                        "/api/v1/indexerstatus",
+                        "/api/v1/appprofile",
+                        "/api/v1/indexerproxy",
+                        "/api/v1/health",
+                    ],
+                    |[indexers, statuses, profiles, proxies, health]| {
+                        parse::prowlarr_links(
+                            &indexers,
+                            &statuses,
+                            &profiles,
+                            &proxies,
+                            &health,
+                            seconds(),
+                        )
+                    },
+                )?;
+                Ok(found)
+            }
             "radarr" => {
                 let (today, end) = week();
-                parse::radarr(
+                let mut found = parse::radarr(
                     &self.fetch("RADARR", "/api/v3/movie", &arr("RADARR")?)?,
                     &self.fetch("RADARR", "/api/v3/queue/status", &arr("RADARR")?)?,
                     &self.fetch("RADARR", "/api/v3/queue/details", &arr("RADARR")?)?,
@@ -213,11 +283,20 @@ impl Client {
                         )
                         .unwrap_or_else(|_| json!([])),
                     &today,
-                )
+                )?;
+                self.connect(
+                    &mut found,
+                    "RADARR",
+                    STARR,
+                    |[indexers, statuses, clients, health]| {
+                        parse::starr_links(&indexers, &statuses, &clients, &health, seconds())
+                    },
+                )?;
+                Ok(found)
             }
             "sonarr" => {
                 let (today, end) = week();
-                parse::sonarr(
+                let mut found = parse::sonarr(
                     &self.fetch("SONARR", "/api/v3/series", &arr("SONARR")?)?,
                     &self.fetch("SONARR", "/api/v3/queue", &arr("SONARR")?)?,
                     &self.fetch("SONARR", "/api/v3/wanted/missing", &arr("SONARR")?)?,
@@ -233,7 +312,16 @@ impl Client {
                             &arr("SONARR")?,
                         )
                         .unwrap_or_else(|_| json!([])),
-                )
+                )?;
+                self.connect(
+                    &mut found,
+                    "SONARR",
+                    STARR,
+                    |[indexers, statuses, clients, health]| {
+                        parse::starr_links(&indexers, &statuses, &clients, &health, seconds())
+                    },
+                )?;
+                Ok(found)
             }
             "suwayomi" => self.suwayomi(),
             "bazarr" => {
@@ -489,6 +577,8 @@ impl Client {
             posters: vec![],
             shelf: None,
             idle: None,
+            links: vec![],
+            health: vec![],
             metrics: vec![],
         })
     }
