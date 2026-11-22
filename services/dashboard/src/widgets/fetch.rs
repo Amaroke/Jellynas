@@ -222,6 +222,13 @@ impl Client {
                 &self.fetch("MUSIC_BOT", "/status", &vec![])?,
                 &self.url("JELLYFIN", "")?,
             ),
+            "aurral" => {
+                let auth = self.key("AURRAL", "X-Api-Key")?;
+                parse::aurral(
+                    &self.fetch("AURRAL", "/api/playlists/worker/settings", &auth)?,
+                    &self.fetch("AURRAL", "/api/library/downloads/active", &auth)?,
+                )
+            }
             "seerr" => parse::seerr(
                 &self.fetch("SEERR", "/api/v1/request/count", &arr("SEERR")?)?,
                 &self.fetch("SEERR", "/api/v1/issue/count", &arr("SEERR")?)?,
@@ -421,6 +428,18 @@ impl Client {
         id: u64,
         action: &str,
     ) -> Result<(), String> {
+        if widget == "aurral" {
+            let auth = self.key("AURRAL", "X-Api-Key")?;
+            let request = self
+                .agent
+                .put(self.url("AURRAL", "/api/playlists/worker/settings")?);
+            return match (kind, action) {
+                ("worker", "on" | "off") => {
+                    deliver(request, &auth, &json!({"paused": action == "off"}))
+                }
+                _ => Err(format!("aurral cannot {action} its {kind}")),
+            };
+        }
         let (prefix, version) = match widget {
             "prowlarr" => ("PROWLARR", "v1"),
             "radarr" => ("RADARR", "v3"),

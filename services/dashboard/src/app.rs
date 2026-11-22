@@ -230,7 +230,7 @@ impl App {
                     let name = &service.card.service;
                     if matches!(
                         service.card.widget.as_deref(),
-                        Some("seerr" | "prowlarr" | "radarr" | "sonarr")
+                        Some("seerr" | "prowlarr" | "radarr" | "sonarr" | "aurral")
                     ) && let Some(panel) = board.widgets.get(name)
                     {
                         widgets.insert(name.clone(), panel.clone());
@@ -373,7 +373,9 @@ impl App {
             .iter()
             .find(|found| found.card.service == service)
             .and_then(|found| found.card.widget.clone())
-            .filter(|widget| matches!(widget.as_str(), "prowlarr" | "radarr" | "sonarr"))
+            .filter(|widget| {
+                matches!(widget.as_str(), "prowlarr" | "radarr" | "sonarr" | "aurral")
+            })
         else {
             return Outcome::Unknown;
         };
