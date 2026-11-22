@@ -132,11 +132,17 @@ fn toggle(api: &impl Api, playlist: &Value, field: &str, path: &str) -> Result<b
 }
 
 fn prefixed(owner: &str, name: &str) -> Option<String> {
-    let prefix = format!("{owner} - ");
+    let mut letters = owner.chars();
+    let capital: String = letters
+        .next()
+        .map(|first| first.to_uppercase().chain(letters).collect())
+        .unwrap_or_default();
+    let prefix = format!("{capital} - ");
     if name.starts_with(&prefix) {
         return None;
     }
-    Some(format!("{prefix}{name}"))
+    let bare = name.strip_prefix(&format!("{owner} - ")).unwrap_or(name);
+    Some(format!("{prefix}{bare}"))
 }
 
 fn playlists(api: &impl Api) -> Result<usize, String> {
@@ -377,7 +383,7 @@ mod tests {
         bare["name"] = json!("Road trip");
         bare["ownerUserId"] = json!(3);
         let mut named = playlist("b", Value::Null);
-        named["name"] = json!("friend - Chill");
+        named["name"] = json!("Friend - Chill");
         named["ownerUserId"] = json!(3);
         let mut fake = api(
             kept(),
@@ -389,6 +395,14 @@ mod tests {
         );
         assert_eq!(Ok(1), enforce(&fake));
         assert_eq!(vec!["PUT /playlists/static-playlists/a"], fake.paths());
-        assert_eq!(json!({"name": "friend - Road trip"}), fake.body(0));
+        assert_eq!(json!({"name": "Friend - Road trip"}), fake.body(0));
+    }
+
+    #[test]
+    fn a_lowercase_owner_prefix_is_capitalized() {
+        assert_eq!(
+            Some("Theo - Spotify".to_string()),
+            prefixed("theo", "theo - Spotify")
+        );
     }
 }
