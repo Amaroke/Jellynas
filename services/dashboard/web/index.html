@@ -56,6 +56,13 @@ section h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; 
 .usage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .spark { display: grid; gap: 2px; font-size: 11px; color: var(--muted); min-width: 0; }
 .spark b { color: var(--text); font-weight: 600; }
+.uptime { display: flex; gap: 12px; font-size: 11px; color: var(--muted); }
+.uptime b { color: var(--text); font-weight: 600; }
+.answer { display: flex; gap: 6px; grid-column: 2; margin-top: 2px; }
+.answer button { font: inherit; font-size: 11px; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; }
+.answer button.approve { border-color: var(--running); color: var(--running); }
+.answer button:disabled { opacity: 0.5; cursor: default; }
+.answer .failed { color: var(--unhealthy); font-size: 11px; }
 .spark svg, .throughput svg { width: 100%; height: 28px; display: block; overflow: visible; }
 .spark polyline, .throughput polyline { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .throughput { display: grid; gap: 4px; font-size: 11px; color: var(--muted); }
@@ -126,6 +133,37 @@ async function control(service, action) {
     errors.set(service.service, `Cannot ${action === "restart" ? "restart" : `turn ${action}`} ${service.name}`);
   }
   render(current);
+}
+
+const answers = new Map();
+
+async function answer(id, action) {
+  answers.set(id, "pending");
+  refresh();
+  const response = await fetch(`/seerr/requests/${id}/${action}`, { method: "POST", headers: { "X-Dashboard": "1" } }).catch(() => null);
+  if (response && response.ok) answers.delete(id);
+  else answers.set(id, `Cannot ${action} this request`);
+  refresh();
+}
+
+function buttons(id) {
+  const state = answers.get(id);
+  const approve = element("button", { type: "button", class: "approve" }, "Approve");
+  const decline = element("button", { type: "button" }, "Decline");
+  approve.disabled = decline.disabled = state === "pending";
+  approve.addEventListener("click", () => answer(id, "approve"));
+  decline.addEventListener("click", () => answer(id, "decline"));
+  const node = element("div", { class: "answer" }, approve, decline);
+  if (state && state !== "pending") node.append(element("span", { class: "failed" }, state));
+  return node;
+}
+
+function uptime(name) {
+  const found = (board.uptime || {})[name] || {};
+  const shown = value => value === null || value === undefined ? "—" : `${value.toFixed(2)}%`;
+  return element("div", { class: "uptime" },
+    element("span", {}, "Uptime 24h ", element("b", {}, shown(found.day))),
+    element("span", {}, "7d ", element("b", {}, shown(found.week))));
 }
 
 function clock(seconds) {
@@ -214,7 +252,14 @@ function panel(found, kind) {
         item.prepend(picture(row.image));
       }
       if (row.progress !== null) item.append(element("meter", { min: "0", max: "1", value: String(row.progress) }));
-      else if (row.image) item.append(element("meter", { class: "blank", min: "0", max: "1", value: "0" }));
+      else if (row.image && !(kind === "seerr" && row.id)) item.append(element("meter", { class: "blank", min: "0", max: "1", value: "0" }));
+      if (kind === "seerr" && row.id) {
+        if (!row.image) {
+          item.classList.add("art");
+          item.prepend(element("span", { class: "cover", "aria-hidden": "true" }));
+        }
+        item.append(buttons(row.id));
+      }
       return item;
     })));
   } else if (reading && reading.idle) {
@@ -222,9 +267,9 @@ function panel(found, kind) {
       element("span", { class: "title" }, reading.idle),
       element("span", { class: "detail" }, "—"),
       element("meter", { class: "blank", min: "0", max: "1", value: "0" }));
-    if (ARTWORK.has(kind)) {
+    if (ARTWORK.has(kind) || kind === "seerr") {
       item.classList.add("art");
-      item.prepend(element("span", { class: "cover", "aria-hidden": "true" }, "♪"));
+      item.prepend(element("span", { class: "cover", "aria-hidden": "true" }, kind === "seerr" ? "" : "♪"));
     }
     nodes.push(element("ul", { class: "rows" }, item));
   }
@@ -266,7 +311,7 @@ function tick() {
 
 function refresh() {
   for (const node of main.querySelectorAll("article.card")) {
-    node.replaceChildren(node.querySelector(".head"), ...panel(board.widgets[node.dataset.service], node.dataset.widget), ...usage(node.dataset.service, node.dataset.widget));
+    node.replaceChildren(node.querySelector(".head"), ...panel(board.widgets[node.dataset.service], node.dataset.widget), ...usage(node.dataset.service, node.dataset.widget), uptime(node.dataset.name));
   }
   const host = document.getElementById("status");
   if (host) host.replaceChildren(...[...host.children].slice(0, 2), ...panel(board.host));
@@ -299,7 +344,7 @@ function card(service) {
     ? element("a", { class: "link", href: service.href }, icon, text)
     : element("span", { class: "link" }, icon, text);
   const head = element("div", { class: "head" }, link);
-  const node = element("article", { class: "card", "data-state": service.state, "data-service": service.service, "data-widget": service.widget || "" }, head, ...panel(board.widgets[service.service], service.widget), ...usage(service.service, service.widget));
+  const node = element("article", { class: "card", "data-state": service.state, "data-service": service.service, "data-widget": service.widget || "", "data-name": service.name }, head, ...panel(board.widgets[service.service], service.widget), ...usage(service.service, service.widget), uptime(service.name));
   if (service.switchable) {
     const toggle = element("input", { type: "checkbox", role: "switch", "aria-label": `${service.name} on` });
     toggle.checked = !service.shutdown;

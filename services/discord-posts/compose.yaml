@@ -25,7 +25,7 @@ services:
       DISCORD_TUTOS_WEBHOOK_ID: ${DISCORD_TUTOS_WEBHOOK_ID}
       DISCORD_TUTOS_WEBHOOK_TOKEN: ${DISCORD_TUTOS_WEBHOOK_TOKEN}
     labels:
-      kuma.discord-posts.docker.name: Discord messages
+      kuma.discord-posts.docker.name: Discord posts
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: Discord posts
       dashboard.section: Farm

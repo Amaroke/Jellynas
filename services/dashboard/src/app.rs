@@ -56,6 +56,7 @@ pub struct App {
     shutdown: Mutex<Shutdown>,
     client: Client,
     farm_changes: AtomicU64,
+    answers: AtomicU64,
     samples: Mutex<HashMap<String, (String, Sample)>>,
     history: Mutex<History>,
 }
@@ -78,6 +79,7 @@ impl App {
             shutdown: Mutex::new(shutdown),
             client,
             farm_changes: AtomicU64::new(0),
+            answers: AtomicU64::new(0),
             samples: Mutex::new(HashMap::new()),
             history: Mutex::new(History::default()),
         }
@@ -125,6 +127,7 @@ impl App {
         let services = self.snapshot.borrow().clone();
         let previous = self.board.borrow().clone();
         let changes = self.farm_changes.load(Ordering::SeqCst);
+        let answered = self.answers.load(Ordering::SeqCst);
         let now = now();
         let watched = services.iter().filter(|service| {
             !service.shutdown
@@ -136,7 +139,8 @@ impl App {
                 .join()
                 .unwrap_or_else(|_| Err("the reading crashed".to_string()))
         }
-        let (host, readings, farm, actions, pulls, usage) = thread::scope(|scope| {
+        let (host, readings, farm, actions, pulls, usage, uptime) = thread::scope(|scope| {
+            let uptime = scope.spawn(|| self.client.uptime());
             let measured: Vec<_> = services
                 .iter()
                 .filter(|service| !service.shutdown && service.state != State::Stopped)
@@ -176,6 +180,7 @@ impl App {
                 joined(actions),
                 joined(pulls),
                 usage,
+                joined(uptime),
             )
         });
         let history = self.remember(&usage, &readings);
@@ -206,12 +211,27 @@ impl App {
             eprintln!("Cannot read the Host: {error}");
         }
         let host = Some(widgets::settle(previous.host.as_ref(), host, now));
+        let uptime = uptime.unwrap_or_else(|error| {
+            eprintln!("Cannot read the uptimes: {error}");
+            previous.uptime.clone()
+        });
         self.board.send_modify(|board| {
             let farm = if self.farm_changes.load(Ordering::SeqCst) == changes {
                 farm
             } else {
                 board.farm.clone()
             };
+            let mut widgets = widgets;
+            if self.answers.load(Ordering::SeqCst) != answered {
+                for service in services.iter() {
+                    let name = &service.card.service;
+                    if service.card.widget.as_deref() == Some("seerr")
+                        && let Some(panel) = board.widgets.get(name)
+                    {
+                        widgets.insert(name.clone(), panel.clone());
+                    }
+                }
+            }
             *board = Arc::new(Board {
                 host,
                 widgets,
@@ -219,6 +239,7 @@ impl App {
                 actions,
                 pulls,
                 history,
+                uptime,
             });
         });
     }
@@ -280,6 +301,46 @@ impl App {
             Ok(()) => Outcome::Done,
             Err(error) => {
                 eprintln!("Cannot change {} in the Farm: {error}", control["name"]);
+                Outcome::Failed
+            }
+        }
+    }
+
+    pub fn answer_request(&self, id: u64, action: &str) -> Outcome {
+        if action != "approve" && action != "decline" {
+            return Outcome::Invalid;
+        }
+        let services = self.snapshot.borrow().clone();
+        let Some(service) = services
+            .iter()
+            .find(|service| service.card.widget.as_deref() == Some("seerr"))
+        else {
+            return Outcome::Unknown;
+        };
+        let name = service.card.service.clone();
+        let listed = self
+            .board
+            .borrow()
+            .widgets
+            .get(&name)
+            .and_then(|panel| panel.reading.as_ref())
+            .is_some_and(|reading| reading.rows.iter().any(|row| row.id == Some(id)));
+        if !listed {
+            return Outcome::Unknown;
+        }
+        let sent = self.client.answer_request(id, action);
+        let reading = self.client.widget("seerr");
+        self.board.send_modify(|board| {
+            self.answers.fetch_add(1, Ordering::SeqCst);
+            let mut changed = (**board).clone();
+            let panel = widgets::settle(changed.widgets.get(&name), reading, now());
+            changed.widgets.insert(name.clone(), panel);
+            *board = Arc::new(changed);
+        });
+        match sent {
+            Ok(()) => Outcome::Done,
+            Err(error) => {
+                eprintln!("Cannot {action} the request {id}: {error}");
                 Outcome::Failed
             }
         }

@@ -23,6 +23,14 @@ pub struct Row {
     pub detail: String,
     pub progress: Option<f64>,
     pub image: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<u64>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+pub struct Uptime {
+    pub day: Option<f64>,
+    pub week: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -58,6 +66,7 @@ pub struct Board {
     pub actions: Option<Panel<Value>>,
     pub pulls: Option<Panel<Value>>,
     pub history: History,
+    pub uptime: BTreeMap<String, Uptime>,
 }
 
 pub fn settle<T: Clone>(
@@ -122,6 +131,7 @@ mod tests {
             detail: "carol".into(),
             progress: None,
             image: None,
+            id: None,
         }];
         playing.idle = Some("Nothing playing".into());
         playing.posters = vec![Poster {

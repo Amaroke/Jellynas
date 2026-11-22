@@ -1,14 +1,19 @@
-use super::Reading;
 use super::format::{count, date};
 use super::parse;
+use super::{Reading, Uptime};
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
+use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const LIMIT: u64 = 64 * 1024 * 1024;
+const BADGE: u64 = 64 * 1024;
 const SLOW: Duration = Duration::from_secs(120);
 const LATEST: &str = "/Items?SortBy=DateCreated&SortOrder=Descending&IncludeItemTypes=Movie,Episode&Recursive=true&Limit=300";
+const WEEKS: Duration = Duration::from_secs(600);
+const TITLES: usize = 500;
+const PENDING: &str = "/api/v1/request?take=8&filter=pending&sort=added";
 const SYSTEMS: Duration = Duration::from_secs(10);
 
 pub struct Client {
@@ -17,6 +22,8 @@ pub struct Client {
     slow: ureq::Agent,
     env: HashMap<String, String>,
     systems: Mutex<Option<(Instant, Value)>>,
+    titles: Mutex<HashMap<String, Value>>,
+    weeks: Mutex<Option<(Instant, HashMap<u64, f64>)>>,
 }
 
 type Headers = Vec<(&'static str, String)>;
@@ -67,6 +74,8 @@ impl Client {
                 .into(),
             env,
             systems: Mutex::new(None),
+            titles: Mutex::new(HashMap::new()),
+            weeks: Mutex::new(None),
         }
     }
 
@@ -157,6 +166,7 @@ impl Client {
             "seerr" => parse::seerr(
                 &self.fetch("SEERR", "/api/v1/request/count", &arr("SEERR")?)?,
                 &self.fetch("SEERR", "/api/v1/issue/count", &arr("SEERR")?)?,
+                &self.pending().unwrap_or_else(|_| json!({"results": []})),
             ),
             "qbittorrent" => {
                 let key = self.var("QBITTORRENT_API_KEY")?;
@@ -257,6 +267,138 @@ impl Client {
             }
             _ => Err(format!("unknown widget {kind}")),
         }
+    }
+
+    fn pending(&self) -> Result<Value, String> {
+        let auth = self.key("SEERR", "X-Api-Key")?;
+        let mut pending = self.fetch("SEERR", PENDING, &auth)?;
+        for request in pending["results"].as_array_mut().into_iter().flatten() {
+            let kind = if request["type"].as_str() == Some("tv") {
+                "tv"
+            } else {
+                "movie"
+            };
+            let Some(tmdb) = request["media"]["tmdbId"].as_u64() else {
+                continue;
+            };
+            let key = format!("{kind}/{tmdb}");
+            let known = self
+                .titles
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .get(&key)
+                .cloned();
+            let details = match known {
+                Some(details) => details,
+                None => match self.fetch("SEERR", &format!("/api/v1/{key}"), &auth) {
+                    Ok(details) => {
+                        self.remember(key, details.clone());
+                        details
+                    }
+                    Err(_) => {
+                        self.remember(key, json!({}));
+                        continue;
+                    }
+                },
+            };
+            request["details"] = details;
+        }
+        Ok(pending)
+    }
+
+    fn remember(&self, key: String, details: Value) {
+        let mut titles = self
+            .titles
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if titles.len() >= TITLES {
+            titles.clear();
+        }
+        titles.insert(key, details);
+    }
+
+    pub fn answer_request(&self, id: u64, action: &str) -> Result<(), String> {
+        let mut request = self
+            .agent
+            .post(self.url("SEERR", &format!("/api/v1/request/{id}/{action}"))?);
+        for (name, value) in self.key("SEERR", "X-Api-Key")? {
+            request = request.header(name, value);
+        }
+        request
+            .send_empty()
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn uptime(&self) -> Result<BTreeMap<String, Uptime>, String> {
+        let slug = self.var("UPTIME_KUMA_SLUG")?;
+        let page = self.fetch("UPTIME_KUMA", &format!("/api/status-page/{slug}"), &vec![])?;
+        let heartbeat = self.fetch(
+            "UPTIME_KUMA",
+            &format!("/api/status-page/heartbeat/{slug}"),
+            &vec![],
+        )?;
+        let (fresh, mut weeks) = {
+            let cached = self
+                .weeks
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            match cached.as_ref() {
+                Some((read, weeks)) => (read.elapsed() < WEEKS, weeks.clone()),
+                None => (false, HashMap::new()),
+            }
+        };
+        if !fresh {
+            let ids: Vec<u64> = page["publicGroupList"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|group| group["monitorList"].as_array())
+                .flatten()
+                .filter_map(|monitor| monitor["id"].as_u64())
+                .collect();
+            let read: Vec<(u64, Option<f64>)> = thread::scope(|scope| {
+                let pending: Vec<_> = ids
+                    .iter()
+                    .map(|id| (*id, scope.spawn(move || self.badge(*id))))
+                    .collect();
+                pending
+                    .into_iter()
+                    .map(|(id, handle)| (id, handle.join().ok().flatten()))
+                    .collect()
+            });
+            for (id, percent) in read {
+                if let Some(percent) = percent {
+                    weeks.insert(id, percent);
+                }
+            }
+            weeks.retain(|id, _| ids.contains(id));
+            *self
+                .weeks
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+                Some((Instant::now(), weeks.clone()));
+        }
+        parse::uptimes(&page, &heartbeat, &weeks)
+    }
+
+    fn badge(&self, id: u64) -> Option<f64> {
+        let url = self
+            .url("UPTIME_KUMA", &format!("/api/badge/{id}/uptime/168"))
+            .ok()?;
+        let svg = self
+            .agent
+            .get(url)
+            .call()
+            .and_then(|mut response| {
+                response
+                    .body_mut()
+                    .with_config()
+                    .limit(BADGE)
+                    .read_to_string()
+            })
+            .ok()?;
+        parse::badge(&svg)
     }
 
     fn suwayomi(&self) -> parse::Parsed {
