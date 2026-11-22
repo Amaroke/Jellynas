@@ -40,6 +40,22 @@ pub struct Poster {
     pub image: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Link {
+    pub kind: String,
+    pub id: u64,
+    pub name: String,
+    pub hint: Option<String>,
+    pub state: String,
+    pub until: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Health {
+    pub level: String,
+    pub message: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Reading {
     pub figures: Vec<Figure>,
@@ -47,6 +63,10 @@ pub struct Reading {
     pub posters: Vec<Poster>,
     pub shelf: Option<String>,
     pub idle: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<Link>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub health: Vec<Health>,
     #[serde(skip)]
     pub metrics: Vec<(&'static str, f64)>,
 }
@@ -97,6 +117,11 @@ pub fn rest(previous: Option<&Panel>) -> Option<Panel> {
     }
     reading.rows.clear();
     reading.posters.clear();
+    reading.health.clear();
+    for link in &mut reading.links {
+        link.state = "unknown".into();
+        link.until = None;
+    }
     if reading.idle.is_some() {
         reading.idle = Some("Service stopped".into());
     }
@@ -121,8 +146,40 @@ mod tests {
             posters: vec![],
             shelf: None,
             idle: None,
+            links: vec![],
+            health: vec![],
             metrics: vec![],
         }
+    }
+
+    #[test]
+    fn a_resting_panel_keeps_its_connections_in_an_unknown_state() {
+        let mut found = reading("1");
+        found.links = vec![Link {
+            kind: "client".into(),
+            id: 1,
+            name: "qBittorrent".into(),
+            hint: None,
+            state: "failing".into(),
+            until: Some(500),
+        }];
+        found.health = vec![Health {
+            level: "warning".into(),
+            message: "No download client is available".into(),
+        }];
+        let resting = rest(Some(&settle(None, Ok(found), 100)))
+            .unwrap()
+            .reading
+            .unwrap();
+        assert_eq!(
+            vec![("qBittorrent", "unknown", None)],
+            resting
+                .links
+                .iter()
+                .map(|link| (link.name.as_str(), link.state.as_str(), link.until))
+                .collect::<Vec<_>>()
+        );
+        assert!(resting.health.is_empty());
     }
 
     #[test]

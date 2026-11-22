@@ -1,9 +1,10 @@
 use super::format::{bytes, count, day, duration, epoch, percent, rate};
-use super::{Figure, Poster, Reading, Row, Uptime};
+use super::{Figure, Health, Link, Poster, Reading, Row, Uptime};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 
 pub type Parsed = Result<Reading, String>;
+pub type Linked = Result<(Vec<Link>, Vec<Health>), String>;
 
 const ROWS: usize = 8;
 const POSTERS: usize = 8;
@@ -58,6 +59,8 @@ fn reading(figures: Vec<(&str, String)>) -> Reading {
         posters: vec![],
         shelf: None,
         idle: None,
+        links: vec![],
+        health: vec![],
         metrics: vec![],
     }
 }
@@ -480,6 +483,160 @@ pub fn bazarr(movies: &Value, episodes: &Value) -> Parsed {
     Ok(found)
 }
 
+fn failing_until(statuses: &Value, id: u64, now: u64) -> Option<u64> {
+    statuses
+        .as_array()?
+        .iter()
+        .filter(|status| status["indexerId"].as_u64() == Some(id))
+        .filter_map(|status| status["disabledTill"].as_str().and_then(epoch))
+        .find(|until| *until > now)
+}
+
+fn said(health: &Value) -> Vec<Health> {
+    health
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|item| {
+            let level = item["type"].as_str()?;
+            let message = item["message"].as_str()?;
+            matches!(level, "error" | "warning").then(|| Health {
+                level: level.into(),
+                message: message.into(),
+            })
+        })
+        .collect()
+}
+
+fn unavailable(health: &Value, source: &str, name: &str) -> Result<bool, String> {
+    Ok(items(health)?
+        .iter()
+        .filter(|item| item["source"].as_str() == Some(source))
+        .any(|item| {
+            item["type"].as_str() == Some("error")
+                || item["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains(name))
+        }))
+}
+
+fn link(kind: &str, item: &Value, name: String, hint: Option<String>) -> Result<Link, String> {
+    Ok(Link {
+        kind: kind.into(),
+        id: whole(item, "id")?,
+        name,
+        hint,
+        state: "on".into(),
+        until: None,
+    })
+}
+
+pub fn prowlarr_links(
+    indexers: &Value,
+    statuses: &Value,
+    profiles: &Value,
+    proxies: &Value,
+    health: &Value,
+    now: u64,
+) -> Linked {
+    let paused: Vec<u64> = items(profiles)?
+        .iter()
+        .filter(|profile| profile["name"].as_str() == Some("Paused"))
+        .filter_map(|profile| profile["id"].as_u64())
+        .collect();
+    let mut found = Vec::new();
+    for indexer in items(indexers)? {
+        let mut item = link(
+            "indexer",
+            indexer,
+            text(indexer, "name")?,
+            indexer["protocol"].as_str().map(String::from),
+        )?;
+        let until = failing_until(statuses, item.id, now);
+        item.state = if indexer["enable"].as_bool() != Some(true) {
+            "off"
+        } else if until.is_some() {
+            "failing"
+        } else if indexer["appProfileId"]
+            .as_u64()
+            .is_some_and(|profile| paused.contains(&profile))
+        {
+            "paused"
+        } else {
+            "on"
+        }
+        .into();
+        item.until = until.filter(|_| item.state == "failing");
+        found.push(item);
+    }
+    found.sort_by_key(|item| item.name.to_lowercase());
+    let mut gateways = Vec::new();
+    for proxy in items(proxies)? {
+        let name = text(proxy, "name")?;
+        let mut item = link("proxy", proxy, name.clone(), None)?;
+        if unavailable(health, "IndexerProxyStatusCheck", &name)? {
+            item.state = "failing".into();
+        }
+        gateways.push(item);
+    }
+    gateways.sort_by_key(|item| item.name.to_lowercase());
+    found.extend(gateways);
+    Ok((found, said(health)))
+}
+
+pub fn starr_links(
+    indexers: &Value,
+    statuses: &Value,
+    clients: &Value,
+    health: &Value,
+    now: u64,
+) -> Linked {
+    let on =
+        |item: &Value, keys: &[&str]| keys.iter().any(|key| item[*key].as_bool() == Some(true));
+    let mut found = Vec::new();
+    for indexer in items(indexers)? {
+        let full = text(indexer, "name")?;
+        let (name, hint) = match full.strip_suffix(" (Prowlarr)") {
+            Some(name) => (name.to_string(), Some("from Prowlarr".to_string())),
+            None => (full.clone(), None),
+        };
+        let mut item = link("indexer", indexer, name, hint)?;
+        let until = failing_until(statuses, item.id, now);
+        item.state = if !on(
+            indexer,
+            &[
+                "enableRss",
+                "enableAutomaticSearch",
+                "enableInteractiveSearch",
+            ],
+        ) {
+            "off"
+        } else if until.is_some() {
+            "failing"
+        } else {
+            "on"
+        }
+        .into();
+        item.until = until.filter(|_| item.state == "failing");
+        found.push(item);
+    }
+    found.sort_by_key(|item| item.name.to_lowercase());
+    let mut takers = Vec::new();
+    for client in items(clients)? {
+        let name = text(client, "name")?;
+        let mut item = link("client", client, name.clone(), None)?;
+        if !on(client, &["enable"]) {
+            item.state = "off".into();
+        } else if unavailable(health, "DownloadClientStatusCheck", &name)? {
+            item.state = "failing".into();
+        }
+        takers.push(item);
+    }
+    takers.sort_by_key(|item| item.name.to_lowercase());
+    found.extend(takers);
+    Ok((found, said(health)))
+}
+
 pub fn prowlarr(stats: &Value) -> Parsed {
     let mut totals = [0; 4];
     for indexer in items(field(stats, "indexers")?)? {
@@ -888,6 +1045,8 @@ pub fn host(systems: &Value, name: &str) -> Parsed {
         posters: vec![],
         shelf: None,
         idle: None,
+        links: vec![],
+        health: vec![],
         metrics: vec![],
     })
 }
@@ -1678,5 +1837,138 @@ time=2026-11-22T03:30:05.000+01:00 level=ERROR msg="Fatal error running command:
             ("Result", "Running"),
             figures(&backup(cut, 1_795_314_600).unwrap())[2]
         );
+    }
+
+    fn links(found: &[Link]) -> Vec<(&str, &str, &str, Option<u64>)> {
+        found
+            .iter()
+            .map(|link| {
+                (
+                    link.kind.as_str(),
+                    link.name.as_str(),
+                    link.state.as_str(),
+                    link.until,
+                )
+            })
+            .collect()
+    }
+
+    const NOON: u64 = 1_795_348_800;
+
+    #[test]
+    fn a_prowlarr_indexer_is_on_off_failing_or_paused_by_ratio() {
+        let indexers = json!([
+            {"id": 3, "name": "C411", "enable": true, "appProfileId": 2, "protocol": "torrent"},
+            {"id": 1, "name": "Nyaa.si", "enable": true, "appProfileId": 1, "protocol": "torrent"},
+            {"id": 5, "name": "Old", "enable": false, "appProfileId": 1, "protocol": "usenet"},
+            {"id": 6, "name": "Flaky", "enable": true, "appProfileId": 1, "protocol": "torrent"}
+        ]);
+        let statuses = json!([
+            {"indexerId": 6, "disabledTill": "2026-11-22T12:30:00Z"},
+            {"indexerId": 1, "disabledTill": "2026-11-22T10:00:00Z"}
+        ]);
+        let profiles = json!([{"id": 1, "name": "Standard"}, {"id": 2, "name": "Paused"}]);
+        let (found, health) = prowlarr_links(
+            &indexers,
+            &statuses,
+            &profiles,
+            &json!([]),
+            &json!([]),
+            NOON,
+        )
+        .unwrap();
+        assert_eq!(
+            vec![
+                ("indexer", "C411", "paused", None),
+                ("indexer", "Flaky", "failing", Some(NOON + 1800)),
+                ("indexer", "Nyaa.si", "on", None),
+                ("indexer", "Old", "off", None),
+            ],
+            links(&found)
+        );
+        assert_eq!(Some("torrent".to_string()), found[0].hint);
+        assert_eq!(3, found[0].id);
+        assert!(health.is_empty());
+    }
+
+    #[test]
+    fn a_prowlarr_proxy_fails_when_its_health_check_names_it_or_all_of_them() {
+        let proxies = json!([{"id": 1, "name": "FlareSolverr"}, {"id": 2, "name": "Gluetun"}]);
+        let all = json!([
+            {"source": "IndexerProxyStatusCheck", "type": "error", "message": "All indexer proxies are unavailable due to failures"},
+            {"source": "UpdateCheck", "type": "notice", "message": "A new version is out"}
+        ]);
+        let (found, health) =
+            prowlarr_links(&json!([]), &json!([]), &json!([]), &proxies, &all, NOON).unwrap();
+        assert_eq!(
+            vec![
+                ("proxy", "FlareSolverr", "failing", None),
+                ("proxy", "Gluetun", "failing", None)
+            ],
+            links(&found)
+        );
+        assert_eq!(
+            vec![Health {
+                level: "error".into(),
+                message: "All indexer proxies are unavailable due to failures".into()
+            }],
+            health
+        );
+        let one = json!([{"source": "IndexerProxyStatusCheck", "type": "warning", "message": "Proxys indisponibles suite à des échecs : Gluetun"}]);
+        let (found, _) =
+            prowlarr_links(&json!([]), &json!([]), &json!([]), &proxies, &one, NOON).unwrap();
+        assert_eq!(
+            vec![
+                ("proxy", "FlareSolverr", "on", None),
+                ("proxy", "Gluetun", "failing", None)
+            ],
+            links(&found)
+        );
+        assert!(prowlarr_links(&json!({}), &json!([]), &json!([]), &proxies, &one, NOON).is_err());
+    }
+
+    #[test]
+    fn radarr_and_sonarr_list_their_indexers_then_their_download_clients() {
+        let indexers = json!([
+            {"id": 3, "name": "C411 (Prowlarr)", "enableRss": true, "enableAutomaticSearch": true, "enableInteractiveSearch": true},
+            {"id": 1, "name": "Nyaa.si (Prowlarr)", "enableRss": false, "enableAutomaticSearch": false, "enableInteractiveSearch": false},
+            {"id": 4, "name": "Slow (Prowlarr)", "enableRss": true, "enableAutomaticSearch": true, "enableInteractiveSearch": true}
+        ]);
+        let statuses = json!([{"indexerId": 4, "disabledTill": "2026-11-22T13:00:00Z"}]);
+        let clients = json!([{"id": 1, "name": "qBittorrent", "enable": false}, {"id": 2, "name": "Aria", "enable": true}]);
+        let health = json!([{"source": "DownloadClientCheck", "type": "warning", "message": "No download client is available"}]);
+        let (found, said) = starr_links(&indexers, &statuses, &clients, &health, NOON).unwrap();
+        assert_eq!(
+            vec![
+                ("indexer", "C411", "on", None),
+                ("indexer", "Nyaa.si", "off", None),
+                ("indexer", "Slow", "failing", Some(NOON + 3600)),
+                ("client", "Aria", "on", None),
+                ("client", "qBittorrent", "off", None),
+            ],
+            links(&found)
+        );
+        assert_eq!(Some("from Prowlarr".to_string()), found[0].hint);
+        assert_eq!(None, found[3].hint);
+        let down = json!([{"source": "DownloadClientStatusCheck", "type": "warning", "message": "Clients indisponibles : Aria"}]);
+        let (found, _) = starr_links(&indexers, &statuses, &clients, &down, NOON).unwrap();
+        assert_eq!(("client", "Aria", "failing", None), links(&found)[3]);
+        let all = json!([{"source": "DownloadClientStatusCheck", "type": "error", "message": "Tous les clients sont indisponibles"}]);
+        let (found, _) = starr_links(&indexers, &statuses, &clients, &all, NOON).unwrap();
+        assert_eq!(
+            vec![
+                ("client", "Aria", "failing", None),
+                ("client", "qBittorrent", "off", None)
+            ],
+            links(&found)[3..].to_vec()
+        );
+        assert_eq!(
+            vec![Health {
+                level: "warning".into(),
+                message: "No download client is available".into()
+            }],
+            said
+        );
+        assert!(starr_links(&indexers, &statuses, &json!(null), &health, NOON).is_err());
     }
 }
