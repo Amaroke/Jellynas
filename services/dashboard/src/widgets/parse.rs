@@ -1,4 +1,4 @@
-use super::format::{bytes, count, duration, percent, rate};
+use super::format::{bytes, count, duration, epoch, percent, rate};
 use super::{Figure, Poster, Reading, Row};
 use serde_json::Value;
 
@@ -183,6 +183,123 @@ pub fn music_bot(status: &Value, images: &str) -> Parsed {
                 .and_then(|id| artwork(images, id, 160)),
         }];
     }
+    Ok(found)
+}
+
+fn ago(now: u64, then: u64) -> String {
+    format!("{} ago", duration(now.saturating_sub(then)))
+}
+
+fn failure(title: &str, detail: &str) -> Row {
+    Row {
+        title: title.to_string(),
+        detail: detail.to_string(),
+        progress: None,
+        image: None,
+    }
+}
+
+const COMPLETED: &str = "job completed successfully";
+
+pub fn deploy(containers: &Value, logs: &str, now: u64) -> Parsed {
+    let (at, sha) = items(containers)?
+        .iter()
+        .filter_map(|container| {
+            let labels = &container["Labels"];
+            let at = epoch(labels["cd.doco.deployment.timestamp"].as_str()?)?;
+            Some((at, labels["cd.doco.deployment.target.sha"].as_str()?))
+        })
+        .max_by_key(|(at, _)| *at)
+        .ok_or("no deploy found")?;
+    let error = logs
+        .lines()
+        .rev()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .filter(|entry| entry["time"].as_str().and_then(epoch) >= Some(at))
+        .find(|entry| {
+            let failed = entry["level"]
+                .as_str()
+                .is_some_and(|level| level.eq_ignore_ascii_case("error"));
+            failed || entry["msg"].as_str() == Some(COMPLETED)
+        })
+        .filter(|entry| entry["msg"].as_str() != Some(COMPLETED));
+    let mut found = reading(vec![
+        ("Commit", sha.chars().take(7).collect()),
+        ("Deployed", ago(now, at)),
+        (
+            "Result",
+            if error.is_some() { "Failed" } else { "Success" }.to_string(),
+        ),
+    ]);
+    found.idle = Some("No error since the deploy".to_string());
+    if let Some(entry) = error {
+        found.rows = vec![failure(
+            entry["msg"].as_str().unwrap_or("error"),
+            entry["error"].as_str().unwrap_or(""),
+        )];
+    }
+    Ok(found)
+}
+
+fn logfmt<'a>(line: &'a str, key: &str) -> Option<&'a str> {
+    let marker = format!("{key}=");
+    let start = if line.starts_with(&marker) {
+        marker.len()
+    } else {
+        line.find(&format!(" {marker}"))? + marker.len() + 1
+    };
+    let rest = &line[start..];
+    match rest.strip_prefix('"') {
+        Some(quoted) => quoted.split('"').next(),
+        None => rest.split(' ').next(),
+    }
+}
+
+const RUNNING: u64 = 3 * 3600;
+
+pub fn backup(logs: &str, now: u64) -> Parsed {
+    let mut started = None;
+    let mut run = None;
+    let mut stored = None;
+    let mut took = None;
+    let mut error = None;
+    for line in logs.lines() {
+        let Some(at) = logfmt(line, "time").and_then(epoch) else {
+            continue;
+        };
+        let message = logfmt(line, "msg").unwrap_or("");
+        if message.starts_with("Now running script") {
+            run = Some(at);
+            error = None;
+        } else if message.starts_with("Stored copy of backup") {
+            stored = Some(at);
+            took = run.map(|start| at.saturating_sub(start));
+            started = run;
+        } else if logfmt(line, "level") == Some("ERROR") {
+            error = Some(failure(message, logfmt(line, "error").unwrap_or("")));
+        }
+    }
+    let result = if error.is_some() {
+        "Failed"
+    } else if stored.is_some() && run == started {
+        "Success"
+    } else if run.is_some_and(|at| now.saturating_sub(at) < RUNNING) {
+        "Running"
+    } else if run.is_some() {
+        "Interrupted"
+    } else {
+        "Unknown"
+    };
+    let mut found = reading(vec![
+        (
+            "Last backup",
+            stored.map_or_else(|| "—".to_string(), |at| ago(now, at)),
+        ),
+        ("Took", took.map_or_else(|| "—".to_string(), duration)),
+        ("Result", result.to_string()),
+    ]);
+    found.idle = Some("No error in the last run".to_string());
+    found.rows = error.into_iter().collect();
     Ok(found)
 }
 
@@ -978,6 +1095,129 @@ mod tests {
         assert_eq!(
             Err("missing MovieCount".to_string()),
             jellyfin(&json!({}), &json!([]), &json!({"Items": []}), IMAGES)
+        );
+    }
+
+    const NOW: u64 = 1_795_350_000;
+
+    fn deployed(sha: &str, at: &str) -> Value {
+        json!({"Labels": {
+            "cd.doco.deployment.target.sha": sha,
+            "cd.doco.deployment.timestamp": at
+        }})
+    }
+
+    #[test]
+    fn the_last_deploy_is_the_newest_label_and_succeeds_without_errors() {
+        let containers = json!([
+            deployed("aaaaaaaaaaaa", "2026-11-20T10:00:00Z"),
+            deployed("df8b53c628732a6a", "2026-11-22T08:26:17.955548255Z"),
+            {"Labels": {"com.docker.compose.service": "manual"}}
+        ]);
+        let logs = r#"{"time":"2026-11-22T08:27:37.12Z","level":"info","msg":"job completed successfully"}
+not json
+"#;
+        let reading = deploy(&containers, logs, NOW).unwrap();
+        assert_eq!(
+            vec![
+                ("Commit", "df8b53c"),
+                ("Deployed", "3h 53m ago"),
+                ("Result", "Success")
+            ],
+            figures(&reading)
+        );
+        assert!(reading.rows.is_empty());
+        assert_eq!(Some("No error since the deploy".to_string()), reading.idle);
+        assert_eq!(
+            Err("no deploy found".to_string()),
+            deploy(&json!([]), "", NOW)
+        );
+    }
+
+    #[test]
+    fn a_deploy_error_after_the_last_deploy_is_a_failure() {
+        let containers = json!([deployed("df8b53c628732a6a", "2026-11-22T08:26:17Z")]);
+        let logs = r#"{"time":"2026-11-22T08:10:00Z","level":"error","msg":"too old","error":"ignored"}
+{"time":"2026-11-22T08:40:00Z","level":"ERROR","msg":"failed to fetch","error":"github unreachable"}
+{"time":"2026-11-22T08:50:00Z","level":"info","msg":"job completed successfully"}
+{"time":"2026-11-22T09:00:00Z","level":"ERROR","msg":"deployment failed","error":"service radarr: image not found"}
+"#;
+        let reading = deploy(&containers, logs, NOW).unwrap();
+        assert_eq!(("Result", "Failed"), figures(&reading)[2]);
+        let expected = vec![Row {
+            title: "deployment failed".into(),
+            detail: "service radarr: image not found".into(),
+            progress: None,
+            image: None,
+        }];
+        assert_eq!(expected, reading.rows);
+        let recovered = format!(
+            "{logs}{}\n",
+            r#"{"time":"2026-11-22T09:10:00Z","level":"info","msg":"job completed successfully"}"#
+        );
+        let reading = deploy(&containers, &recovered, NOW).unwrap();
+        assert_eq!(("Result", "Success"), figures(&reading)[2]);
+    }
+
+    #[test]
+    fn the_backup_reports_its_last_run() {
+        let logs = r#"time=2026-11-22T00:23:02.005+01:00 level=INFO msg="Successfully scheduled backup from environment with expression 30 3 * * *"
+time=2026-11-22T03:30:00.120+01:00 level=INFO msg="Now running script on schedule 30 3 * * *"
+time=2026-11-22T03:31:41.565+01:00 level=INFO msg="Stored copy of backup `/tmp/appdata-2026-11-22T03-30-00.tar.gz` in `/archive`." storage=Local
+time=2026-11-22T03:31:41.609+01:00 level=INFO msg="None of 6 existing backups were pruned." storage=Local
+"#;
+        let reading = backup(logs, NOW).unwrap();
+        assert_eq!(
+            vec![
+                ("Last backup", "9h 48m ago"),
+                ("Took", "1m"),
+                ("Result", "Success")
+            ],
+            figures(&reading)
+        );
+        assert_eq!(Some("No error in the last run".to_string()), reading.idle);
+    }
+
+    #[test]
+    fn a_backup_error_after_the_last_start_is_a_failure() {
+        let logs = r#"time=2026-11-21T03:30:00.000+01:00 level=INFO msg="Now running script on schedule 30 3 * * *"
+time=2026-11-21T03:31:00.000+01:00 level=INFO msg="Stored copy of backup `/tmp/a.tar.gz` in `/archive`." storage=Local
+time=2026-11-22T03:30:00.000+01:00 level=INFO msg="Now running script on schedule 30 3 * * *"
+time=2026-11-22T03:30:05.000+01:00 level=ERROR msg="Fatal error running command: archive failed" error="no space left on device"
+"#;
+        let reading = backup(logs, NOW).unwrap();
+        assert_eq!(
+            vec![
+                ("Last backup", "1d 9h ago"),
+                ("Took", "1m"),
+                ("Result", "Failed")
+            ],
+            figures(&reading)
+        );
+        let expected = vec![Row {
+            title: "Fatal error running command: archive failed".into(),
+            detail: "no space left on device".into(),
+            progress: None,
+            image: None,
+        }];
+        assert_eq!(expected, reading.rows);
+        let never = backup(
+            "time=2026-11-22T00:23:02.005+01:00 level=INFO msg=\"scheduled\"\n",
+            NOW,
+        )
+        .unwrap();
+        assert_eq!(
+            vec![("Last backup", "—"), ("Took", "—"), ("Result", "Unknown")],
+            figures(&never)
+        );
+        let cut = "time=2026-11-22T03:30:00.000+01:00 level=INFO msg=\"Now running script\"\n";
+        assert_eq!(
+            ("Result", "Interrupted"),
+            figures(&backup(cut, NOW).unwrap())[2]
+        );
+        assert_eq!(
+            ("Result", "Running"),
+            figures(&backup(cut, 1_795_314_600).unwrap())[2]
         );
     }
 }

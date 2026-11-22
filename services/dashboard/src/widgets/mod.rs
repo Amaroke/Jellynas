@@ -7,6 +7,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 
 pub use fetch::Client;
+pub use format::epoch;
 
 use crate::stats::History;
 

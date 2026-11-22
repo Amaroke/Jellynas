@@ -17,6 +17,7 @@ services:
       dashboard.name: doco-cd
       dashboard.section: Hosting
       dashboard.icon: doco-cd.svg
+      dashboard.widget: doco-cd
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../../.env:/jellynas/.env:ro

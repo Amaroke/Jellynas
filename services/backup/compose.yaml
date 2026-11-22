@@ -25,6 +25,7 @@ services:
       dashboard.section: Observation
       dashboard.description: Archive of the appdata, every night
       dashboard.icon: restic.png
+      dashboard.widget: backup
     volumes:
       - ${APPDATA_ROOT}/:/backup/appdata:ro
       - ${BACKUP_ROOT}/:/archive
