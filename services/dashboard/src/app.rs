@@ -228,8 +228,10 @@ impl App {
             if self.answers.load(Ordering::SeqCst) != answered {
                 for service in services.iter() {
                     let name = &service.card.service;
-                    if service.card.widget.as_deref() == Some("seerr")
-                        && let Some(panel) = board.widgets.get(name)
+                    if matches!(
+                        service.card.widget.as_deref(),
+                        Some("seerr" | "prowlarr" | "radarr" | "sonarr")
+                    ) && let Some(panel) = board.widgets.get(name)
                     {
                         widgets.insert(name.clone(), panel.clone());
                     }
@@ -359,6 +361,59 @@ impl App {
                 *board = Arc::new(changed);
             });
             thread::sleep(MEASURE);
+        }
+    }
+
+    pub fn switch_link(&self, service: &str, kind: &str, id: u64, action: &str) -> Outcome {
+        if !matches!(action, "on" | "off" | "retry") {
+            return Outcome::Invalid;
+        }
+        let services = self.snapshot.borrow().clone();
+        let Some(widget) = services
+            .iter()
+            .find(|found| found.card.service == service)
+            .and_then(|found| found.card.widget.clone())
+            .filter(|widget| matches!(widget.as_str(), "prowlarr" | "radarr" | "sonarr"))
+        else {
+            return Outcome::Unknown;
+        };
+        let link = self
+            .board
+            .borrow()
+            .widgets
+            .get(service)
+            .and_then(|panel| panel.reading.as_ref())
+            .and_then(|reading| {
+                reading
+                    .links
+                    .iter()
+                    .find(|link| link.kind == kind && link.id == id)
+                    .cloned()
+            });
+        let Some(link) = link else {
+            return Outcome::Unknown;
+        };
+        if !link.allows(action) {
+            return Outcome::Refused;
+        }
+        let sent = self.client.switch_link(&widget, kind, id, action);
+        let reading = self.client.widget(&widget);
+        self.board.send_modify(|board| {
+            self.answers.fetch_add(1, Ordering::SeqCst);
+            let mut changed = (**board).clone();
+            let panel = widgets::settle(changed.widgets.get(service), reading, now());
+            changed.widgets.insert(service.to_string(), panel);
+            *board = Arc::new(changed);
+        });
+        match sent {
+            Ok(()) => Outcome::Done,
+            Err(error) => {
+                eprintln!(
+                    "Cannot {action} the {kind} {} of {service}: {error}",
+                    link.name
+                );
+                Outcome::Failed
+            }
         }
     }
 

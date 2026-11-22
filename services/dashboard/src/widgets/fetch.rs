@@ -28,6 +28,20 @@ pub struct Client {
 
 type Headers = Vec<(&'static str, String)>;
 
+fn deliver(
+    mut request: ureq::RequestBuilder<ureq::typestate::WithBody>,
+    headers: &Headers,
+    body: &Value,
+) -> Result<(), String> {
+    for (name, value) in headers {
+        request = request.header(*name, value);
+    }
+    request
+        .send_json(body)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 fn encode(input: &str) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut output = String::new();
@@ -398,6 +412,70 @@ impl Client {
             titles.clear();
         }
         titles.insert(key, details);
+    }
+
+    pub fn switch_link(
+        &self,
+        widget: &str,
+        kind: &str,
+        id: u64,
+        action: &str,
+    ) -> Result<(), String> {
+        let (prefix, version) = match widget {
+            "prowlarr" => ("PROWLARR", "v1"),
+            "radarr" => ("RADARR", "v3"),
+            "sonarr" => ("SONARR", "v3"),
+            _ => return Err(format!("{widget} has no connections")),
+        };
+        let resource = match kind {
+            "indexer" => "indexer",
+            "client" => "downloadclient",
+            "proxy" => "indexerproxy",
+            _ => return Err(format!("unknown connection {kind}")),
+        };
+        let auth = self.key(prefix, "X-Api-Key")?;
+        let item = self.fetch(prefix, &format!("/api/{version}/{resource}/{id}"), &auth)?;
+        let sent = match action {
+            "retry" => deliver(
+                self.slow
+                    .post(self.url(prefix, &format!("/api/{version}/{resource}/test"))?),
+                &auth,
+                &item,
+            ),
+            "on" | "off" => deliver(
+                self.slow.put(self.url(
+                    prefix,
+                    &format!("/api/{version}/{resource}/{id}?forceSave=true"),
+                )?),
+                &auth,
+                &parse::switched(widget, kind, &item, action == "on"),
+            ),
+            _ => Err(format!("unknown action {action}")),
+        };
+        if let Err(error) = self.check_health(prefix, version, &auth) {
+            eprintln!("Cannot check the health of {widget}: {error}");
+        }
+        sent
+    }
+
+    fn check_health(&self, prefix: &str, version: &str, auth: &Headers) -> Result<(), String> {
+        let command = self.post(
+            &self.url(prefix, &format!("/api/{version}/command"))?,
+            auth,
+            &json!({"name": "CheckHealth"}),
+        )?;
+        let id = command["id"].as_u64().ok_or("the command has no id")?;
+        for _ in 0..20 {
+            let status = self.fetch(prefix, &format!("/api/{version}/command/{id}"), auth)?;
+            if matches!(
+                status["status"].as_str(),
+                Some("completed" | "failed" | "aborted")
+            ) {
+                return Ok(());
+            }
+            thread::sleep(Duration::from_millis(250));
+        }
+        Err("the health check did not finish in time".into())
     }
 
     pub fn answer_request(&self, id: u64, action: &str) -> Result<(), String> {
