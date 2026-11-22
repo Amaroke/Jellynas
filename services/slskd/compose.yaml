@@ -34,6 +34,7 @@ services:
       dashboard.icon: slskd.svg
       dashboard.href: https://slskd.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/slskd:/app
       - ${DATA_ROOT}/torrents/soulseek:/data/torrents/soulseek

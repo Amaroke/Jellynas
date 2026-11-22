@@ -24,6 +24,7 @@ services:
       dashboard.icon: sonarr.svg
       dashboard.href: https://sonarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/sonarr:/config
       - ${DATA_ROOT}/media/shows:/data/media/shows

@@ -31,6 +31,7 @@ services:
       dashboard.icon: jellyfin.svg
       dashboard.href: https://jellyfin.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/jellyfin:/config
       - ${DATA_ROOT}/media:/data/media:ro

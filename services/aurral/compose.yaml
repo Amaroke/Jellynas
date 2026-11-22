@@ -44,6 +44,7 @@ services:
       dashboard.icon: aurral.svg
       dashboard.href: https://aurral.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/aurral:/config
       - ${DATA_ROOT}/media/aurral:/data/media/aurral

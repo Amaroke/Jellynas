@@ -21,6 +21,7 @@ services:
       dashboard.monitor: http://flaresolverr:8191/health
       dashboard.icon: flaresolverr.svg
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     healthcheck:
       test:
         - "CMD"

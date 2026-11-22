@@ -61,5 +61,6 @@ services:
       dashboard.section: Observation
       dashboard.icon: uptime-kuma.svg
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/autokuma:/data

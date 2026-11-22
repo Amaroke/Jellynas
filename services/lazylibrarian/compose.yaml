@@ -22,6 +22,7 @@ services:
       dashboard.href:
         https://lazylibrarian.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/lazylibrarian:/config
       - ${DATA_ROOT}/media/books:/data/media/books

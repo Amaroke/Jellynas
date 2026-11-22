@@ -33,6 +33,7 @@ services:
         Republishes the Discord messages, every day at 00:30
       dashboard.icon: discord.svg
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ../../scripts:/app/scripts:ro
       - ../../discord-posts:/app/discord-posts:ro
