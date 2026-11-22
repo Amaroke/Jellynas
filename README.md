@@ -2755,6 +2755,15 @@ others, then restart doco-cd to apply `.env`:
 - autobrr, `AUTOBRR_API_KEY`: Settings > API Keys, click "Add new" and name it
   `Homepage`
 - Beszel, `BESZEL_EMAIL` and `BESZEL_PASSWORD`: set in [Beszel](#beszel)
+- TrueNAS, `TRUENAS_API_KEY`, read by the Dashboard only: in Credentials >
+  Users, add a user `dashboard` with the password disabled in the group
+  `truenas_readonly_administrators`, then add an API key for it
+- TrueNAS, `TRUENAS_FINGERPRINT`: the SHA-256 fingerprint of the certificate of
+  the web interface, as below, set again after each renewal
+
+```sh
+openssl x509 -in /etc/certificates/truenas_default.crt -noout -fingerprint -sha256
+```
 
 ```sh
 docker restart doco-cd

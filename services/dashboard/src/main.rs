@@ -3,7 +3,9 @@ mod cards;
 mod docker;
 mod icons;
 mod shutdown;
+mod space;
 mod stats;
+mod truenas;
 mod web;
 mod widgets;
 
@@ -56,6 +58,10 @@ async fn main() {
     ));
     let watcher = app.clone();
     thread::spawn(move || watcher.watch());
+    let measurer = app.clone();
+    thread::spawn(move || measurer.measure());
+    let pool = app.clone();
+    thread::spawn(move || pool.watch_truenas());
     let poller = app.clone();
     thread::spawn(move || poller.poll());
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", PORT))
