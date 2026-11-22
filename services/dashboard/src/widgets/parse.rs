@@ -1,6 +1,7 @@
 use super::format::{bytes, count, day, duration, epoch, percent, rate};
-use super::{Figure, Poster, Reading, Row};
+use super::{Figure, Poster, Reading, Row, Uptime};
 use serde_json::Value;
+use std::collections::{BTreeMap, HashMap};
 
 pub type Parsed = Result<Reading, String>;
 
@@ -106,6 +107,7 @@ fn playing(session: &Value, images: &str) -> Option<Row> {
         detail,
         progress,
         image,
+        id: None,
     })
 }
 
@@ -207,6 +209,7 @@ pub fn music_bot(status: &Value, images: &str) -> Parsed {
             image: status["artwork"]
                 .as_str()
                 .and_then(|id| artwork(images, id, 160)),
+            id: None,
         }];
     }
     Ok(found)
@@ -222,6 +225,7 @@ fn failure(title: &str, detail: &str) -> Row {
         detail: detail.to_string(),
         progress: None,
         image: None,
+        id: None,
     }
 }
 
@@ -329,8 +333,52 @@ pub fn backup(logs: &str, now: u64) -> Parsed {
     Ok(found)
 }
 
-pub fn seerr(requests: &Value, issues: &Value) -> Parsed {
-    Ok(reading(vec![
+fn request(entry: &Value) -> Option<Row> {
+    let id = entry["id"].as_u64()?;
+    let details = &entry["details"];
+    let name = details["title"].as_str().or(details["name"].as_str());
+    let year = details["releaseDate"]
+        .as_str()
+        .or(details["firstAirDate"].as_str())
+        .and_then(|date| date.get(..4));
+    let title = match (name, year) {
+        (Some(name), Some(year)) => format!("{name} ({year})"),
+        (Some(name), None) => name.to_string(),
+        _ => format!("Request {id}"),
+    };
+    let kind = if entry["type"].as_str() == Some("tv") {
+        let seasons: Vec<String> = entry["seasons"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|season| season["seasonNumber"].as_u64())
+            .map(|number| number.to_string())
+            .collect();
+        if seasons.is_empty() {
+            "Series".to_string()
+        } else {
+            format!("Series, seasons {}", seasons.join(", "))
+        }
+    } else {
+        "Movie".to_string()
+    };
+    let by = entry["requestedBy"]["displayName"]
+        .as_str()
+        .unwrap_or("someone");
+    Some(Row {
+        title,
+        detail: format!("{kind} \u{b7} {by}"),
+        progress: None,
+        image: details["posterPath"]
+            .as_str()
+            .filter(|path| path.starts_with('/') && !path.contains(".."))
+            .map(|path| format!("https://image.tmdb.org/t/p/w154{path}")),
+        id: Some(id),
+    })
+}
+
+pub fn seerr(requests: &Value, issues: &Value, pending: &Value) -> Parsed {
+    let mut found = reading(vec![
         ("Pending", count(whole(requests, "pending")?)),
         ("Processing", count(whole(requests, "processing")?)),
         ("Available", count(whole(requests, "available")?)),
@@ -342,7 +390,44 @@ pub fn seerr(requests: &Value, issues: &Value) -> Parsed {
                 count(whole(issues, "total")?)
             ),
         ),
-    ]))
+    ]);
+    found.idle = Some("No pending request".to_string());
+    found.rows = items(field(pending, "results")?)?
+        .iter()
+        .filter_map(request)
+        .take(ROWS)
+        .collect();
+    Ok(found)
+}
+
+pub fn badge(svg: &str) -> Option<f64> {
+    let end = svg.rfind("%<")?;
+    let start = svg[..end].rfind('>')? + 1;
+    svg[start..end].trim().parse().ok()
+}
+
+pub fn uptimes(
+    page: &Value,
+    heartbeat: &Value,
+    week: &HashMap<u64, f64>,
+) -> Result<BTreeMap<String, Uptime>, String> {
+    let days = field(heartbeat, "uptimeList")?;
+    let round = |value: f64| (value * 100.0).round() / 100.0;
+    Ok(items(field(page, "publicGroupList")?)?
+        .iter()
+        .filter_map(|group| group["monitorList"].as_array())
+        .flatten()
+        .filter_map(|monitor| {
+            let id = monitor["id"].as_u64()?;
+            let uptime = Uptime {
+                day: days[format!("{id}_24")]
+                    .as_f64()
+                    .map(|day| round(day * 100.0)),
+                week: week.get(&id).copied(),
+            };
+            Some((monitor["name"].as_str()?.to_string(), uptime))
+        })
+        .collect())
 }
 
 pub fn gluetun(ip: &Value) -> Parsed {
@@ -432,6 +517,7 @@ fn worker(job: &Value) -> Option<Row> {
         detail,
         progress: job["percentage"].as_f64().map(|percent| percent / 100.0),
         image: None,
+        id: None,
     })
 }
 
@@ -527,6 +613,7 @@ pub fn qbittorrent(torrents: &Value) -> Parsed {
                 ),
                 progress: Some(progress),
                 image: None,
+                id: None,
             })
         })
         .collect::<Result<_, _>>()?;
@@ -556,6 +643,7 @@ fn queue(details: &Value, title: impl Fn(&Value) -> String) -> Result<Vec<Row>, 
                 detail,
                 progress: (size > 0.0).then_some(1.0 - remaining),
                 image: None,
+                id: None,
             };
             (status == "downloading", remaining, row)
         })
@@ -865,6 +953,7 @@ mod tests {
                 image: Some(
                     "https://jellyfin.example.org/Items/s1/Images/Primary?maxHeight=160".into(),
                 ),
+                id: None,
             },
             Row {
                 title: "Heat".into(),
@@ -873,6 +962,7 @@ mod tests {
                 image: Some(
                     "https://jellyfin.example.org/Items/m1/Images/Primary?maxHeight=160".into(),
                 ),
+                id: None,
             },
             Row {
                 title: "Teardrop".into(),
@@ -881,6 +971,7 @@ mod tests {
                 image: Some(
                     "https://jellyfin.example.org/Items/a1/Images/Primary?maxHeight=160".into(),
                 ),
+                id: None,
             },
         ];
         assert_eq!(expected, reading.rows);
@@ -936,6 +1027,7 @@ mod tests {
             image: Some(
                 "https://jellyfin.example.org/Items/a1/Images/Primary?maxHeight=160".into(),
             ),
+            id: None,
         }];
         assert_eq!(expected, reading.rows);
         let idle = json!({"state": "Idle", "track": "Nothing", "queue": 0, "shuffle": "Off", "channel": "None", "artwork": null});
@@ -949,10 +1041,96 @@ mod tests {
     }
 
     #[test]
+    fn seerr_lists_the_pending_requests_with_their_poster() {
+        let pending = json!({"results": [
+            {"id": 12, "type": "movie", "requestedBy": {"displayName": "alice"},
+             "details": {"title": "Dune", "releaseDate": "2021-09-15", "posterPath": "/dune.jpg"}},
+            {"id": 13, "type": "tv", "requestedBy": {"displayName": "bob"}, "seasons": [{"seasonNumber": 1}, {"seasonNumber": 2}],
+             "details": {"name": "Frieren", "firstAirDate": "2023-09-29", "posterPath": null}},
+            {"id": 14, "type": "movie", "requestedBy": {}, "details": {}}
+        ]});
+        let reading = seerr(
+            &json!({"pending": 3, "processing": 0, "available": 0}),
+            &json!({"open": 0, "total": 0}),
+            &pending,
+        )
+        .unwrap();
+        let expected = vec![
+            Row {
+                title: "Dune (2021)".into(),
+                detail: "Movie \u{b7} alice".into(),
+                progress: None,
+                image: Some("https://image.tmdb.org/t/p/w154/dune.jpg".into()),
+                id: Some(12),
+            },
+            Row {
+                title: "Frieren (2023)".into(),
+                detail: "Series, seasons 1, 2 \u{b7} bob".into(),
+                progress: None,
+                image: None,
+                id: Some(13),
+            },
+            Row {
+                title: "Request 14".into(),
+                detail: "Movie \u{b7} someone".into(),
+                progress: None,
+                image: None,
+                id: Some(14),
+            },
+        ];
+        assert_eq!(expected, reading.rows);
+    }
+
+    #[test]
+    fn uptime_kuma_gives_each_monitor_its_day_and_week() {
+        let page = json!({"publicGroupList": [
+            {"monitorList": [{"id": 50, "name": "Jellyfin"}, {"id": 46, "name": "Seerr"}]},
+            {"monitorList": [{"id": 7, "name": "Backup"}]}
+        ]});
+        let heartbeat = json!({"uptimeList": {"50_24": 0.9943, "46_24": 1}});
+        let week = std::collections::HashMap::from([(50, 98.24)]);
+        let found = uptimes(&page, &heartbeat, &week).unwrap();
+        assert_eq!(
+            vec![
+                (
+                    "Backup".to_string(),
+                    Uptime {
+                        day: None,
+                        week: None
+                    }
+                ),
+                (
+                    "Jellyfin".to_string(),
+                    Uptime {
+                        day: Some(99.43),
+                        week: Some(98.24)
+                    }
+                ),
+                (
+                    "Seerr".to_string(),
+                    Uptime {
+                        day: Some(100.0),
+                        week: None
+                    }
+                ),
+            ],
+            found.into_iter().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn a_badge_tells_its_percent() {
+        let svg = r#"<text x="1">Uptime (168h)</text><text x="1165" textLength="430">98.24%</text></g></svg>"#;
+        assert_eq!(Some(98.24), badge(svg));
+        assert_eq!(None, badge("<svg>N/A</svg>"));
+    }
+
+    #[test]
     fn seerr_counts_the_requests_and_the_open_issues() {
         let requests = json!({"total": 20, "pending": 3, "approved": 2, "processing": 1, "available": 12, "completed": 12});
         let issues = json!({"total": 4, "open": 1, "closed": 3});
-        let reading = seerr(&requests, &issues).unwrap();
+        let reading = seerr(&requests, &issues, &json!({"results": []})).unwrap();
+        assert_eq!(Some("No pending request".to_string()), reading.idle);
         assert_eq!(
             vec![
                 ("Pending", "3"),
@@ -1005,6 +1183,7 @@ mod tests {
             detail: detail.into(),
             progress: None,
             image: None,
+            id: None,
         };
         assert_eq!(
             vec![
@@ -1052,12 +1231,14 @@ mod tests {
                 detail: "transcode · 0:12:30 left".into(),
                 progress: Some(0.425),
                 image: None,
+                id: None,
             },
             Row {
                 title: "Heat.mkv".into(),
                 detail: "health check".into(),
                 progress: None,
                 image: None,
+                id: None,
             },
         ];
         assert_eq!(expected, reading.rows);
@@ -1425,6 +1606,7 @@ not json
             detail: "service radarr: image not found".into(),
             progress: None,
             image: None,
+            id: None,
         }];
         assert_eq!(expected, reading.rows);
         let recovered = format!(
@@ -1475,6 +1657,7 @@ time=2026-11-22T03:30:05.000+01:00 level=ERROR msg="Fatal error running command:
             detail: "no space left on device".into(),
             progress: None,
             image: None,
+            id: None,
         }];
         assert_eq!(expected, reading.rows);
         let never = backup(

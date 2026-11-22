@@ -37,6 +37,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/services/{service}/{action}", post(control))
         .route("/farm/controls", post(farm_control))
         .route("/quick-actions/{key}", post(quick_action))
+        .route("/seerr/requests/{id}/{action}", post(answer_request))
         .route("/healthz", get(health))
         .with_state(app)
 }
@@ -201,6 +202,15 @@ async fn quick_action(
     headers: HeaderMap,
 ) -> StatusCode {
     act(peer, &headers, move || app.quick_action(&key)).await
+}
+
+async fn answer_request(
+    State(app): State<Arc<App>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Path((id, action)): Path<(u64, String)>,
+    headers: HeaderMap,
+) -> StatusCode {
+    act(peer, &headers, move || app.answer_request(id, &action)).await
 }
 
 async fn health(State(app): State<Arc<App>>) -> StatusCode {
