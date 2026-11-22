@@ -2707,17 +2707,22 @@ ratio](#private-tracker-ratio), [Beszel](#beszel) and [Uptime
 Kuma](#uptime-kuma).
 
 The Dashboard, `services/dashboard`, is the start page of the Admin, on the
-local network only, with no sign-in. It shows one card per service, grouped in
-sections, with its state, its link, its uptime, its CPU and memory, and the live
-figures of its service, such as the Requests waiting in Seerr, with buttons to
-approve or decline them, the queues of Radarr and Sonarr, the torrents of
-qBittorrent, or the public IP and the country of the VPN. The Status section
-shows the Host, the pools and disks of TrueNAS and the space of the Media tree.
-The Farm, the Quick actions and the Pull requests have their own sections. A
-service with the `dashboard.switchable` label also gets an on and off control
-and a restart button, through its own socket proxy.
+local network only, with no sign-in. A strip on top gives the time and the Host.
+Under it, one table lists every service, grouped in sections that tell how many
+need a look. A row gives the state, the link, the live figures of the service,
+its CPU and memory, its uptime, and, for a service with the
+`dashboard.switchable` label, a restart and a power button, through its own
+socket proxy. A row with a list, such as the missing subtitles of Bazarr or the
+next days of Sonarr, unfolds. The rail on the right shows what plays on Jellyfin
+and its latest additions, the Requests waiting in Seerr with buttons to approve
+or decline them, the torrents of qBittorrent, the pools and disks of TrueNAS and
+the space of the Media tree. The Quick actions, the Pull requests and the Farm
+follow the table. The Dashboard serves its own font, IBM Plex Sans, under the
+SIL Open Font License. It installs as a web app: the install button of the
+address bar in Chrome or Edge, "Add to Home screen" on Android, Share then "Add
+to Home Screen" on an iPhone.
 
-Each card comes from the `dashboard.*` labels of its service in its
+Each row comes from the `dashboard.*` labels of its service in its
 `compose.yaml`, which hold no key. The Dashboard reads the keys from `.env` and
 calls the APIs itself, so no key ever reaches the browser. It mounts the Media
 tree read-only to measure it. `./scripts/verify.sh` checks that it cannot write
