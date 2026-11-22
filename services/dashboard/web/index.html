@@ -439,8 +439,8 @@ function facts(service) {
 }
 
 const CPU_STEPS = [10, 35, 75, 150];
-const RAM_STEPS = [512, 1024, 2048, 4096].map(mebibytes => mebibytes * 1048576);
-const UPTIME_STEPS = [99.5, 98, 95, 90];
+const RAM_STEPS = [256, 512, 1024, 2048].map(mebibytes => mebibytes * 1048576);
+const UPTIME_STEPS = [99.9, 99, 97, 90];
 
 function level(value, steps, falling) {
   const index = steps.findIndex(step => falling ? value >= step : value < step);
