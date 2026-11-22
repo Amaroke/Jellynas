@@ -2711,7 +2711,9 @@ waiting in Seerr with buttons to approve or decline them, the torrents of
 qBittorrent, the downloads of Aurral with a switch to pause them, each indexer,
 proxy and download client of Prowlarr, Radarr and Sonarr as on, off, failing or
 paused by ratio with their health warnings, and buttons to turn an indexer or a
-download client on or off and to retry a failing one, the pools and disks of
+download client on or off and to retry a failing one. A warning that only says
+every download client or every indexer is off counts as no trouble, since a
+switch turned them off. Then come the pools and disks of
 TrueNAS and the space of the Media tree. The Quick actions, the Pull requests
 and the Farm follow the table. The Dashboard serves its own font, IBM Plex Sans,
 under the SIL Open Font License. It installs as a web app: the install button of
