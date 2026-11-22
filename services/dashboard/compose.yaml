@@ -23,6 +23,8 @@ services:
       JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}
       MUSIC_BOT_URL: http://music-bot:8000
       SEERR_URL: https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      AURRAL_URL: https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      AURRAL_API_KEY: ${AURRAL_API_KEY}
       SEERR_API_KEY: ${SEERR_API_KEY}
       QBITTORRENT_URL: http://gluetun:8080
       QBITTORRENT_API_KEY: ${QBITTORRENT_API_KEY}

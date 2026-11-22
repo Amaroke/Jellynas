@@ -30,6 +30,7 @@ WIDGETS = {
     "jellyfin",
     "music-bot",
     "seerr",
+    "aurral",
     "qbittorrent",
     "gluetun",
     "slskd",
