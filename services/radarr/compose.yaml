@@ -27,7 +27,7 @@ services:
       cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/radarr:/config
-      - ${DATA_ROOT}:/data
+      - ${DATA_ROOT}/:/data
     healthcheck:
       test:
         - "CMD"
