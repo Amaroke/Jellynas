@@ -21,12 +21,22 @@ pub struct Row {
     pub title: String,
     pub detail: String,
     pub progress: Option<f64>,
+    pub image: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Poster {
+    pub title: String,
+    pub detail: String,
+    pub image: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Reading {
     pub figures: Vec<Figure>,
     pub rows: Vec<Row>,
+    pub posters: Vec<Poster>,
+    pub idle: Option<String>,
     #[serde(skip)]
     pub metrics: Vec<(&'static str, f64)>,
 }
@@ -67,6 +77,23 @@ pub fn settle<T: Clone>(
     }
 }
 
+pub fn rest(previous: Option<&Panel>) -> Option<Panel> {
+    let mut reading = previous?.reading.clone()?;
+    for figure in &mut reading.figures {
+        figure.value = "—".into();
+    }
+    reading.rows.clear();
+    reading.posters.clear();
+    if reading.idle.is_some() {
+        reading.idle = Some("Service stopped".into());
+    }
+    Some(Panel {
+        reading: Some(reading),
+        error: None,
+        updated: None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -78,8 +105,37 @@ mod tests {
                 value: value.into(),
             }],
             rows: vec![],
+            posters: vec![],
+            idle: None,
             metrics: vec![],
         }
+    }
+
+    #[test]
+    fn a_resting_panel_keeps_its_shape_without_values() {
+        let mut playing = reading("12");
+        playing.rows = vec![Row {
+            title: "Heat".into(),
+            detail: "carol".into(),
+            progress: None,
+            image: None,
+        }];
+        playing.idle = Some("Nothing playing".into());
+        playing.posters = vec![Poster {
+            title: "Heat".into(),
+            detail: "1995".into(),
+            image: "https://jellyfin.example.org/Items/m1/Images/Primary".into(),
+        }];
+        let previous = settle(None, Ok(playing), 100);
+        let mut blank = reading("—");
+        blank.idle = Some("Service stopped".into());
+        let expected = Panel {
+            reading: Some(blank),
+            error: None,
+            updated: None,
+        };
+        assert_eq!(Some(expected), rest(Some(&previous)));
+        assert_eq!(None, rest(None));
     }
 
     #[test]

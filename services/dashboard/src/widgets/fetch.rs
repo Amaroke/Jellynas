@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 const LIMIT: u64 = 64 * 1024 * 1024;
 const SLOW: Duration = Duration::from_secs(120);
+const LATEST: &str = "/Items?SortBy=DateCreated&SortOrder=Descending&IncludeItemTypes=Movie,Episode&Recursive=true&Limit=300";
 const SYSTEMS: Duration = Duration::from_secs(10);
 
 pub struct Client {
@@ -136,8 +137,16 @@ impl Client {
                 parse::jellyfin(
                     &self.fetch("JELLYFIN", "/Items/Counts", &auth)?,
                     &self.fetch("JELLYFIN", "/Sessions?activeWithinSeconds=60", &auth)?,
+                    &self
+                        .fetch("JELLYFIN", LATEST, &auth)
+                        .unwrap_or_else(|_| json!({"Items": []})),
+                    &self.url("JELLYFIN", "")?,
                 )
             }
+            "music-bot" => parse::music_bot(
+                &self.fetch("MUSIC_BOT", "/status", &vec![])?,
+                &self.url("JELLYFIN", "")?,
+            ),
             "seerr" => parse::seerr(
                 &self.fetch("SEERR", "/api/v1/request/count", &arr("SEERR")?)?,
                 &self.fetch("SEERR", "/api/v1/issue/count", &arr("SEERR")?)?,
@@ -305,6 +314,8 @@ impl Client {
                 },
             ],
             rows: vec![],
+            posters: vec![],
+            idle: None,
             metrics: vec![],
         })
     }

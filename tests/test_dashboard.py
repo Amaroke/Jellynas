@@ -27,6 +27,7 @@ ESSENTIAL = {
 HOMEPAGE = ROOT / "services" / "homepage" / "services.yaml"
 WIDGETS = {
     "jellyfin",
+    "music-bot",
     "seerr",
     "qbittorrent",
     "gluetun",

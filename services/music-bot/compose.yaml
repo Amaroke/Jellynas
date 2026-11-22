@@ -24,6 +24,7 @@ services:
       dashboard.name: Music bot
       dashboard.section: Watch
       dashboard.icon: discord.svg
+      dashboard.widget: music-bot
       dashboard.switchable: "true"
     volumes:
       - ${DATA_ROOT}/media/music:/data/media/music:ro

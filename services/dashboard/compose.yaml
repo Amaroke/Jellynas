@@ -21,6 +21,7 @@ services:
       DOCKER_HOST: tcp://dashboard-socket-proxy:2375
       JELLYFIN_URL: https://jellyfin.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}
+      MUSIC_BOT_URL: http://music-bot:8000
       SEERR_URL: https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       SEERR_API_KEY: ${SEERR_API_KEY}
       QBITTORRENT_URL: http://gluetun:8080

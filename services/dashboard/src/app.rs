@@ -158,7 +158,7 @@ impl App {
         let farm = Some(widgets::settle(previous.farm.as_ref(), farm, now));
         let actions = Some(widgets::settle(previous.actions.as_ref(), actions, now));
         let pulls = Some(widgets::settle(previous.pulls.as_ref(), pulls, now));
-        let widgets: BTreeMap<String, Panel> = readings
+        let mut widgets: BTreeMap<String, Panel> = readings
             .into_iter()
             .map(|(name, reading)| {
                 if let Err(error) = &reading {
@@ -168,6 +168,16 @@ impl App {
                 (name, panel)
             })
             .collect();
+        for service in services.iter() {
+            let name = &service.card.service;
+            let shown = service.card.widget.is_some() || service.card.monitor.is_some();
+            if shown
+                && !widgets.contains_key(name)
+                && let Some(panel) = widgets::rest(previous.widgets.get(name))
+            {
+                widgets.insert(name.clone(), panel);
+            }
+        }
         if let Err(error) = &host {
             eprintln!("Cannot read the Host: {error}");
         }
