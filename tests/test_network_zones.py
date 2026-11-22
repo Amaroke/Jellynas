@@ -151,7 +151,7 @@ class NetworkZonesTest(unittest.TestCase):
 
     def test_only_caddy_names_the_public_services_directly(self):
         paths = [path for path in included_compose_files() if path.parent.name != "caddy"]
-        paths += sorted((ROOT / "services" / "homepage").glob("*.yaml")) + sorted((ROOT / "services" / "music-bot").glob("*.py"))
+        paths += sorted((ROOT / "services" / "music-bot").glob("*.py"))
         for path in paths:
             text = path.read_text(encoding="utf-8")
             for address in DIRECT_ADDRESSES:

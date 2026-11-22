@@ -90,8 +90,8 @@ once its disk budget is full, and never lets a torrent go.
 _Avoid_: ratio, ratio folder, ratio torrents, cross-seed torrents, Zen reserve
 
 **Switch**:
-An on or off setting of the Farm that the Admin flips in Homepage, one per kind
-of grab, per Quest farm and per cleaning.
+An on or off setting of the Farm that the Admin flips in the Dashboard, one per
+kind of grab, per Quest farm and per cleaning.
 _Avoid_: toggle, flag, button
 
 **Public torrent**:

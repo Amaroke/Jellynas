@@ -24,7 +24,8 @@ ESSENTIAL = {
     "dashboard",
     "backup",
 }
-HOMEPAGE = ROOT / "services" / "homepage" / "services.yaml"
+CADDYFILE = ROOT / "services" / "caddy" / "Caddyfile"
+SECRET = re.compile(r"\$\{[A-Z_]*(KEY|PASSWORD|SECRET|TOKEN|USERNAME|EMAIL)[A-Z_]*")
 WIDGETS = {
     "jellyfin",
     "music-bot",
@@ -62,25 +63,6 @@ def labels(lines):
         else:
             key = None
     return found
-
-
-def homepage_cards():
-    cards, name = {}, None
-    for line in HOMEPAGE.read_text(encoding="utf-8").splitlines():
-        card = re.match(r"^    - (.+):$", line)
-        if card:
-            name = card.group(1)
-            cards[name] = {}
-        kind = re.match(r"^          type: (.+)$", line)
-        if name and kind:
-            cards[name]["widget"] = kind.group(1)
-        if name and re.match(r"^        siteMonitor:", line):
-            cards[name]["monitor"] = True
-    return cards
-
-
-def dashboard_cards():
-    return {found["dashboard.name"]: found for found in map(labels, services().values()) if "dashboard.name" in found}
 
 
 class DashboardLabelsTest(unittest.TestCase):
@@ -128,18 +110,51 @@ class DashboardLabelsTest(unittest.TestCase):
             if monitor is not None:
                 self.assertRegex(monitor, r"^https?://\S+$", service)
 
-    @unittest.skipUnless(HOMEPAGE.exists(), "Homepage is gone")
-    def test_every_homepage_widget_and_monitor_has_its_counterpart(self):
-        cards = dashboard_cards()
-        for name, homepage in homepage_cards().items():
-            kind = homepage.get("widget")
-            if kind == "iframe" or not (kind or homepage.get("monitor")):
-                continue
-            self.assertIn(name, cards)
-            if kind:
-                self.assertEqual(kind.replace("uptimekuma", "uptime-kuma"), cards[name].get("dashboard.widget"), name)
-            if homepage.get("monitor"):
-                self.assertIn("dashboard.monitor", cards[name], name)
+    def test_every_service_has_a_card(self):
+        missing = {service for service, lines in services().items() if "dashboard.name" not in labels(lines)}
+        self.assertEqual(set(), missing)
+
+    def test_no_label_holds_a_secret(self):
+        for service, lines in services().items():
+            for key, value in labels(lines).items():
+                self.assertNotRegex(value, SECRET, f"{service} {key}")
+
+    def test_no_label_holds_a_personal_value(self):
+        for service, lines in services().items():
+            for key, value in labels(lines).items():
+                self.assertNotRegex(value, r"\b\d{1,3}(\.\d{1,3}){3}\b", f"{service} {key}")
+                for host in re.findall(r"https?://([^/\s]+)", value):
+                    self.assertRegex(host, r"^([a-z0-9-]+\.)*\$\{DOMAIN\}:|^[a-z0-9_-]+(:\d+)?$", f"{service} {key}")
+
+    def test_every_link_has_a_lan_name(self):
+        caddyfile = CADDYFILE.read_text(encoding="utf-8")
+        routed = set(re.findall(r"^\s*import lan ([a-z0-9-]+) ", caddyfile, re.MULTILINE))
+        routed |= set(re.findall(r"^\s*host ([a-z0-9-]+)\.lan\.", caddyfile, re.MULTILINE))
+        for service, lines in services().items():
+            href = labels(lines).get("dashboard.href")
+            if href:
+                self.assertRegex(href, r"^https://[a-z0-9-]+\.lan\.\$\{DOMAIN\}:", service)
+                self.assertIn(re.match(r"^https://([a-z0-9-]+)\.", href).group(1), routed, service)
+
+    def test_homepage_is_gone(self):
+        self.assertFalse((ROOT / "services" / "homepage").exists())
+        self.assertNotIn("homepage", services())
+        self.assertNotIn("HOMEPAGE_", (ROOT / ".env.example").read_text(encoding="utf-8"))
+
+    def test_the_old_address_of_homepage_leads_to_the_dashboard(self):
+        caddyfile = CADDYFILE.read_text(encoding="utf-8")
+        self.assertNotRegex(caddyfile, r"import lan homepage ")
+        block = re.search(r"@homepage \{\n(.*?)\n\t\}\n\thandle @homepage \{\n(.*?)\n\t\}", caddyfile, re.DOTALL)
+        self.assertIsNotNone(block)
+        self.assertIn("host homepage.lan.{$DOMAIN}", block.group(1))
+        self.assertIn("remote_ip {$LAN_SUBNET}", block.group(1))
+        self.assertIn("redir https://dashboard.lan.{$DOMAIN}:{$CADDY_HTTPS_PORT}{uri}", block.group(2))
+
+    def test_every_variable_is_documented(self):
+        documented = set(re.findall(r"^([A-Z][A-Z0-9_]*)=", (ROOT / ".env.example").read_text(encoding="utf-8"), re.MULTILINE))
+        for path in included_compose_files():
+            used = set(re.findall(r"\$\{([A-Z][A-Z0-9_]*)", path.read_text(encoding="utf-8")))
+            self.assertEqual(set(), used - documented, path.name)
 
 
 if __name__ == "__main__":

@@ -33,7 +33,6 @@ include:
   - services/uptime-kuma/compose.yaml
   - services/dozzle/compose.yaml
   - services/socket-proxy/compose.yaml
-  - services/homepage/compose.yaml
   - services/dashboard/compose.yaml
   - services/backup/compose.yaml
 

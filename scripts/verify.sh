@@ -220,6 +220,22 @@ check_no_media_tree() {
   check_not_mounted "$1" media "does not mount the media tree"
 }
 
+check_mounted_read_only() {
+  local service="$1" target="$2" id mode
+  enabled "$service" || return
+  id="$(docker compose ps -q "$service" 2>/dev/null | head -n 1)"
+  if [ -z "$id" ]; then
+    fail "$service" "has no container, cannot check that $target is read-only"
+    return
+  fi
+  mode="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "'"$target"'"}}{{.RW}}{{end}}{{end}}' "$id")"
+  case "$mode" in
+    false) pass "$service" "mounts $target read-only" ;;
+    true) fail "$service" "can write to $target" ;;
+    *) fail "$service" "does not mount $target" ;;
+  esac
+}
+
 check_no_torrents_mount() {
   check_not_mounted "$1" torrents "does not mount the torrents tree"
 }
@@ -301,21 +317,6 @@ check_hsts() {
     pass caddy "$host sends HSTS"
   else
     fail caddy "$host sends no HSTS"
-  fi
-}
-
-check_homepage_values() {
-  local name unsafe=""
-  enabled homepage || return
-  while read -r name; do
-    case "$(env_value "$name")" in
-      *"'"*) unsafe="$unsafe $name" ;;
-    esac
-  done < <(sed -n 's/^      HOMEPAGE_VAR_[A-Z_]*: [$][{]\([A-Z_]*\).*/\1/p' services/homepage/compose.yaml)
-  if [ -n "$unsafe" ]; then
-    fail homepage "a single quote in$unsafe breaks its config, the page stays empty"
-  else
-    pass homepage "no value it reads from .env holds a single quote"
   fi
 }
 
@@ -578,12 +579,11 @@ check_no_torrents_mount beszel-agent
 check_no_media_mount uptime-kuma
 check_no_media_mount autokuma
 check_no_media_mount dozzle
-check_no_media_tree homepage
-check_no_torrents_mount homepage
+check_mounted_read_only dashboard /media
+check_no_torrents_mount dashboard
 check_no_media_mount backup
 check_read_only backup /backup/appdata
 check_backup_root
-check_homepage_values
 check_published_ports
 check_no_new_privileges
 check_docker_socket_read_only
@@ -602,7 +602,6 @@ check_login_required autobrr "https://autobrr.$lan:$https_port/api/config"
 check_login_required beszel "https://beszel.$lan:$https_port/api/beszel/info"
 check_login_required uptime-kuma "https://uptime-kuma.$lan:$https_port/metrics"
 check_login_required dozzle "https://dozzle.$lan:$https_port/"
-check_login_required homepage "https://homepage.$lan:$https_port/api/services"
 check_api_key_required cross-seed "http://cross-seed:2468/api/status"
 check_exit_ip qbittorrent
 check_exit_ip slskd
@@ -616,10 +615,10 @@ check_public_hostname "${domain:+truenas.$lan}" "$host_ip"
 check_public_hostname "${domain:+jellyfin.$lan}" "$host_ip"
 check_public_hostname "${domain:+seerr.$lan}" "$host_ip"
 check_public_hostname "${domain:+qbittorrent.$lan}" "$host_ip"
-check_public_hostname "${domain:+homepage.$lan}" "$host_ip"
+check_public_hostname "${domain:+dashboard.$lan}" "$host_ip"
 check_lan_refused_outside "radarr.$lan"
 check_lan_refused_outside "truenas.$lan"
-check_lan_refused_outside "homepage.$lan"
+check_lan_refused_outside "dashboard.$lan"
 check_lan_refused_outside "lldap.$lan"
 check_unknown_host_refused "$jellyfin_hostname"
 check_hsts "$jellyfin_hostname"

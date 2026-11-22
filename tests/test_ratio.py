@@ -584,7 +584,7 @@ class Grabs(unittest.TestCase):
         run(qbt, c411=c411)
         self.assertEqual((qbt.added, qbt.deleted), ([], []))
 
-    def test_the_farm_budget_set_in_homepage_counts_over_the_one_of_env(self):
+    def test_the_farm_budget_set_on_the_board_counts_over_the_one_of_env(self):
         qbt = FakeQBittorrent([torrent("big", size_gb=60)])
         state = empty_state()
         found = settings()
