@@ -13,6 +13,7 @@ from unittest import mock
 
 from ratio import (
     C411,
+    C411_CATEGORIES,
     DAY,
     DONE_AT_START,
     GB,
@@ -305,7 +306,7 @@ SETTINGS = {
     "twin_seed_after": 3600,
     "board_refresh": "http://farm-board:8000/refresh",
 }
-QUIET = {**{name: False for name in SWITCHES if name.startswith("volume:")}, "quantity_seed": False}
+GRABBING = {"free": True, "twins": True}
 
 
 def settings(**changes):
@@ -314,7 +315,7 @@ def settings(**changes):
 
 def controls_of(found, switches=None):
     numbers = {name: found[key] / unit for name, (key, unit, _, _) in NUMBERS.items()}
-    return {"switches": {**SWITCHES, **QUIET, **(switches or {})}, "numbers": numbers}
+    return {"switches": {**SWITCHES, **GRABBING, **(switches or {})}, "numbers": numbers}
 
 
 def empty_state(**changes):
@@ -1194,10 +1195,8 @@ class ControlsStore(unittest.TestCase):
             path = os.path.join(folder, "controls.json")
             controls = Controls(path)
             snapshot = controls.snapshot(SETTINGS)
-            self.assertTrue(snapshot["switches"]["free"])
-            self.assertFalse(snapshot["switches"]["paid"])
-            self.assertTrue(snapshot["switches"]["volume:ebook"])
-            self.assertFalse(snapshot["switches"]["volume:films-videos"])
+            grabs = ["free", "twins", "paid", "quantity_seed", "adopt", *(f"volume:{slug}" for slug in C411_CATEGORIES)]
+            self.assertEqual({name: False for name in grabs}, {name: snapshot["switches"][name] for name in grabs})
             self.assertEqual(snapshot["numbers"], {"farm_size_gb": 100, "floor": 1.2, "daily_gb": 2, "max_size_gb": 1})
             controls.change("paid", True)
             controls.change("floor", 1.5)
