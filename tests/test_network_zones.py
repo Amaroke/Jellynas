@@ -137,7 +137,7 @@ class NetworkZonesTest(unittest.TestCase):
     def test_only_the_vpn_and_the_beszel_agent_borrow_another_network(self):
         borrowed = {service: network_mode(lines) for service, lines in all_services().items() if network_mode(lines)}
         self.assertEqual(
-            {"qbittorrent": "service:gluetun", "slskd": "service:gluetun", "suwayomi": "service:gluetun", "beszel-agent": "host"},
+            {"qbittorrent": "service:gluetun", "slskd": "service:gluetun", "beszel-agent": "host"},
             borrowed,
         )
 

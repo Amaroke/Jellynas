@@ -56,7 +56,7 @@ impl Arr {
                 "media management",
                 "/config/mediamanagement",
                 rules(json!({
-                    "copyUsingHardlinks": false,
+                    "copyUsingHardlinks": true,
                     "recycleBin": self.recycle_bin,
                     "recycleBinCleanupDays": 30,
                     self.unmonitor_deleted: true,
@@ -195,6 +195,18 @@ mod tests {
         assert_eq!(vec!["PUT /config/host/1"], fake.paths());
         assert_eq!(json!(false), fake.body(0)["analyticsEnabled"]);
         assert_eq!(json!("kept"), fake.body(0)["untouched"]);
+    }
+
+    #[test]
+    fn an_import_by_copy_turns_back_into_a_hardlink() {
+        for arr in [radarr(), sonarr()] {
+            let mut pages = in_line(&arr);
+            pages.get_mut("/config/mediamanagement").unwrap()["copyUsingHardlinks"] = json!(false);
+            let fake = Fake::new(pages);
+            assert_eq!(Ok(1), enforce(&arr, &fake));
+            assert_eq!(vec!["PUT /config/mediamanagement/1"], fake.paths());
+            assert_eq!(json!(true), fake.body(0)["copyUsingHardlinks"]);
+        }
     }
 
     #[test]

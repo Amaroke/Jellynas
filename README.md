@@ -31,21 +31,20 @@ guide is written so that an AI agent can follow it as well as a person.
 13. [slskd](#slskd)
 14. [Recyclarr](#recyclarr)
 15. [Requests](#requests)
-16. [Tdarr](#tdarr)
-17. [Bazarr](#bazarr)
-18. [Indexarr](#indexarr)
-19. [Music bot](#music-bot)
-20. [Discord messages](#discord-messages)
-21. [PR radar](#pr-radar)
-22. [Private tracker ratio](#private-tracker-ratio)
-23. [Observation](#observation)
-24. [Beszel](#beszel)
-25. [Uptime Kuma](#uptime-kuma)
-26. [Dozzle](#dozzle)
-27. [Dashboard](#dashboard)
-28. [Backup](#backup)
-29. [Verify the NAS](#verify-the-nas)
-30. [Contributing](#contributing)
+16. [Indexarr](#indexarr)
+17. [Music bot](#music-bot)
+18. [Discord messages](#discord-messages)
+19. [PR radar](#pr-radar)
+20. [Private tracker ratio](#private-tracker-ratio)
+21. [Observation](#observation)
+22. [Beszel](#beszel)
+23. [Uptime Kuma](#uptime-kuma)
+24. [Dozzle](#dozzle)
+25. [Dashboard](#dashboard)
+26. [Backup](#backup)
+27. [Verify the NAS](#verify-the-nas)
+28. [On hold](#on-hold)
+29. [Contributing](#contributing)
 
 ## Prerequisites
 
@@ -841,8 +840,8 @@ inside the container and be lost.
 Each finished torrent keeps seeding from the torrents tree, to give back to
 other peers. A torrent of C411 never stops and nothing removes it. ratio removes
 a public torrent after two weeks, or sooner once the same files seed on C411.
-Each import is a copy, so a downloaded file sits twice on the disk while its
-torrent seeds, forever for C411: keep enough free space for it. In Tools >
+Radarr and Sonarr import by hardlink, so a movie or an episode takes its space
+once while its torrent seeds, forever for C411. In Tools >
 Options, set:
 
 - Downloads > Default Torrent Management Mode: Automatic, so each category picks
@@ -935,10 +934,10 @@ files seed on C411.
 Requires [Prowlarr](#prowlarr).
 
 Radarr fulfils movie Requests: it searches the indexers, sends the torrent to
-qBittorrent, then copies the finished movie into the Library. No other
-maintained open source tool covers movies as well. It sees only the movies
-folder, under `/data/media/movies`, and the torrents tree, under
-`/data/torrents`.
+qBittorrent, then hardlinks the finished movie into the Library. No other
+maintained open source tool covers movies as well. It sees the whole data root
+under `/data`, since a hardlink only works within one mount, and files movies
+only under `/data/media/movies`.
 
 ### Login of Radarr
 
@@ -968,8 +967,8 @@ hand:
 - "Rename Movies" on, with both the movie file and folder named
   `{Movie Title} ({Release Year}) [tmdbid-{TmdbId}]`, so Jellyfin always
   matches the right movie, even a remake with the same title.
-- "Use Hardlinks instead of Copy" off. Each import is a copy, so the torrent
-  keeps seeding from the torrents tree while Tdarr normalises the Library file.
+- "Use Hardlinks instead of Copy" on. Each import is a hardlink, so the torrent
+  keeps seeding from the torrents tree and the movie takes its space once.
 - Recycling bin `/data/media/movies/.recycle`, emptied after 30 days. A deleted
   movie stays there for 30 days and can be moved back. Jellyfin and Radarr skip
   hidden folders, so it never shows up as a movie.
@@ -1053,10 +1052,10 @@ If an import goes wrong:
 Requires [Prowlarr](#prowlarr).
 
 Sonarr fulfils show Requests and fetches new episodes on its own: it searches
-the indexers, sends the torrent to qBittorrent, then copies each finished
-episode into the Library. It sees only the shows and anime folders, under
-`/data/media/shows` and `/data/media/anime`, and the torrents tree, under
-`/data/torrents`. Medusa or SickChill can replace it.
+the indexers, sends the torrent to qBittorrent, then hardlinks each finished
+episode into the Library. It sees the whole data root under `/data`, like
+Radarr, and files episodes only under `/data/media/shows` and
+`/data/media/anime`. Medusa or SickChill can replace it.
 
 ### Login of Sonarr
 
@@ -1281,142 +1280,10 @@ the user token of their ListenBrainz settings. Aurral then sends what they play
 in the browser and in the apps, and recommends from it. ListenBrainz can carry
 it on to Last.fm, which Aurral no longer reaches itself.
 
-## LazyLibrarian
-
-Requires [Prowlarr](#prowlarr).
-
-LazyLibrarian follows authors and books: a wanted book arrives in the Library on
-its own, from the indexers through qBittorrent. It sees only the books folder,
-under `/data/media/books`, and the torrents tree, under `/data/torrents`.
-Readarr is retired, and no other maintained open source tool finds and files
-books this way.
-
-### Login of LazyLibrarian
-
-Open `https://lazylibrarian.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. In Config >
-Interface:
-
-1. Under WebServer Options, set "User" and "Pass" to a username and a strong
-   password, distinct from the other tools.
-2. Under API, check "Enable API" and generate the "API Full Access key", which
-   Prowlarr and policy use.
-3. Click "Save changes" and restart LazyLibrarian from its menu.
-
-In `.env`, set `LAZYLIBRARIAN_API_KEY` to the API Full Access key, then restart
-doco-cd to apply `.env`:
-
-```sh
-docker restart doco-cd
-```
-
-`./scripts/verify.sh` checks that the web UI then asks for the login.
-
-### Download client of LazyLibrarian
-
-1. In qBittorrent, add a category `books` with `/data/torrents/books` as the
-   save path.
-2. In LazyLibrarian, Config > Downloaders, under Torrents, enter the qBittorrent
-   login, click "Test qBitTorrent", then "Save changes". policy sets the rest.
-
-### Settings of LazyLibrarian kept by policy
-
-[policy](#policy) puts these back every night:
-
-| Setting                        | Value                           |
-| ------------------------------ | ------------------------------- |
-| Authentication type            | Basic (Browser Popup)           |
-| Enable user accounts           | off                             |
-| Telemetry                      | off                             |
-| eBook Library Folder           | `/data/media/books`             |
-| Keep original files            | on                              |
-| qBitTorrent                    | on, host `gluetun`, port `8080` |
-| qBitTorrent Label/Category     | `books`                         |
-| Download directory             | `/data/torrents/books`          |
-| Keep seeding after processing  | on                              |
-| Do not delete if still seeding | on                              |
-
-Each import is a copy, so the torrent keeps seeding from the torrents tree, and
-LazyLibrarian never removes a torrent before qBittorrent stops it at its seeding
-goal. LazyLibrarian sees the download directory at the same path as
-qBittorrent. A change of the authentication type applies once LazyLibrarian
-restarts.
-
-### Indexers of LazyLibrarian
-
-In Prowlarr, Settings > Apps, click "+" and pick LazyLibrarian. Set "Prowlarr
-Server" to `http://prowlarr:9696` and "LazyLibrarian Server" to
-`http://lazylibrarian:5299`, paste the API Full Access key, click "Test", then
-"Save". Every indexer with book categories then shows up in LazyLibrarian,
-Config > Providers.
-
-### Want a book
-
-In Authors, search a book or an author, add it and mark the book as Wanted.
-LazyLibrarian searches the indexers, sends the book to qBittorrent, then copies
-it into the books folder, where the Books library of Jellyfin picks it up. A
-Friend reads it in the Jellyfin app or downloads it to their phone.
-
-## Suwayomi
-
-Requires [qBittorrent](#qbittorrent).
-
-Suwayomi follows manga: it runs the Mihon extensions, which read manga sites,
-and downloads each new chapter of a manga in the library as a CBZ file into the
-manga folder of the Library, where Jellyfin reads it. It shares the network of
-Gluetun, like qBittorrent: manga sites see the IP of the VPN, and when the VPN
-is down, it has no connectivity at all. It sees only the manga folder, mounted
-as its downloads folder, and its appdata folder. Kaizoku is archived and points
-to Suwayomi, and LazyLibrarian handles manga poorly. Suwayomi passes the
-Cloudflare challenge of a site with its own built-in browser. A site that
-refuses the IPs of the VPN stays out of reach.
-
-### Login of Suwayomi
-
-In `.env`, set `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD` to the login of its
-web UI, letters and digits only and distinct from the other tools, then restart
-doco-cd to apply `.env`:
-
-```sh
-docker restart doco-cd
-```
-
-Suwayomi asks for this login at every visit. The Dashboard uses it to read its
-figures, and policy to keep its settings. `./scripts/verify.sh` checks that the
-web UI asks for it.
-
-### Extensions
-
-Open `https://suwayomi.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. In
-Settings > Browse, add the URL of a Mihon extension repository, then in Browse >
-Extensions, install the extension of each manga site you read.
-
-### Settings of Suwayomi kept by policy
-
-[policy](#policy) puts these back every night:
-
-| Setting                         | Value    |
-| ------------------------------- | -------- |
-| Download new chapters           | on       |
-| Skip manga with unread chapters | off      |
-| Save as CBZ                     | on       |
-| Automatic update interval       | 12 hours |
-
-Suwayomi checks the sites for new chapters every 12 hours and downloads each new
-one on its own. Friends read in Jellyfin, so Suwayomi sees every chapter as
-unread, and would skip every manga if it left out those with unread chapters.
-CBZ is also set from compose, at each start.
-
-### Want a manga
-
-In Browse, pick a source, search a manga and add it to the library. Open it,
-select the chapters to keep and click "Download". Suwayomi files them under
-`mangas/<source>/<manga>` in the manga folder, where the Manga library of
-Jellyfin picks them up. New chapters follow on their own.
-
 ## Policy
 
-Requires [Jellyfin](#jellyfin), [Radarr](#radarr), [Sonarr](#sonarr),
-[Aurral](#aurral), [LazyLibrarian](#lazylibrarian) and [Suwayomi](#suwayomi).
+Requires [Jellyfin](#jellyfin), [Radarr](#radarr), [Sonarr](#sonarr) and
+[Aurral](#aurral).
 
 policy keeps the settings of the apps the way this README sets them. At its
 start, then every day at 4:30 in the time zone of `TZ`, it reads them through
@@ -1672,7 +1539,7 @@ flowchart LR
     automation -->|search| Trackers
     vpn -->|"tunnel only"| Trackers
     vpn -->|"tunnel only"| Soulseek
-    vpn -->|"tunnel only"| Manga
+    vpn -.->|"tunnel only"| Manga
     vpn -->|download| data
     automation -->|"import, subtitles, MKV H265"| data
     watch -->|"read-only"| data
@@ -1688,12 +1555,12 @@ flowchart LR
     Prowlarr --- FlareSolverr
     Prowlarr -->|indexers| Radarr
     Prowlarr -->|indexers| Sonarr
-    Prowlarr -->|indexers| LazyLibrarian
+    Prowlarr -.->|indexers| LazyLibrarian
     Recyclarr -->|profiles| Radarr
     Recyclarr -->|profiles| Sonarr
-    Radarr -->|"new files"| Bazarr
-    Sonarr -->|"new files"| Bazarr
-    Bazarr -->|requeue| Tdarr
+    Radarr -.->|"new files"| Bazarr
+    Sonarr -.->|"new files"| Bazarr
+    Bazarr -.->|requeue| Tdarr
     Radarr -->|works| Indexarr
     Sonarr -->|works| Indexarr
     autobrr ~~~ crossseed ~~~ ratioscript
@@ -1731,6 +1598,9 @@ flowchart LR
     style observation fill:#e0f2f1,stroke:#00897b,stroke-width:2px,color:#1f2937
     classDef dataNode fill:#ffffff,stroke:#78909c,color:#1f2937,stroke-width:1.5px
     class Torrents,Library dataNode
+
+    classDef onHold stroke-dasharray:5 5
+    class LazyLibrarian,Suwayomi,Bazarr,Tdarr,Manga onHold
     style data fill:#eceff1,stroke:#78909c,stroke-width:2px,color:#1f2937
 ```
 
@@ -1781,187 +1651,6 @@ pinned, so Renovate keeps them up to date:
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
 | Actions | actionlint checks the workflows, then zizmor audits their security |
-
-## Tdarr
-
-Requires [Radarr](#radarr) and [Sonarr](#sonarr).
-
-Tdarr normalises every video of the Library to MKV H265 within 1920x1080, one
-compact format that most devices play directly, offline on a phone included. MP4
-holds subtitles and several audio tracks poorly, and H264 makes much larger
-files. Unmanic or FileFlows can replace it. It sees only the movies, shows and
-anime folders, under the same paths as Radarr and Sonarr, and never the torrents
-tree, so a torrent still seeding is never touched. Its work files go to
-`<APPDATA_ROOT>/tdarr/cache`.
-
-The flow, `services/tdarr/flow.json`, picks the tracks of each file, embeds the
-subtitle files of Bazarr, replaces the original as MKV and asks Radarr or Sonarr
-to rescan its folder, following the rules of [Languages](#languages).
-
-### Login of Tdarr
-
-1. In `.env`, set `TDARR_API_KEY` before the first start of Tdarr, to `tapi_`
-   followed by random letters and digits:
-
-   ```bash
-   echo "tapi_$(openssl rand -hex 16)"
-   ```
-
-2. Start Tdarr with `docker restart doco-cd`. It creates the `admin` login with
-   that key as its password, and its internal node connects with the same key.
-3. Open `https://tdarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the
-   local network and sign in with `admin` and the key.
-4. In Tools > Account, click "Change Password" and set a strong password,
-   distinct from the other tools, stored in your password manager. The key keeps
-   working for the node.
-
-### Flow
-
-Tdarr keeps its flows in its own database, so the repo holds the flow as an
-export.
-
-1. In Flows, click "Import JSON Flow Template", paste the content of
-   `services/tdarr/flow.json`, and create the flow.
-2. After pulling a change to `services/tdarr/flow.json`, import it again and
-   pick "Update Existing Flow".
-
-### Libraries of Tdarr
-
-In Libraries, click "Library +" once per folder:
-
-| Library | Source               |
-| ------- | -------------------- |
-| Movies  | `/data/media/movies` |
-| Shows   | `/data/media/shows`  |
-| Anime   | `/data/media/anime`  |
-
-For each library:
-
-1. In Source, enter the folder, check "Folder Watch", and leave "Hold Files
-   After Scanning" checked so a file still being copied by Radarr or Sonarr
-   waits before it is processed.
-2. In Transcode Cache, enter `/temp`.
-3. In Transcode, pick "Flows" and the `Jellynas normalise to MKV H265 1080p`
-   flow.
-4. Leave the output folder empty, so each file is replaced in place.
-
-### Node
-
-On the home page, the internal node starts with one transcode and one health
-check CPU worker. Raise the transcode workers if the machine has cores to spare,
-each one encodes a file at a time.
-
-## Bazarr
-
-Requires [Recyclarr](#recyclarr) and [Tdarr](#tdarr).
-
-Bazarr finds the subtitles for watching in the original audio. It learns about
-each file from Radarr and Sonarr, then saves the subtitles next to it in the
-Library, where Tdarr embeds them into the video and deletes the subtitle files.
-It sees only the movies, shows and anime folders, under the same paths as Radarr
-and Sonarr, so no path mapping is needed. Jellyfin can also fetch subtitles on
-demand with its OpenSubtitles plugin, without embedding them.
-
-### Login of Bazarr
-
-1. Open `https://bazarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the
-   local network.
-2. In Settings > General > Security, set "Authentication" to "Form", enter a
-   username and a strong password, distinct from the other tools, stored in your
-   password manager, and save.
-
-### Languages
-
-Every work in a foreign language, anime included, gets French and English
-subtitles, and a French original work gets none. Subtitles only serve to watch
-in the original audio. They are embedded in the video rather than left beside
-it, and only Tdarr writes the file, so Bazarr and Tdarr never rewrite the same
-video.
-
-Sonarr and Radarr tag each French original work so that Bazarr leaves it out. In
-Settings > Tags of Sonarr, click "+" under Auto Tagging, name the rule `French
-original`, check "Remove Tags Automatically", enter `french-original` as the
-tag, add the condition "Original Language is French", and save. Do the same in
-Radarr. Each work gets its tag at its next refresh, or right away with "Update
-All" in Series and in Movies.
-
-Then in Bazarr, Settings > Languages:
-
-1. Add French and English to "Languages Filter".
-2. Under "Languages Profile", click "Add New Profile", name it `French and
-   English`, add French and English, and save the profile.
-3. Check "Series" and "Movies" under "Tag-Based Automatic Language Profile
-   Selection", and enter `french-original` under "Remove Profile Tags".
-4. Under "Default Language Profiles For Newly Added Shows", check "Series" and
-   "Movies" and pick `French and English` for both, then save.
-
-A subtitle track already inside the file counts as found, so a `MULTi` release
-with French subtitles needs no download.
-
-### Providers
-
-In Settings > Providers, click "+" for each provider, fill in what it asks for,
-and save:
-
-| Provider | Sign-up | Covers |
-| --- | --- | --- |
-| OpenSubtitles.com | Free account on [opensubtitles.com](https://www.opensubtitles.com), with a daily download limit | Movies and shows, the widest French catalogue |
-| Podnapisi | None | Movies and shows |
-| Gestdown | None | Shows, from the Addic7ed catalogue |
-
-### Sonarr and Radarr
-
-1. In Settings > Sonarr, check "Enabled", enter `sonarr` as the address and
-   `8989` as the port, paste the Sonarr API key, click "Test", then "Save".
-2. In Settings > Radarr, check "Enabled", enter `radarr` as the address and
-   `7878` as the port, paste the Radarr API key, click "Test", then "Save".
-
-Bazarr then lists every show and movie, picks the profile of each from its tags
-at every sync, and searches subtitles for each new file.
-
-### Anime on an older NAS
-
-A NAS set up before anime got French and English subtitles still gives them
-French and Japanese ones. To switch it:
-
-1. In Settings > Tags of Sonarr and of Radarr, delete the `Anime` rule under
-   Auto Tagging. Then in Series of Sonarr, click "Select Series", select every
-   anime, click "Set Tags" at the bottom, pick `anime`, choose "Remove", and
-   apply. Do the same in Movies of Radarr. Back in Settings > Tags, delete the
-   `anime` tag, now unused.
-2. In Bazarr, Settings > Languages, delete the `French and Japanese` profile,
-   remove Japanese from "Languages Filter", and save. No work carries the
-   `anime` tag any more, so no sync gives it back that profile.
-3. In Series, click "Mass Edit", select every anime, pick `French and English`
-   as the profile, and save. Do the same in Movies for every anime movie.
-4. In Settings > Providers, delete Jimaku.cc. In the Metadata tab, delete AniDB,
-   and save.
-5. Import `services/tdarr/flow.json` again in Tdarr, as [Tdarr](#tdarr)
-   describes.
-
-### Subtitles embedded by Tdarr
-
-The Library holds no subtitle file: Tdarr embeds each one into its video, so a
-Friend who downloads a video gets its subtitles. When Bazarr finds a subtitle
-after Tdarr has processed the video, it puts the video back in the Tdarr queue
-with `services/bazarr/tdarr_requeue.py`, which reads `TDARR_API_KEY` from
-`.env`. In Settings > Subtitles:
-
-1. Under "Embedded Subtitles", leave "Use Embedded Subtitles" checked, so an
-   embedded track counts as found and is never downloaded again.
-2. Under "Upgrading Subtitles", uncheck "Upgrade Previously Downloaded
-   Subtitles". An upgrade would add a second track of the same language to the
-   video.
-3. Under "Post-Processing", check "Custom Post-Processing", leave the score
-   thresholds unchecked, and enter this command:
-
-   ```sh
-   python3 /scripts/tdarr_requeue.py "{{episode}}"
-   ```
-
-4. Save.
-
-Bazarr writes the outcome of each command in System > Logs.
 
 ## Indexarr
 
@@ -2666,9 +2355,8 @@ Open `https://dozzle.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in.
 
 ## Dashboard
 
-Requires [Bazarr](#bazarr), [Suwayomi](#suwayomi), [Private tracker
-ratio](#private-tracker-ratio), [Beszel](#beszel) and [Uptime
-Kuma](#uptime-kuma).
+Requires [Private tracker ratio](#private-tracker-ratio), [Beszel](#beszel)
+and [Uptime Kuma](#uptime-kuma).
 
 The Dashboard, `services/dashboard`, is the start page of the Admin, on the
 local network only, with no sign-in. A strip on top gives the time and the Host.
@@ -2857,6 +2545,335 @@ if any check fails.
 The script ends with the public addresses to test yourself. Open each one on a
 phone on 4G with wifi off: it must load over HTTPS without a certificate
 warning.
+
+## On hold
+
+These services stay in the repo with their setup, but the NAS runs none of them
+until it has a use for them. Their lines are commented out in `compose.yaml`,
+their keys sit empty at the end of `.env`, so policy and the Dashboard leave
+them alone, and the [Architecture](#architecture) draws them dashed.
+
+To bring one back, uncomment its line in `compose.yaml`, fill its keys in
+`.env`, restart doco-cd, and follow its section below:
+
+```sh
+docker restart doco-cd
+```
+
+### LazyLibrarian
+
+Requires [Prowlarr](#prowlarr).
+
+LazyLibrarian follows authors and books: a wanted book arrives in the Library on
+its own, from the indexers through qBittorrent. It sees only the books folder,
+under `/data/media/books`, and the torrents tree, under `/data/torrents`.
+Readarr is retired, and no other maintained open source tool finds and files
+books this way.
+
+#### Login of LazyLibrarian
+
+Open `https://lazylibrarian.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. In Config >
+Interface:
+
+1. Under WebServer Options, set "User" and "Pass" to a username and a strong
+   password, distinct from the other tools.
+2. Under API, check "Enable API" and generate the "API Full Access key", which
+   Prowlarr and policy use.
+3. Click "Save changes" and restart LazyLibrarian from its menu.
+
+In `.env`, set `LAZYLIBRARIAN_API_KEY` to the API Full Access key, then restart
+doco-cd to apply `.env`:
+
+```sh
+docker restart doco-cd
+```
+
+`./scripts/verify.sh` checks that the web UI then asks for the login.
+
+#### Download client of LazyLibrarian
+
+1. In qBittorrent, add a category `books` with `/data/torrents/books` as the
+   save path.
+2. In LazyLibrarian, Config > Downloaders, under Torrents, enter the qBittorrent
+   login, click "Test qBitTorrent", then "Save changes". policy sets the rest.
+
+#### Settings of LazyLibrarian kept by policy
+
+[policy](#policy) puts these back every night:
+
+| Setting                        | Value                           |
+| ------------------------------ | ------------------------------- |
+| Authentication type            | Basic (Browser Popup)           |
+| Enable user accounts           | off                             |
+| Telemetry                      | off                             |
+| eBook Library Folder           | `/data/media/books`             |
+| Keep original files            | on                              |
+| qBitTorrent                    | on, host `gluetun`, port `8080` |
+| qBitTorrent Label/Category     | `books`                         |
+| Download directory             | `/data/torrents/books`          |
+| Keep seeding after processing  | on                              |
+| Do not delete if still seeding | on                              |
+
+Each import is a copy, so the torrent keeps seeding from the torrents tree, and
+LazyLibrarian never removes a torrent before qBittorrent stops it at its seeding
+goal. LazyLibrarian sees the download directory at the same path as
+qBittorrent. A change of the authentication type applies once LazyLibrarian
+restarts.
+
+#### Indexers of LazyLibrarian
+
+In Prowlarr, Settings > Apps, click "+" and pick LazyLibrarian. Set "Prowlarr
+Server" to `http://prowlarr:9696` and "LazyLibrarian Server" to
+`http://lazylibrarian:5299`, paste the API Full Access key, click "Test", then
+"Save". Every indexer with book categories then shows up in LazyLibrarian,
+Config > Providers.
+
+#### Want a book
+
+In Authors, search a book or an author, add it and mark the book as Wanted.
+LazyLibrarian searches the indexers, sends the book to qBittorrent, then copies
+it into the books folder, where the Books library of Jellyfin picks it up. A
+Friend reads it in the Jellyfin app or downloads it to their phone.
+
+### Suwayomi
+
+Requires [qBittorrent](#qbittorrent).
+
+Suwayomi follows manga: it runs the Mihon extensions, which read manga sites,
+and downloads each new chapter of a manga in the library as a CBZ file into the
+manga folder of the Library, where Jellyfin reads it. It shares the network of
+Gluetun, like qBittorrent: manga sites see the IP of the VPN, and when the VPN
+is down, it has no connectivity at all. It sees only the manga folder, mounted
+as its downloads folder, and its appdata folder. Kaizoku is archived and points
+to Suwayomi, and LazyLibrarian handles manga poorly. Suwayomi passes the
+Cloudflare challenge of a site with its own built-in browser. A site that
+refuses the IPs of the VPN stays out of reach.
+
+#### Login of Suwayomi
+
+In `.env`, set `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD` to the login of its
+web UI, letters and digits only and distinct from the other tools, then restart
+doco-cd to apply `.env`:
+
+```sh
+docker restart doco-cd
+```
+
+Suwayomi asks for this login at every visit. The Dashboard uses it to read its
+figures, and policy to keep its settings. `./scripts/verify.sh` checks that the
+web UI asks for it.
+
+#### Extensions
+
+Open `https://suwayomi.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. In
+Settings > Browse, add the URL of a Mihon extension repository, then in Browse >
+Extensions, install the extension of each manga site you read.
+
+#### Settings of Suwayomi kept by policy
+
+[policy](#policy) puts these back every night:
+
+| Setting                         | Value    |
+| ------------------------------- | -------- |
+| Download new chapters           | on       |
+| Skip manga with unread chapters | off      |
+| Save as CBZ                     | on       |
+| Automatic update interval       | 12 hours |
+
+Suwayomi checks the sites for new chapters every 12 hours and downloads each new
+one on its own. Friends read in Jellyfin, so Suwayomi sees every chapter as
+unread, and would skip every manga if it left out those with unread chapters.
+CBZ is also set from compose, at each start.
+
+#### Want a manga
+
+In Browse, pick a source, search a manga and add it to the library. Open it,
+select the chapters to keep and click "Download". Suwayomi files them under
+`mangas/<source>/<manga>` in the manga folder, where the Manga library of
+Jellyfin picks them up. New chapters follow on their own.
+
+### Tdarr
+
+Requires [Radarr](#radarr) and [Sonarr](#sonarr).
+
+Tdarr normalises every video of the Library to MKV H265 within 1920x1080, one
+compact format that most devices play directly, offline on a phone included. MP4
+holds subtitles and several audio tracks poorly, and H264 makes much larger
+files. Unmanic or FileFlows can replace it. It sees only the movies, shows and
+anime folders, under the same paths as Radarr and Sonarr, and never the torrents
+tree. It writes each new file beside the original, then swaps it in, so the
+hardlink to a seeding torrent breaks and the torrent keeps its own data: the
+video then takes its space twice while its torrent seeds. Its work files go to
+`<APPDATA_ROOT>/tdarr/cache`.
+
+The flow, `services/tdarr/flow.json`, picks the tracks of each file, embeds the
+subtitle files of Bazarr, replaces the original as MKV and asks Radarr or Sonarr
+to rescan its folder, following the rules of [Languages](#languages).
+
+#### Login of Tdarr
+
+1. In `.env`, set `TDARR_API_KEY` before the first start of Tdarr, to `tapi_`
+   followed by random letters and digits:
+
+   ```bash
+   echo "tapi_$(openssl rand -hex 16)"
+   ```
+
+2. Start Tdarr with `docker restart doco-cd`. It creates the `admin` login with
+   that key as its password, and its internal node connects with the same key.
+3. Open `https://tdarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the
+   local network and sign in with `admin` and the key.
+4. In Tools > Account, click "Change Password" and set a strong password,
+   distinct from the other tools, stored in your password manager. The key keeps
+   working for the node.
+
+#### Flow
+
+Tdarr keeps its flows in its own database, so the repo holds the flow as an
+export.
+
+1. In Flows, click "Import JSON Flow Template", paste the content of
+   `services/tdarr/flow.json`, and create the flow.
+2. After pulling a change to `services/tdarr/flow.json`, import it again and
+   pick "Update Existing Flow".
+
+#### Libraries of Tdarr
+
+In Libraries, click "Library +" once per folder:
+
+| Library | Source               |
+| ------- | -------------------- |
+| Movies  | `/data/media/movies` |
+| Shows   | `/data/media/shows`  |
+| Anime   | `/data/media/anime`  |
+
+For each library:
+
+1. In Source, enter the folder, check "Folder Watch", and leave "Hold Files
+   After Scanning" checked so a file still being copied by Radarr or Sonarr
+   waits before it is processed.
+2. In Transcode Cache, enter `/temp`.
+3. In Transcode, pick "Flows" and the `Jellynas normalise to MKV H265 1080p`
+   flow.
+4. Leave the output folder empty, so each file is replaced in place.
+
+#### Node
+
+On the home page, the internal node starts with one transcode and one health
+check CPU worker. Raise the transcode workers if the machine has cores to spare,
+each one encodes a file at a time.
+
+### Bazarr
+
+Requires [Recyclarr](#recyclarr) and [Tdarr](#tdarr).
+
+Bazarr finds the subtitles for watching in the original audio. It learns about
+each file from Radarr and Sonarr, then saves the subtitles next to it in the
+Library, where Tdarr embeds them into the video and deletes the subtitle files.
+It sees only the movies, shows and anime folders, under the same paths as Radarr
+and Sonarr, so no path mapping is needed. Jellyfin can also fetch subtitles on
+demand with its OpenSubtitles plugin, without embedding them.
+
+#### Login of Bazarr
+
+1. Open `https://bazarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the
+   local network.
+2. In Settings > General > Security, set "Authentication" to "Form", enter a
+   username and a strong password, distinct from the other tools, stored in your
+   password manager, and save.
+
+#### Languages
+
+Every work in a foreign language, anime included, gets French and English
+subtitles, and a French original work gets none. Subtitles only serve to watch
+in the original audio. They are embedded in the video rather than left beside
+it, and only Tdarr writes the file, so Bazarr and Tdarr never rewrite the same
+video.
+
+Sonarr and Radarr tag each French original work so that Bazarr leaves it out. In
+Settings > Tags of Sonarr, click "+" under Auto Tagging, name the rule `French
+original`, check "Remove Tags Automatically", enter `french-original` as the
+tag, add the condition "Original Language is French", and save. Do the same in
+Radarr. Each work gets its tag at its next refresh, or right away with "Update
+All" in Series and in Movies.
+
+Then in Bazarr, Settings > Languages:
+
+1. Add French and English to "Languages Filter".
+2. Under "Languages Profile", click "Add New Profile", name it `French and
+   English`, add French and English, and save the profile.
+3. Check "Series" and "Movies" under "Tag-Based Automatic Language Profile
+   Selection", and enter `french-original` under "Remove Profile Tags".
+4. Under "Default Language Profiles For Newly Added Shows", check "Series" and
+   "Movies" and pick `French and English` for both, then save.
+
+A subtitle track already inside the file counts as found, so a `MULTi` release
+with French subtitles needs no download.
+
+#### Providers
+
+In Settings > Providers, click "+" for each provider, fill in what it asks for,
+and save:
+
+| Provider | Sign-up | Covers |
+| --- | --- | --- |
+| OpenSubtitles.com | Free account on [opensubtitles.com](https://www.opensubtitles.com), with a daily download limit | Movies and shows, the widest French catalogue |
+| Podnapisi | None | Movies and shows |
+| Gestdown | None | Shows, from the Addic7ed catalogue |
+
+#### Sonarr and Radarr
+
+1. In Settings > Sonarr, check "Enabled", enter `sonarr` as the address and
+   `8989` as the port, paste the Sonarr API key, click "Test", then "Save".
+2. In Settings > Radarr, check "Enabled", enter `radarr` as the address and
+   `7878` as the port, paste the Radarr API key, click "Test", then "Save".
+
+Bazarr then lists every show and movie, picks the profile of each from its tags
+at every sync, and searches subtitles for each new file.
+
+#### Anime on an older NAS
+
+A NAS set up before anime got French and English subtitles still gives them
+French and Japanese ones. To switch it:
+
+1. In Settings > Tags of Sonarr and of Radarr, delete the `Anime` rule under
+   Auto Tagging. Then in Series of Sonarr, click "Select Series", select every
+   anime, click "Set Tags" at the bottom, pick `anime`, choose "Remove", and
+   apply. Do the same in Movies of Radarr. Back in Settings > Tags, delete the
+   `anime` tag, now unused.
+2. In Bazarr, Settings > Languages, delete the `French and Japanese` profile,
+   remove Japanese from "Languages Filter", and save. No work carries the
+   `anime` tag any more, so no sync gives it back that profile.
+3. In Series, click "Mass Edit", select every anime, pick `French and English`
+   as the profile, and save. Do the same in Movies for every anime movie.
+4. In Settings > Providers, delete Jimaku.cc. In the Metadata tab, delete AniDB,
+   and save.
+5. Import `services/tdarr/flow.json` again in Tdarr, as [Tdarr](#tdarr)
+   describes.
+
+#### Subtitles embedded by Tdarr
+
+The Library holds no subtitle file: Tdarr embeds each one into its video, so a
+Friend who downloads a video gets its subtitles. When Bazarr finds a subtitle
+after Tdarr has processed the video, it puts the video back in the Tdarr queue
+with `services/bazarr/tdarr_requeue.py`, which reads `TDARR_API_KEY` from
+`.env`. In Settings > Subtitles:
+
+1. Under "Embedded Subtitles", leave "Use Embedded Subtitles" checked, so an
+   embedded track counts as found and is never downloaded again.
+2. Under "Upgrading Subtitles", uncheck "Upgrade Previously Downloaded
+   Subtitles". An upgrade would add a second track of the same language to the
+   video.
+3. Under "Post-Processing", check "Custom Post-Processing", leave the score
+   thresholds unchecked, and enter this command:
+
+   ```sh
+   python3 /scripts/tdarr_requeue.py "{{episode}}"
+   ```
+
+4. Save.
+
+Bazarr writes the outcome of each command in System > Logs.
 
 ## Contributing
 
