@@ -1234,7 +1234,7 @@ any.
 | Permissions of Friends | add artist, add album, playlists         |
 | Following an artist    | new releases only                        |
 | Every playlist         | scrobble tracks, show availability       |
-| Name of a playlist     | `<username> - <name>`, from its owner    |
+| Name of a playlist     | `<Username> - <name>`, from its owner    |
 | Imported playlist      | no auto-sync, keep removed tracks        |
 
 The permissions of Friends are also the default ones, every delete stays off,
