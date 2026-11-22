@@ -71,6 +71,12 @@ section h2::before { content: ""; width: 8px; height: 8px; border-radius: 2px; b
 .service .facts .failed { color: var(--unhealthy); }
 .service .meter { display: grid; gap: 2px; font-size: 12px; color: var(--muted); min-width: 0; }
 .service .meter b { color: var(--text); font-weight: 500; }
+[data-level="0"] { --level: var(--running); }
+[data-level="1"] { --level: color-mix(in srgb, var(--running) 50%, var(--restarting)); }
+[data-level="2"] { --level: var(--restarting); }
+[data-level="3"] { --level: color-mix(in srgb, var(--restarting) 50%, var(--unhealthy)); }
+[data-level="4"] { --level: var(--unhealthy); }
+.service .meter[data-level] b, .service .up b[data-level] { color: var(--level); }
 .service .meter svg { width: 100%; height: 18px; display: block; overflow: visible; }
 .service .up { font-size: 12px; color: var(--muted); display: grid; }
 .service .up b { color: var(--text); font-weight: 500; }
@@ -432,16 +438,29 @@ function facts(service) {
   return node;
 }
 
-function meter(label, points, shown) {
-  return element("span", { class: "meter" }, element("span", {}, `${label} `, element("b", {}, points.length ? shown(points.at(-1)) : "—")), plot([[points, "var(--accent)"]]));
+const CPU_STEPS = [10, 35, 75, 150];
+const RAM_STEPS = [512, 1024, 2048, 4096].map(mebibytes => mebibytes * 1048576);
+const UPTIME_STEPS = [99.5, 98, 95, 90];
+
+function level(value, steps, falling) {
+  const index = steps.findIndex(step => falling ? value >= step : value < step);
+  return String(index === -1 ? steps.length : index);
+}
+
+function meter(label, points, shown, steps) {
+  if (!points.length) return element("span", { class: "meter" }, element("span", {}, `${label} `, element("b", {}, "—")), plot([[points, "var(--accent)"]]));
+  const last = points.at(-1);
+  return element("span", { class: "meter", "data-level": level(last, steps) }, element("span", {}, `${label} `, element("b", {}, shown(last))), plot([[points, "var(--level)"]]));
 }
 
 function uptime(name) {
   const found = (board.uptime || {})[name] || {};
-  const shown = value => value === null || value === undefined ? "—" : `${value.toFixed(2)}%`;
-  return element("span", { class: "up" },
-    element("span", {}, "24h ", element("b", {}, shown(found.day))),
-    element("span", {}, "7d ", element("b", {}, shown(found.week))));
+  const node = element("span", { class: "up" });
+  for (const [label, value] of [["24h", found.day], ["7d", found.week]]) {
+    if (value === null || value === undefined) continue;
+    node.append(element("span", {}, `${label} `, element("b", { "data-level": level(value, UPTIME_STEPS, true) }, `${value.toFixed(2)}%`)));
+  }
+  return node;
 }
 
 function expandable(service) {
@@ -491,8 +510,8 @@ function row(service) {
   const who = element("span", { class: "who" }, name, element("small", {}, said));
   const line = element("div", { class: "line" },
     element("span", { class: "dot", title: stateOf(service) }), icon(service), who, facts(service),
-    meter("CPU", series.cpu || [], value => `${value.toFixed(1)}%`),
-    meter("RAM", series.memory || [], bytes),
+    meter("CPU", series.cpu || [], value => `${value.toFixed(1)}%`, CPU_STEPS),
+    meter("RAM", series.memory || [], bytes, RAM_STEPS),
     uptime(service.name),
     actions(service));
   if (errors.has(service.service)) line.append(element("span", { class: "error" }, errors.get(service.service)));

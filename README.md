@@ -2710,19 +2710,19 @@ The Dashboard, `services/dashboard`, is the start page of the Admin, on the
 local network only, with no sign-in. A strip on top gives the time and the Host.
 Under it, one table lists every service, grouped in sections that tell how many
 need a look. A row gives the state, the link, the live figures of the service,
-its CPU and memory, its uptime, and, for a service with the
-`dashboard.switchable` label, a restart and a power button, through its own
-socket proxy. A row with a list, such as the missing subtitles of Bazarr or the
-next days of Sonarr, unfolds. The rail on the right shows what plays on Jellyfin
-and its latest additions, the Requests waiting in Seerr with buttons to approve
-or decline them, the torrents of qBittorrent, each indexer, proxy and download
-client of Prowlarr, Radarr and Sonarr as on, off, failing or paused by ratio
-with their health warnings, the pools and disks of TrueNAS and the space of the
-Media tree. The Quick actions, the Pull requests and the Farm follow the table.
-The Dashboard serves its own font, IBM Plex Sans, under the SIL Open Font
-License. It installs as a web app: the install button of the address bar in
-Chrome or Edge, "Add to Home screen" on Android, Share then "Add to Home Screen"
-on an iPhone.
+its CPU and memory, from green to red as they grow, its uptime, from green to
+red as it drops, and, for a service with the `dashboard.switchable` label, a
+restart and a power button, through its own socket proxy. A row with a list,
+such as the missing subtitles of Bazarr or the next days of Sonarr, unfolds. The
+rail on the right shows what plays on Jellyfin and its latest additions, the
+Requests waiting in Seerr with buttons to approve or decline them, the torrents
+of qBittorrent, each indexer, proxy and download client of Prowlarr, Radarr and
+Sonarr as on, off, failing or paused by ratio with their health warnings, the
+pools and disks of TrueNAS and the space of the Media tree. The Quick actions,
+the Pull requests and the Farm follow the table. The Dashboard serves its own
+font, IBM Plex Sans, under the SIL Open Font License. It installs as a web app:
+the install button of the address bar in Chrome or Edge, "Add to Home screen" on
+Android, Share then "Add to Home Screen" on an iPhone.
 
 Each row comes from the `dashboard.*` labels of its service in its
 `compose.yaml`, which hold no key. The Dashboard reads the keys from `.env` and
@@ -2788,7 +2788,7 @@ Uptime Kuma, Status Pages, click "New Status Page", enter `NAS` as the name and
 for a new service, goes on the status page by hand too. The status page is
 reachable on the lan name of Uptime Kuma without a login, so any device of the
 local network can read it. The uptime of each card comes from the monitor of the
-same name.
+same name, and a service without a monitor shows none.
 
 ### Open
 
