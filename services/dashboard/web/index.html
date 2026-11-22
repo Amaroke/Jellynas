@@ -2,9 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>Dashboard</title>
+<link rel="manifest" href="/assets/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-small.png">
+<link rel="apple-touch-icon" href="/assets/icon-apple.png">
+<meta name="theme-color" content="#eef0f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Dashboard">
 <link rel="preload" href="/assets/plex-sans-regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.min.css">
@@ -13,13 +21,13 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--font); font-variant-numeric: tabular-nums; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 24px 8px; max-width: 1680px; margin: 0 auto; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(18px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right)) 8px calc(24px + env(safe-area-inset-left)); max-width: 1680px; margin: 0 auto; }
 header h1 { font-size: 20px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 #live { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 #live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--unhealthy); }
 #live.on::before { background: var(--running); }
-main { padding: 0 24px 48px; max-width: 1680px; margin: 0 auto; display: grid; gap: 24px; }
-@media (max-width: 600px) { header { padding: 14px 16px 6px; } main { padding: 0 16px 32px; } }
+main { padding: 0 calc(24px + env(safe-area-inset-right)) calc(48px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left)); max-width: 1680px; margin: 0 auto; display: grid; gap: 24px; }
+@media (max-width: 600px) { header { padding: calc(14px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 6px calc(16px + env(safe-area-inset-left)); } main { padding: 0 calc(16px + env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); } }
 section h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
 section h2::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--accent); }
 
@@ -39,7 +47,7 @@ section h2::before { content: ""; width: 8px; height: 8px; border-radius: 2px; b
 @media (max-width: 1100px) { .room { grid-template-columns: minmax(0, 1fr); } }
 
 .table { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
-.table h3 { position: sticky; top: 0; z-index: 1; margin: 0; padding: 10px 16px; font-size: 13px; font-weight: 600; background: var(--raised); border-top: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+.table h3 { position: sticky; top: env(safe-area-inset-top); z-index: 1; margin: 0; padding: 10px 16px; font-size: 13px; font-weight: 600; background: var(--raised); border-top: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
 .table .group:first-child h3 { border-top: none; border-radius: var(--radius) var(--radius) 0 0; }
 .table h3::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--accent); }
 .table h3 small { color: var(--muted); font-weight: 400; font-size: 12px; }
@@ -85,7 +93,7 @@ section h2::before { content: ""; width: 8px; height: 8px; border-radius: 2px; b
   .service .more-area { padding-left: 16px; }
 }
 
-.rail { display: grid; gap: 14px; position: sticky; top: 12px; }
+.rail { display: grid; gap: 14px; position: sticky; top: calc(12px + env(safe-area-inset-top)); }
 @media (max-width: 1100px) { .rail { position: static; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; } }
 .block { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 10px; min-width: 0; align-content: start; }
 .block h4 { margin: 0; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }

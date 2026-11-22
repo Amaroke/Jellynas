@@ -2718,7 +2718,9 @@ and its latest additions, the Requests waiting in Seerr with buttons to approve
 or decline them, the torrents of qBittorrent, the pools and disks of TrueNAS and
 the space of the Media tree. The Quick actions, the Pull requests and the Farm
 follow the table. The Dashboard serves its own font, IBM Plex Sans, under the
-SIL Open Font License.
+SIL Open Font License. It installs as a web app: the install button of the
+address bar in Chrome or Edge, "Add to Home screen" on Android, Share then "Add
+to Home Screen" on an iPhone.
 
 Each row comes from the `dashboard.*` labels of its service in its
 `compose.yaml`, which hold no key. The Dashboard reads the keys from `.env` and

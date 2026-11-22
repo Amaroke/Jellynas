@@ -88,12 +88,14 @@ fn asset_kind(file: &str) -> Option<&'static str> {
         "js" => Some("text/javascript"),
         "css" => Some("text/css"),
         "woff2" => Some("font/woff2"),
+        "png" => Some("image/png"),
+        "webmanifest" => Some("application/manifest+json"),
         _ => None,
     }
 }
 
 fn cache_of(kind: &str) -> Option<&'static str> {
-    (kind == "font/woff2").then_some("public, max-age=2592000")
+    matches!(kind, "font/woff2" | "image/png").then_some("public, max-age=2592000")
 }
 
 async fn asset(State(app): State<Arc<App>>, Path(file): Path<String>) -> Response {
@@ -238,17 +240,52 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_fonts_are_cached_since_scripts_and_styles_change_with_each_deploy() {
+    fn the_manifest_starts_at_the_page_and_names_icons_that_are_served() {
+        let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(web.join("manifest.webmanifest")).unwrap())
+                .unwrap();
+        assert_eq!("/", manifest["start_url"]);
+        assert_eq!("/", manifest["scope"]);
+        assert_eq!("standalone", manifest["display"]);
+        let icons = manifest["icons"].as_array().unwrap();
+        let sizes: Vec<&str> = icons
+            .iter()
+            .filter_map(|icon| icon["sizes"].as_str())
+            .collect();
+        assert!(sizes.contains(&"192x192"));
+        assert!(sizes.contains(&"512x512"));
+        assert!(icons.iter().any(|icon| icon["purpose"] == "maskable"));
+        for icon in icons {
+            let file = icon["src"]
+                .as_str()
+                .unwrap()
+                .strip_prefix("/assets/")
+                .unwrap();
+            assert_eq!(Some("image/png"), asset_kind(file), "{file}");
+            assert!(web.join(file).is_file(), "{file}");
+        }
+    }
+
+    #[test]
+    fn only_fonts_and_icons_are_cached_since_the_rest_changes_with_each_deploy() {
         assert_eq!(Some("public, max-age=2592000"), cache_of("font/woff2"));
+        assert_eq!(Some("public, max-age=2592000"), cache_of("image/png"));
+        assert_eq!(None, cache_of("application/manifest+json"));
         assert_eq!(None, cache_of("text/javascript"));
         assert_eq!(None, cache_of("text/css"));
     }
 
     #[test]
-    fn only_plain_scripts_styles_and_fonts_are_assets() {
+    fn only_plain_scripts_styles_fonts_images_and_the_manifest_are_assets() {
         assert_eq!(Some("text/javascript"), asset_kind("sections.js"));
         assert_eq!(Some("text/css"), asset_kind("sections.css"));
         assert_eq!(Some("font/woff2"), asset_kind("plex-sans-medium.woff2"));
+        assert_eq!(Some("image/png"), asset_kind("icon-maskable.png"));
+        assert_eq!(
+            Some("application/manifest+json"),
+            asset_kind("manifest.webmanifest")
+        );
         for file in [
             "index.html",
             "../state.js",
