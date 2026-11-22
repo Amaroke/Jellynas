@@ -304,6 +304,7 @@ pub fn qbittorrent(torrents: &Value) -> Parsed {
         ("Upload", rate(up)),
     ]);
     found.metrics = vec![("download", down), ("upload", up)];
+    found.idle = Some("Nothing downloading".to_string());
     found.rows = leeches
         .into_iter()
         .take(ROWS)
@@ -382,6 +383,7 @@ pub fn radarr(movies: &Value, status: &Value, details: &Value) -> Parsed {
         ("Missing", count(missing.len() as u64)),
         ("Queued", count(whole(status, "totalCount")?)),
     ]);
+    found.idle = Some("Queue empty".to_string());
     found.rows = queue(details, |entry| {
         titled(movies, &entry["movieId"])
             .or(entry["title"].as_str())
@@ -398,6 +400,7 @@ pub fn sonarr(series: &Value, queued: &Value, missing: &Value, details: &Value) 
         ("Wanted", count(whole(missing, "totalRecords")?)),
         ("Queued", count(whole(queued, "totalRecords")?)),
     ]);
+    found.idle = Some("Queue empty".to_string());
     found.rows = queue(details, |entry| {
         let episode = entry["episode"]["title"]
             .as_str()
@@ -790,6 +793,7 @@ mod tests {
             {"name": "Paused", "state": "stoppedUP", "progress": 1, "dlspeed": 0, "upspeed": 0, "size": gib}
         ]);
         let reading = qbittorrent(&torrents).unwrap();
+        assert_eq!(Some("Nothing downloading".to_string()), reading.idle);
         assert_eq!(
             vec![
                 ("Leech", "2"),
@@ -826,6 +830,7 @@ mod tests {
             {"movieId": 2, "title": "Dune.2021.1080p", "status": "downloading", "trackedDownloadState": "downloading", "size": 100, "sizeleft": 25, "timeleft": "00:12:00.3802167"}
         ]);
         let reading = radarr(&movies, &status, &details).unwrap();
+        assert_eq!(Some("Queue empty".to_string()), reading.idle);
         assert_eq!(
             vec![
                 ("Movies", "1"),
@@ -853,6 +858,7 @@ mod tests {
             {"seriesId": 7, "title": "Severance.S02E03", "episode": {"title": "Who Is Alive?"}, "status": "downloading", "size": 0, "sizeleft": 0}
         ]);
         let reading = sonarr(&series, &queue, &missing, &details).unwrap();
+        assert_eq!(Some("Queue empty".to_string()), reading.idle);
         assert_eq!(
             vec![("Series", "2"), ("Wanted", "2"), ("Queued", "1")],
             figures(&reading)
