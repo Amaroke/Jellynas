@@ -775,13 +775,19 @@ class Adoption(unittest.TestCase):
 
 
 class Ledger(unittest.TestCase):
-    def test_every_torrent_counts_and_removed_ones_stay(self):
+    def test_every_torrent_counts_and_removed_ones_leave(self):
         qbt = FakeQBittorrent([
             torrent("c411", category="movies", downloaded_gb=6, uploaded_gb=1),
             torrent("public", category="movies", tracker=PUBLIC, downloaded_gb=9),
         ])
-        state = run(qbt, state=empty_state(transfers={"gone": [2 * GB, 0]}))
-        self.assertEqual(state["transfers"], {"c411": [6 * GB, 1 * GB], "public": [9 * GB, 0], "gone": [2 * GB, 0]})
+        state = run(qbt, state=empty_state(transfers={"gone": [2 * GB, 0]}, history={"gone": [[NOW, 0, 0]]}, zen={"gone": [0, DAY]}))
+        self.assertEqual(state["transfers"], {"c411": [6 * GB, 1 * GB], "public": [9 * GB, 0]})
+        self.assertNotIn("gone", state["history"])
+        self.assertNotIn("gone", state["zen"])
+
+    def test_an_empty_answer_of_qbittorrent_forgets_nothing(self):
+        state = run(FakeQBittorrent(), state=empty_state(transfers={"kept": [GB, 0]}))
+        self.assertEqual(state["transfers"], {"kept": [GB, 0]})
 
 
 def report_of(state, origin, tracker="c411"):
@@ -800,11 +806,11 @@ class Origins(unittest.TestCase):
             torrent("other", category="shows", tracker="https://other.example/announce"),
             torrent("down", category="", tracker=""),
         ])
-        state = run(qbt, state=empty_state(transfers={"gone": [GB, 0]}, origins={"gone": ["radarr", "c411"]}))
+        state = run(qbt)
         self.assertEqual(state["origins"], {
             "movie": ["radarr", "c411"], "show": ["sonarr", "c411"], "book": ["lazylibrarian", "c411"], "grab": ["farm", "c411"],
             "seed": ["cross-seed", "c411"], "public": ["radarr", "nyaa"], "other": ["sonarr", "other"],
-            "down": ["unknown", "other"], "gone": ["radarr", "c411"],
+            "down": ["unknown", "other"],
         })
 
     def test_a_torrent_announcing_on_nyaa_among_other_trackers_counts_for_nyaa(self):
@@ -828,11 +834,11 @@ class Origins(unittest.TestCase):
             [("cross-seed", ""), ("farm", ""), ("radarr", "c411"), ("sonarr", "nyaa")],
         )
 
-    def test_a_removed_torrent_keeps_its_origin(self):
+    def test_a_removed_torrent_leaves_the_report(self):
         state = empty_state()
-        run(FakeQBittorrent([torrent("grab", downloaded_gb=3, uploaded_gb=1)]), state=state)
-        run(FakeQBittorrent(), state=state, now=NOW + 2 * DAY)
-        self.assertEqual(state["origins"], {"grab": ["farm", "c411"]})
+        run(FakeQBittorrent([torrent("grab"), torrent("kept")]), state=state)
+        run(FakeQBittorrent([torrent("kept")]), state=state, now=NOW + 2 * DAY)
+        self.assertEqual(state["origins"], {"kept": ["farm", "c411"]})
         self.assertEqual(report_of(state, "farm", None)["torrents"], 1)
 
     def test_an_origin_out_of_the_ledger_is_forgotten(self):
@@ -871,7 +877,7 @@ class Report(unittest.TestCase):
         qbt = FakeQBittorrent([torrent("movie", category="movies", seeders=100, downloaded_gb=6, uploaded_gb=3)])
         self.run_quietly(qbt, state, NOW)
         figures = report_of(state, "radarr")
-        self.assertEqual(figures["downloaded_gb"], 7)
+        self.assertEqual(figures["downloaded_gb"], 6)
         self.assertEqual(figures["week_downloaded_gb"], 4)
         self.assertEqual(figures["week_uploaded_gb"], 2.5)
         self.assertNotIn("gone", state["history"])

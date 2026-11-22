@@ -136,8 +136,8 @@ counts for the Farm.
 _Avoid_: source, kind, pool
 
 **Ledger**:
-What every torrent of the NAS downloaded and uploaded, removed torrents
-included.
+What every torrent qBittorrent holds downloaded and uploaded. A removed
+torrent leaves it.
 _Avoid_: history, stats
 
 **Deficit**:
