@@ -7,8 +7,8 @@ import itertools
 HISTORY_DAYS = 30
 PARTS = ("1", "2")
 COLORS = {
-    "paid": "#f472b6", "free": "#34d399", "library": "#38bdf8",
-    "unknown": "#94a3b8", "public": "#64748b",
+    "radarr": "#fbbf24", "sonarr": "#38bdf8", "lazylibrarian": "#a78bfa", "farm": "#34d399", "cross-seed": "#f472b6",
+    "unknown": "#94a3b8",
 }
 TIER_COLORS = ("#fb7185", "#fbbf24", "#facc15", "#34d399", "#a78bfa")
 BEHAVIOURS = ("free", "twins", "paid", "clean_public", "drop_twins", "hold", "adopt")
@@ -46,12 +46,11 @@ TEXT = {
         },
         "save": "Save",
         "disk": "Farm disk", "free": "Free", "of": "of {budget} {gb}",
-        "earned": "Earned by Source", "columns": ("Source", "Torrents", "Down", "Up", "Ratio"), "total": "Total",
+        "earned": "Earned by origin", "columns": ("Origin", "Torrents", "Down", "Up", "Ratio"), "total": "Total",
         "week": "7 days: {down} down, {up} up, ratio {ratio}, {days} days in the Farm",
         "explain": {
-            "paid": "Fresh release bought with download", "free": "No download counted on C411",
-            "library": "Movie or show of the Library",
-            "public": "Public tracker copy, leaves within two weeks", "unknown": "Source not recorded",
+            "radarr": "Movie of the Library", "sonarr": "Show of the Library", "lazylibrarian": "Book of the Library",
+            "farm": "Grabbed or moved into the Farm", "cross-seed": "Added by cross-seed", "unknown": "Origin not recorded",
         },
     },
     "fr": {
@@ -85,12 +84,11 @@ TEXT = {
         },
         "save": "Valider",
         "disk": "Disque de la Farm", "free": "Libre", "of": "sur {budget} {gb}",
-        "earned": "Gains par Source", "columns": ("Source", "Torrents", "Reçu", "Envoyé", "Ratio"), "total": "Total",
+        "earned": "Gains par origine", "columns": ("Origine", "Torrents", "Reçu", "Envoyé", "Ratio"), "total": "Total",
         "week": "7 jours : {down} reçus, {up} envoyés, ratio {ratio}, {days} jours dans la Farm",
         "explain": {
-            "paid": "Sortie fraîche payée en download", "free": "Aucun download compté sur C411",
-            "library": "Film ou série de la Library",
-            "public": "Copie d'un tracker public, part sous deux semaines", "unknown": "Source non enregistrée",
+            "radarr": "Film de la Library", "sonarr": "Série de la Library", "lazylibrarian": "Livre de la Library",
+            "farm": "Grabbé ou déplacé dans la Farm", "cross-seed": "Ajouté par cross-seed", "unknown": "Origine non enregistrée",
         },
     },
 }
@@ -402,16 +400,16 @@ def donut(farm, words):
     start, rings, legend = 0, [], []
     for s in farm["slices"]:
         part = 100 * s["gb"] / max(budget, used)
-        color = COLORS.get(s["source"], COLORS["unknown"])
+        color = COLORS.get(s["origin"], COLORS["unknown"])
         rings.append(
             f'<circle r="0.84" pathLength="100" stroke="{color}" '
             f'stroke-dasharray="{part:.2f} {100 - part:.2f}" stroke-dashoffset="{-start:.2f}"/>'
         )
         legend.append(
             f'<li><span class="swatch" style="background:{color}"></span>'
-            f'<span class="name">{escape(s["source"])}</span>'
+            f'<span class="name">{escape(s["origin"])}</span>'
             f'<span class="figure">{escape(size_text(s["gb"], words))}</span>'
-            f'<span class="meta">{escape(words["explain"].get(s["source"], ""))}</span></li>'
+            f'<span class="meta">{escape(words["explain"].get(s["origin"], ""))}</span></li>'
         )
         start += part
     legend.append(
@@ -443,19 +441,19 @@ def share(uploaded, downloaded):
     return round(uploaded / downloaded, 2) if downloaded else None
 
 
-def total_of(sources):
+def total_of(origins):
     keys = ("torrents", "downloaded_gb", "uploaded_gb", "week_downloaded_gb", "week_uploaded_gb", "farm_days")
-    sums = {k: sum(f[k] for f in sources) for k in keys}
+    sums = {k: sum(f[k] for f in origins) for k in keys}
     return {**sums, "ratio": share(sums["uploaded_gb"], sums["downloaded_gb"]), "week_ratio": share(sums["week_uploaded_gb"], sums["week_downloaded_gb"])}
 
 
-def earned(sources, words):
+def earned(origins, words):
     head = "".join(f"<th>{escape(c)}</th>" for c in words["columns"])
     body = "".join(
-        earned_rows(f["source"], f'<span class="swatch" style="background:{COLORS.get(f["source"], COLORS["unknown"])}"></span>', f, words)
-        for f in sources
+        earned_rows(f["origin"], f'<span class="swatch" style="background:{COLORS.get(f["origin"], COLORS["unknown"])}"></span>', f, words)
+        for f in origins
     )
-    foot = earned_rows(words["total"], "", total_of(sources), words) if sources else ""
+    foot = earned_rows(words["total"], "", total_of(origins), words) if origins else ""
     return (
         f'<figure class="earned"><figcaption>{escape(words["earned"])}</figcaption>'
         f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody><tfoot>{foot}</tfoot></table></figure>"
@@ -470,7 +468,7 @@ def body_of(board, part, words, language):
     if not board or not board.get("history"):
         return f'<p class="empty">{escape(words["empty"])}</p>'
     first = f'<section class="kpis">{strip(board, words)}</section>{gauge(board, words)}{trends(board, words)}'
-    second = f'{settings(board, words, language)}<section class="bottom">{donut(board["farm"], words)}{earned(board.get("sources", []), words)}</section>'
+    second = f'{settings(board, words, language)}<section class="bottom">{donut(board["farm"], words)}{earned(board.get("origins", []), words)}</section>'
     return {"1": first, "2": second}.get(part, first + second)
 
 

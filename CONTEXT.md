@@ -127,12 +127,11 @@ The same release, byte for byte, on a public tracker, downloaded there so that
 its C411 copy costs no download on C411.
 _Avoid_: mirror, duplicate
 
-**Source**:
-How a C411 torrent came to the NAS: a fresh paid grab, a free grab, a Library
-download from C411. A free grab costs no download on
-C411: a Twin, a freeleech grab or a cross-seed of the Library. It never changes,
-even when a Library torrent later moves to the Farm.
-_Avoid_: origin, kind, pool
+**Origin**:
+What added a torrent to qBittorrent: radarr, sonarr or lazylibrarian for the
+Library, farm for the Farm, or cross-seed. It follows the category of the
+torrent, so a Library torrent moved to the Farm counts for the Farm.
+_Avoid_: source, kind, pool
 
 **Ledger**:
 What every C411 torrent of the NAS downloaded and uploaded, removed torrents

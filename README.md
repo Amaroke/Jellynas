@@ -2396,12 +2396,12 @@ To use it:
    docker compose logs ratio
    ```
 
-Once a day, the logs also hold one line per Source, with its torrents, the GB
+Once a day, the logs also hold one line per Origin, with its torrents, the GB
 downloaded and uploaded and their ratio, the same over the last 7 days, and the
 days seeded in the Farm:
 
 ```sh
-docker compose logs ratio | grep Source
+docker compose logs ratio | grep Origin
 ```
 
 ratio also keeps one entry per day in `daily` of its state file, the last 30
@@ -2436,7 +2436,7 @@ downloads, 1, the floor and 2, with how much upload reaches each tier above and
 how much download each tier under allows, and two curves over 30 days: the Zen
 paid each night with the balance, and the uploaded and downloaded totals.
 `?part=2` shows each switch and setting of the Farm with
-what it does, its disk split by Source and what each Source earned.
+what it does, its disk split by Origin and what each Origin earned.
 `shot=<width>` sets the width in pixels for the pictures of Discord.
 
 The Farm section of the Dashboard draws the same board from `/board.json` of
