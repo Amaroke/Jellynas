@@ -1253,21 +1253,6 @@ Default rules, keep the back catalogue on "None" and only "New releases" on, so
 following an artist never downloads a whole discography: a Friend adds the
 albums they want one by one.
 
-### Import a music library
-
-1. Copy the music under `$DATA_ROOT/media/music`, which Aurral mounts as an
-   inbox, and give it to the Apps user:
-
-   ```sh
-   sudo chown -R 568:568 "$DATA_ROOT/media/music"
-   ```
-
-2. In Settings > Library, click "Import a folder", pick `/data/media/music`,
-   the mode "Move" and the monitor "Tracks". Aurral moves each file into its
-   Library as `Artist/Album/07 - Title`, fills in the missing tags, and empties
-   the inbox. Importing never follows an artist.
-3. In slskd, Shares, click "Rescan".
-
 ### Apps
 
 Aurral serves the Subsonic API at `https://aurral.<DOMAIN>:<CADDY_HTTPS_PORT>`,
@@ -2047,11 +2032,11 @@ Requires [Jellyfin](#jellyfin) and [Aurral](#aurral).
 
 The music bot plays the music of the Library in a voice channel of the Discord
 server of the Admin. Only a DJ commands it, a member who holds the `MusicDJ`
-role. It searches Jellyfin, then reads the files from the music folder, mounted
-read-only under the same path as Jellyfin, so it can never change a file. It
-connects out to Discord only, so it has no public name and no lan name.
-`./scripts/verify.sh` checks that it mounts nothing else and cannot write to it.
-It reports no play to Jellyfin.
+role. It searches Jellyfin, then reads the files at the path Jellyfin gives.
+Jellyfin holds no music since Aurral, and the bot mounts no media folder, so it
+finds nothing to play until it reads the Library of Aurral. It connects out to
+Discord only, so it has no public name and no lan name. `./scripts/verify.sh`
+checks that it mounts no media. It reports no play to Jellyfin.
 
 ### Discord application
 
