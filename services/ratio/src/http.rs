@@ -63,14 +63,13 @@ pub fn call(
             .map(str::to_string)
     };
     let retry_after = header("retry-after");
-    let cookie = response
-        .headers()
-        .get_all("set-cookie")
-        .iter()
-        .filter_map(|value| value.to_str().ok())
-        .find(|value| value.starts_with("SID="))
-        .and_then(|value| value.split(';').next())
-        .map(str::to_string);
+    let cookie = session_of(
+        response
+            .headers()
+            .get_all("set-cookie")
+            .iter()
+            .filter_map(|value| value.to_str().ok()),
+    );
     let status = response.status().as_u16();
     let body = response
         .body_mut()
@@ -119,5 +118,37 @@ mod tests {
             "hashes=a%7Cb&json=%7B%22x%22%3A%201%7D",
             String::from_utf8(body).unwrap()
         );
+    }
+}
+
+fn session_of<'a>(cookies: impl Iterator<Item = &'a str>) -> Option<String> {
+    cookies
+        .filter_map(|value| value.split(';').next())
+        .find(|pair| {
+            pair.split_once('=')
+                .is_some_and(|(name, _)| name == "SID" || name.starts_with("QBT_SID"))
+        })
+        .map(str::to_string)
+}
+
+#[cfg(test)]
+mod session {
+    use super::session_of;
+
+    #[test]
+    fn the_session_cookie_of_qbittorrent_is_kept_whatever_its_port() {
+        let found = session_of(
+            [
+                "other=1; path=/",
+                "QBT_SID_8080=abc; HttpOnly; SameSite=Lax; path=/",
+            ]
+            .into_iter(),
+        );
+        assert_eq!(Some("QBT_SID_8080=abc".to_string()), found);
+        assert_eq!(
+            Some("SID=x".to_string()),
+            session_of(["SID=x; path=/"].into_iter())
+        );
+        assert_eq!(None, session_of(["other=1"].into_iter()));
     }
 }
