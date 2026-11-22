@@ -1,4 +1,4 @@
-use super::format::{bytes, count, duration, epoch, percent, rate};
+use super::format::{bytes, count, day, duration, epoch, percent, rate};
 use super::{Figure, Poster, Reading, Row};
 use serde_json::Value;
 
@@ -55,6 +55,7 @@ fn reading(figures: Vec<(&str, String)>) -> Reading {
             .collect(),
         rows: vec![],
         posters: vec![],
+        shelf: None,
         idle: None,
         metrics: vec![],
     }
@@ -135,6 +136,30 @@ fn addition(item: &Value, images: &str) -> Option<(String, Poster)> {
     Some((key.to_string(), poster))
 }
 
+const WEEK: &str = "Next 7 days";
+
+fn poster_of(images: &Value) -> String {
+    images
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|image| image["coverType"].as_str() == Some("poster"))
+        .and_then(|image| image["remoteUrl"].as_str())
+        .filter(|url| url.starts_with("https://"))
+        .unwrap_or("")
+        .to_string()
+}
+
+fn within_week(date: &str, today: &str) -> bool {
+    let (Some(at), Some(start)) = (
+        epoch(&format!("{}T00:00:00Z", date.get(..10).unwrap_or(""))),
+        epoch(&format!("{today}T00:00:00Z")),
+    ) else {
+        return false;
+    };
+    at >= start && at < start + 7 * 86400
+}
+
 pub fn jellyfin(counts: &Value, sessions: &Value, latest: &Value, images: &str) -> Parsed {
     let mut found = reading(vec![
         ("Movies", count(whole(counts, "MovieCount")?)),
@@ -145,6 +170,7 @@ pub fn jellyfin(counts: &Value, sessions: &Value, latest: &Value, images: &str) 
         .iter()
         .filter_map(|session| playing(session, images))
         .collect();
+    found.shelf = Some("Latest additions".to_string());
     found.idle = Some(NOTHING_PLAYING.to_string());
     let mut seen = Vec::new();
     for (key, poster) in items(field(latest, "Items")?)?
@@ -327,11 +353,46 @@ pub fn gluetun(ip: &Value) -> Parsed {
     ]))
 }
 
+fn missing(entry: &Value) -> String {
+    let names: Vec<&str> = entry["missing_subtitles"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|language| language["name"].as_str())
+        .collect();
+    if names.is_empty() {
+        "Missing subtitles".to_string()
+    } else {
+        format!("Missing {}", names.join(", "))
+    }
+}
+
 pub fn bazarr(movies: &Value, episodes: &Value) -> Parsed {
-    Ok(reading(vec![
+    let mut found = reading(vec![
         ("Missing episodes", count(whole(episodes, "total")?)),
         ("Missing movies", count(whole(movies, "total")?)),
-    ]))
+    ]);
+    found.idle = Some("No subtitles missing".to_string());
+    let shows = episodes["data"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let title = match entry["episode_number"].as_str() {
+                Some(number) => format!("{} {number}", entry["seriesTitle"].as_str()?),
+                None => entry["seriesTitle"].as_str()?.to_string(),
+            };
+            Some(failure(&title, &missing(entry)))
+        });
+    let films: Vec<Row> = movies["data"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| Some(failure(entry["title"].as_str()?, &missing(entry))))
+        .take(ROWS / 2)
+        .collect();
+    found.rows = shows.take(ROWS - films.len()).chain(films).collect();
+    Ok(found)
 }
 
 pub fn prowlarr(stats: &Value) -> Parsed {
@@ -354,7 +415,27 @@ pub fn prowlarr(stats: &Value) -> Parsed {
     ]))
 }
 
-pub fn tdarr(stats: &Value) -> Parsed {
+fn worker(job: &Value) -> Option<Row> {
+    let file = job["file"].as_str()?;
+    let title = file.rsplit(['/', '\\']).next().unwrap_or(file).to_string();
+    let kind = match job["workerType"].as_str().unwrap_or("") {
+        kind if kind.starts_with("transcode") => "transcode",
+        kind if kind.starts_with("healthcheck") => "health check",
+        _ => "work",
+    };
+    let detail = match job["ETA"].as_str().filter(|eta| !eta.is_empty()) {
+        Some(eta) => format!("{kind} \u{b7} {eta} left"),
+        None => kind.to_string(),
+    };
+    Some(Row {
+        title,
+        detail,
+        progress: job["percentage"].as_f64().map(|percent| percent / 100.0),
+        image: None,
+    })
+}
+
+pub fn tdarr(stats: &Value, nodes: &Value) -> Parsed {
     let table = |index: u8| -> Result<u64, String> {
         let viewable = whole(stats, &format!("table{index}ViewableCount")).unwrap_or(0);
         if viewable > 0 {
@@ -362,12 +443,23 @@ pub fn tdarr(stats: &Value) -> Parsed {
         }
         whole(stats, &format!("table{index}Count"))
     };
-    Ok(reading(vec![
+    let mut found = reading(vec![
         ("Queue", count(table(1)? + table(4)?)),
         ("Processed", count(table(2)? + table(5)?)),
         ("Errored", count(table(3)? + table(6)?)),
         ("Saved", bytes(number(stats, "sizeDiff")? * 1e9)),
-    ]))
+    ]);
+    found.idle = Some("No transcode running".to_string());
+    found.rows = nodes
+        .as_object()
+        .into_iter()
+        .flat_map(|nodes| nodes.values())
+        .filter_map(|node| node["workers"].as_object())
+        .flat_map(|workers| workers.values())
+        .filter_map(worker)
+        .take(ROWS)
+        .collect();
+    Ok(found)
 }
 
 pub fn suwayomi(counts: &Value) -> Parsed {
@@ -482,7 +574,31 @@ fn titled<'a>(list: &'a [Value], id: &Value) -> Option<&'a str> {
         .and_then(|item| item["title"].as_str())
 }
 
-pub fn radarr(movies: &Value, status: &Value, details: &Value) -> Parsed {
+fn release(movie: &Value, today: &str) -> Option<(String, Poster)> {
+    let (date, kind) = [
+        ("inCinemas", "Cinema"),
+        ("digitalRelease", "Digital"),
+        ("physicalRelease", "Physical"),
+    ]
+    .into_iter()
+    .filter_map(|(key, kind)| Some((movie[key].as_str()?, kind)))
+    .filter(|(date, _)| within_week(date, today))
+    .min_by_key(|(date, _)| date.get(..10).map(String::from))?;
+    let poster = Poster {
+        title: movie["title"].as_str()?.to_string(),
+        detail: format!("{kind} \u{b7} {}", day(date)?),
+        image: poster_of(&movie["images"]),
+    };
+    Some((date.get(..10)?.to_string(), poster))
+}
+
+pub fn radarr(
+    movies: &Value,
+    status: &Value,
+    details: &Value,
+    calendar: &Value,
+    today: &str,
+) -> Parsed {
     let movies = items(movies)?;
     let flag = |movie: &Value, key: &str| movie[key].as_bool() == Some(true);
     let have = movies.iter().filter(|movie| flag(movie, "hasFile")).count();
@@ -507,10 +623,41 @@ pub fn radarr(movies: &Value, status: &Value, details: &Value) -> Parsed {
             .unwrap_or("Unknown movie")
             .to_string()
     })?;
+    let mut releases: Vec<(String, Poster)> = items(calendar)?
+        .iter()
+        .filter_map(|movie| release(movie, today))
+        .collect();
+    releases.sort_by(|a, b| a.0.cmp(&b.0));
+    found.shelf = Some(WEEK.to_string());
+    found.posters = releases
+        .into_iter()
+        .map(|(_, poster)| poster)
+        .take(POSTERS)
+        .collect();
     Ok(found)
 }
 
-pub fn sonarr(series: &Value, queued: &Value, missing: &Value, details: &Value) -> Parsed {
+fn airing(episode: &Value) -> Option<Poster> {
+    let series = &episode["series"];
+    Some(Poster {
+        title: series["title"].as_str()?.to_string(),
+        detail: format!(
+            "S{:02}E{:02} \u{b7} {}",
+            episode["seasonNumber"].as_u64()?,
+            episode["episodeNumber"].as_u64()?,
+            day(episode["airDate"].as_str()?)?
+        ),
+        image: poster_of(&series["images"]),
+    })
+}
+
+pub fn sonarr(
+    series: &Value,
+    queued: &Value,
+    missing: &Value,
+    details: &Value,
+    calendar: &Value,
+) -> Parsed {
     let series = items(series)?;
     let mut found = reading(vec![
         ("Series", count(series.len() as u64)),
@@ -528,6 +675,18 @@ pub fn sonarr(series: &Value, queued: &Value, missing: &Value, details: &Value) 
             None => episode.to_string(),
         }
     })?;
+    let mut airings: Vec<&Value> = items(calendar)?.iter().collect();
+    airings.sort_by_key(|episode| {
+        episode["airDateUtc"]
+            .as_str()
+            .or(episode["airDate"].as_str())
+    });
+    found.shelf = Some(WEEK.to_string());
+    found.posters = airings
+        .into_iter()
+        .filter_map(airing)
+        .take(POSTERS)
+        .collect();
     Ok(found)
 }
 
@@ -639,6 +798,7 @@ pub fn host(systems: &Value, name: &str) -> Parsed {
             .collect(),
         rows: vec![],
         posters: vec![],
+        shelf: None,
         idle: None,
         metrics: vec![],
     })
@@ -829,6 +989,31 @@ mod tests {
             vec![("Missing episodes", "6"), ("Missing movies", "0")],
             figures(&reading)
         );
+        assert_eq!(Some("No subtitles missing".to_string()), reading.idle);
+    }
+
+    #[test]
+    fn bazarr_lists_what_misses_subtitles() {
+        let episodes = json!({"total": 2, "data": [
+            {"seriesTitle": "Reincarnated as a Sword", "episode_number": "2x8", "episodeTitle": "The Island Kingdom", "missing_subtitles": [{"name": "Japanese"}, {"name": "French"}]},
+            {"seriesTitle": "Frieren", "episode_number": "1x1", "missing_subtitles": []}
+        ]});
+        let movies = json!({"total": 1, "data": [{"title": "Heat", "missing_subtitles": [{"name": "English"}]}]});
+        let reading = bazarr(&movies, &episodes).unwrap();
+        let row = |title: &str, detail: &str| Row {
+            title: title.into(),
+            detail: detail.into(),
+            progress: None,
+            image: None,
+        };
+        assert_eq!(
+            vec![
+                row("Reincarnated as a Sword 2x8", "Missing Japanese, French"),
+                row("Frieren 1x1", "Missing subtitles"),
+                row("Heat", "Missing English"),
+            ],
+            reading.rows
+        );
     }
 
     #[test]
@@ -850,6 +1035,35 @@ mod tests {
     }
 
     #[test]
+    fn tdarr_lists_its_running_workers() {
+        let stats = json!({
+            "sizeDiff": 0,
+            "table1Count": 0, "table2Count": 0, "table3Count": 0,
+            "table4Count": 0, "table5Count": 0, "table6Count": 0
+        });
+        let nodes = json!({"n1": {"workers": {
+            "w1": {"file": "/data/media/tv/Severance/S02E03.mkv", "percentage": 42.5, "workerType": "transcodecpu", "ETA": "0:12:30"},
+            "w2": {"file": "/data/media/movies/Heat.mkv", "workerType": "healthcheckcpu"}
+        }}});
+        let reading = tdarr(&stats, &nodes).unwrap();
+        let expected = vec![
+            Row {
+                title: "S02E03.mkv".into(),
+                detail: "transcode · 0:12:30 left".into(),
+                progress: Some(0.425),
+                image: None,
+            },
+            Row {
+                title: "Heat.mkv".into(),
+                detail: "health check".into(),
+                progress: None,
+                image: None,
+            },
+        ];
+        assert_eq!(expected, reading.rows);
+    }
+
+    #[test]
     fn tdarr_prefers_the_viewable_counts() {
         let stats = json!({
             "sizeDiff": 1.5,
@@ -860,7 +1074,9 @@ mod tests {
             "table5Count": 7, "table5ViewableCount": 7,
             "table6Count": 0, "table6ViewableCount": 0
         });
-        let reading = tdarr(&stats).unwrap();
+        let reading = tdarr(&stats, &json!({"n1": {"workers": {}}})).unwrap();
+        assert!(reading.rows.is_empty());
+        assert_eq!(Some("No transcode running".to_string()), reading.idle);
         assert_eq!(
             vec![
                 ("Queue", "5"),
@@ -933,6 +1149,63 @@ mod tests {
         );
     }
 
+    const TODAY: &str = "2026-11-22";
+
+    #[test]
+    fn radarr_shows_the_releases_of_the_week() {
+        let calendar = json!([
+            {"title": "Dune: Part Three", "inCinemas": "2026-12-18T00:00:00Z", "digitalRelease": "2026-11-24T00:00:00Z",
+             "images": [{"coverType": "fanart", "remoteUrl": "https://image.tmdb.org/f.jpg"}, {"coverType": "poster", "remoteUrl": "https://image.tmdb.org/p.jpg"}]},
+            {"title": "Old News", "physicalRelease": "2026-11-10T00:00:00Z", "images": []},
+            {"title": "No Poster", "inCinemas": "2026-11-22T00:00:00Z"}
+        ]);
+        let reading = radarr(
+            &json!([]),
+            &json!({"totalCount": 0}),
+            &json!([]),
+            &calendar,
+            TODAY,
+        )
+        .unwrap();
+        assert_eq!(
+            vec![
+                Poster {
+                    title: "No Poster".into(),
+                    detail: "Cinema · Sun 22 Nov".into(),
+                    image: String::new(),
+                },
+                Poster {
+                    title: "Dune: Part Three".into(),
+                    detail: "Digital · Tue 24 Nov".into(),
+                    image: "https://image.tmdb.org/p.jpg".into(),
+                },
+            ],
+            reading.posters
+        );
+    }
+
+    #[test]
+    fn sonarr_shows_the_episodes_of_the_week() {
+        let calendar = json!([
+            {"seasonNumber": 3, "episodeNumber": 8, "airDate": "2026-11-27",
+             "series": {"title": "The Apothecary Diaries", "images": [{"coverType": "poster", "remoteUrl": "https://artworks.thetvdb.com/p.jpg"}]}}
+        ]);
+        let reading = sonarr(
+            &json!([]),
+            &json!({"totalRecords": 0}),
+            &json!({"totalRecords": 0}),
+            &json!([]),
+            &calendar,
+        )
+        .unwrap();
+        let expected = vec![Poster {
+            title: "The Apothecary Diaries".into(),
+            detail: "S03E08 · Fri 27 Nov".into(),
+            image: "https://artworks.thetvdb.com/p.jpg".into(),
+        }];
+        assert_eq!(expected, reading.posters);
+    }
+
     #[test]
     fn radarr_counts_the_movies_and_lists_the_queue() {
         let movies = json!([
@@ -946,7 +1219,9 @@ mod tests {
             {"movieId": 3, "title": "Alien.1979.1080p", "status": "queued", "trackedDownloadState": "downloading", "size": 100, "sizeleft": 100},
             {"movieId": 2, "title": "Dune.2021.1080p", "status": "downloading", "trackedDownloadState": "downloading", "size": 100, "sizeleft": 25, "timeleft": "00:12:00.3802167"}
         ]);
-        let reading = radarr(&movies, &status, &details).unwrap();
+        let reading = radarr(&movies, &status, &details, &json!([]), TODAY).unwrap();
+        assert_eq!(Some("Next 7 days".to_string()), reading.shelf);
+        assert!(reading.posters.is_empty());
         assert_eq!(Some("Queue empty".to_string()), reading.idle);
         assert_eq!(
             vec![
@@ -974,7 +1249,8 @@ mod tests {
         let details = json!([
             {"seriesId": 7, "title": "Severance.S02E03", "episode": {"title": "Who Is Alive?"}, "status": "downloading", "size": 0, "sizeleft": 0}
         ]);
-        let reading = sonarr(&series, &queue, &missing, &details).unwrap();
+        let reading = sonarr(&series, &queue, &missing, &details, &json!([])).unwrap();
+        assert_eq!(Some("Next 7 days".to_string()), reading.shelf);
         assert_eq!(Some("Queue empty".to_string()), reading.idle);
         assert_eq!(
             vec![("Series", "2"), ("Wanted", "2"), ("Queued", "1")],

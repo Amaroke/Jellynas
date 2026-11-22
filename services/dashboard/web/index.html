@@ -46,6 +46,8 @@ section h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; 
 .posters .detail { color: var(--muted); }
 .posters .cover { width: 72px; height: 108px; border-radius: 6px; background: var(--bg); }
 .posters .idle .title { color: var(--muted); }
+.shelf { display: grid; gap: 4px; min-width: 0; }
+.shelf .caption { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .note { font-size: 12px; color: var(--restarting); }
 .note.failed { color: var(--unhealthy); }
 .alert { background: color-mix(in srgb, var(--unhealthy) 14%, var(--card)); border: 1px solid var(--unhealthy); border-radius: var(--radius); padding: 10px 14px; display: grid; gap: 4px; }
@@ -226,15 +228,16 @@ function panel(found, kind) {
     }
     nodes.push(element("ul", { class: "rows" }, item));
   }
-  if (reading && kind === "jellyfin" && !(reading.posters || []).length) {
-    nodes.push(element("ul", { class: "posters", "aria-label": "Latest additions" }, ...[1, 2, 3].map(() =>
-      element("li", { class: "idle" }, element("span", { class: "cover", "aria-hidden": "true" }),
-        element("span", { class: "title" }, "No additions"), element("span", { class: "detail" }, "—")))));
-  }
-  if (reading && reading.posters && reading.posters.length) {
-    nodes.push(element("ul", { class: "posters", "aria-label": "Latest additions" }, ...reading.posters.map(poster =>
-      element("li", { title: `${poster.title} · ${poster.detail}` }, picture(poster.image),
-        element("span", { class: "title" }, poster.title), element("span", { class: "detail" }, poster.detail)))));
+  if (reading && reading.shelf) {
+    const cover = () => element("span", { class: "cover", "aria-hidden": "true" });
+    const tiles = reading.posters.length
+      ? reading.posters.map(poster =>
+        element("li", { title: `${poster.title} · ${poster.detail}` }, poster.image ? picture(poster.image) : cover(),
+          element("span", { class: "title" }, poster.title), element("span", { class: "detail" }, poster.detail)))
+      : [1, 2, 3].map(() => element("li", { class: "idle" }, cover(),
+        element("span", { class: "title" }, found.updated ? "Nothing yet" : "—"), element("span", { class: "detail" }, "—")));
+    nodes.push(element("div", { class: "shelf" }, element("span", { class: "caption" }, reading.shelf),
+      element("ul", { class: "posters", "aria-label": reading.shelf }, ...tiles)));
   }
   if (found.error) {
     nodes.push(reading && found.updated

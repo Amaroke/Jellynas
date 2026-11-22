@@ -1,10 +1,10 @@
 use super::Reading;
-use super::format::count;
+use super::format::{count, date};
 use super::parse;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const LIMIT: u64 = 64 * 1024 * 1024;
 const SLOW: Duration = Duration::from_secs(120);
@@ -39,6 +39,13 @@ fn encode(input: &str) -> String {
         }
     }
     output
+}
+
+fn week() -> (String, String) {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
+    (date(now), date(now + 7 * 86400))
 }
 
 impl Client {
@@ -182,36 +189,59 @@ impl Client {
                 "/api/v1/indexerstats",
                 &arr("PROWLARR")?,
             )?),
-            "radarr" => parse::radarr(
-                &self.fetch("RADARR", "/api/v3/movie", &arr("RADARR")?)?,
-                &self.fetch("RADARR", "/api/v3/queue/status", &arr("RADARR")?)?,
-                &self.fetch("RADARR", "/api/v3/queue/details", &arr("RADARR")?)?,
-            ),
-            "sonarr" => parse::sonarr(
-                &self.fetch("SONARR", "/api/v3/series", &arr("SONARR")?)?,
-                &self.fetch("SONARR", "/api/v3/queue", &arr("SONARR")?)?,
-                &self.fetch("SONARR", "/api/v3/wanted/missing", &arr("SONARR")?)?,
-                &self.fetch(
-                    "SONARR",
-                    "/api/v3/queue/details?includeEpisode=true",
-                    &arr("SONARR")?,
-                )?,
-            ),
+            "radarr" => {
+                let (today, end) = week();
+                parse::radarr(
+                    &self.fetch("RADARR", "/api/v3/movie", &arr("RADARR")?)?,
+                    &self.fetch("RADARR", "/api/v3/queue/status", &arr("RADARR")?)?,
+                    &self.fetch("RADARR", "/api/v3/queue/details", &arr("RADARR")?)?,
+                    &self
+                        .fetch(
+                            "RADARR",
+                            &format!("/api/v3/calendar?start={today}&end={end}"),
+                            &arr("RADARR")?,
+                        )
+                        .unwrap_or_else(|_| json!([])),
+                    &today,
+                )
+            }
+            "sonarr" => {
+                let (today, end) = week();
+                parse::sonarr(
+                    &self.fetch("SONARR", "/api/v3/series", &arr("SONARR")?)?,
+                    &self.fetch("SONARR", "/api/v3/queue", &arr("SONARR")?)?,
+                    &self.fetch("SONARR", "/api/v3/wanted/missing", &arr("SONARR")?)?,
+                    &self.fetch(
+                        "SONARR",
+                        "/api/v3/queue/details?includeEpisode=true",
+                        &arr("SONARR")?,
+                    )?,
+                    &self
+                        .fetch(
+                            "SONARR",
+                            &format!("/api/v3/calendar?start={today}&end={end}&includeSeries=true"),
+                            &arr("SONARR")?,
+                        )
+                        .unwrap_or_else(|_| json!([])),
+                )
+            }
             "suwayomi" => self.suwayomi(),
             "bazarr" => {
                 let auth = self.key("BAZARR", "X-API-KEY")?;
                 parse::bazarr(
-                    &self.fetch("BAZARR", "/api/movies/wanted", &auth)?,
-                    &self.fetch("BAZARR", "/api/episodes/wanted", &auth)?,
+                    &self.fetch("BAZARR", "/api/movies/wanted?start=0&length=8", &auth)?,
+                    &self.fetch("BAZARR", "/api/episodes/wanted?start=0&length=8", &auth)?,
                 )
             }
             "tdarr" => {
                 let body = json!({"data": {"collection": "StatisticsJSONDB", "mode": "getById", "docID": "statistics"}});
-                parse::tdarr(&self.post(
-                    &self.url("TDARR", "/api/v2/cruddb")?,
-                    &self.key("TDARR", "x-api-key")?,
-                    &body,
-                )?)
+                let auth = self.key("TDARR", "x-api-key")?;
+                parse::tdarr(
+                    &self.post(&self.url("TDARR", "/api/v2/cruddb")?, &auth, &body)?,
+                    &self
+                        .fetch("TDARR", "/api/v2/get-nodes", &auth)
+                        .unwrap_or_else(|_| json!({})),
+                )
             }
             "beszel" => parse::beszel(&self.systems()?, self.var("BESZEL_SYSTEM")?),
             "uptime-kuma" => {
@@ -315,6 +345,7 @@ impl Client {
             ],
             rows: vec![],
             posters: vec![],
+            shelf: None,
             idle: None,
             metrics: vec![],
         })
