@@ -579,6 +579,7 @@ check_no_media_mount uptime-kuma
 check_no_media_mount autokuma
 check_no_media_mount dozzle
 check_mounted_read_only dashboard /media
+check_mounted_read_only dashboard /backup
 check_no_torrents_mount dashboard
 check_no_media_mount backup
 check_read_only backup /backup/appdata

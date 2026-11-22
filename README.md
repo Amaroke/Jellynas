@@ -2817,6 +2817,17 @@ without the proxy, to stop and start the services. `./scripts/verify.sh` checks
 that it cannot write to the appdata and that `BACKUP_ROOT` is on another dataset
 than the data and appdata roots.
 
+The [Dashboard](#dashboard) lists `BACKUP_ROOT` read-only, so its Backup row
+keeps the time of the last archive when the logs of the backup service start
+over, and turns to Missed when no archive came for more than a day. Give the
+Apps group the right to list the folder, and keep it on the new archives:
+
+```bash
+. <(grep -E '^(BACKUP_ROOT|PGID)=' .env)
+sudo chgrp -R "$PGID" "$BACKUP_ROOT"
+sudo chmod 2750 "$BACKUP_ROOT"
+```
+
 ### First archive
 
 Run a backup now, then check that its archive is there:

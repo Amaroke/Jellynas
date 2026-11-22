@@ -289,8 +289,15 @@ fn logfmt<'a>(line: &'a str, key: &str) -> Option<&'a str> {
 }
 
 const RUNNING: u64 = 3 * 3600;
+const NIGHTLY: u64 = 27 * 3600;
 
-pub fn backup(logs: &str, now: u64) -> Parsed {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Archive {
+    pub at: u64,
+    pub size: u64,
+}
+
+pub fn backup(logs: &str, archives: &[Archive], now: u64) -> Parsed {
     let mut started = None;
     let mut run = None;
     let mut stored = None;
@@ -312,27 +319,48 @@ pub fn backup(logs: &str, now: u64) -> Parsed {
             error = Some(failure(message, logfmt(line, "error").unwrap_or("")));
         }
     }
+    let newest = archives.iter().map(|archive| archive.at).max();
+    let last = stored.max(newest);
+    let missed = newest.is_some_and(|at| now.saturating_sub(at) > NIGHTLY);
     let result = if error.is_some() {
         "Failed"
-    } else if stored.is_some() && run == started {
+    } else if stored.is_some() && run == started && !missed {
         "Success"
-    } else if run.is_some_and(|at| now.saturating_sub(at) < RUNNING) {
+    } else if run.is_some_and(|at| now.saturating_sub(at) < RUNNING && stored < Some(at)) {
         "Running"
-    } else if run.is_some() {
+    } else if run.is_some() && stored < run {
         "Interrupted"
+    } else if missed {
+        "Missed"
+    } else if newest.is_some() {
+        "Success"
     } else {
         "Unknown"
     };
+    let size: u64 = archives.iter().map(|archive| archive.size).sum();
     let mut found = reading(vec![
         (
             "Last backup",
-            stored.map_or_else(|| "—".to_string(), |at| ago(now, at)),
+            last.map_or_else(|| "—".to_string(), |at| ago(now, at)),
         ),
         ("Took", took.map_or_else(|| "—".to_string(), duration)),
         ("Result", result.to_string()),
+        (
+            "Archives",
+            format!("{} · {}", count(archives.len() as u64), bytes(size as f64)),
+        ),
     ]);
     found.idle = Some("No error in the last run".to_string());
     found.rows = error.into_iter().collect();
+    if result == "Missed" {
+        found.rows.push(failure(
+            "The nightly backup left no archive",
+            &format!(
+                "Last archive {}",
+                last.map_or_else(String::new, |at| ago(now, at))
+            ),
+        ));
+    }
     Ok(found)
 }
 
@@ -1814,12 +1842,13 @@ time=2026-11-22T03:30:00.120+01:00 level=INFO msg="Now running script on schedul
 time=2026-11-22T03:31:41.565+01:00 level=INFO msg="Stored copy of backup `/tmp/appdata-2026-11-22T03-30-00.tar.gz` in `/archive`." storage=Local
 time=2026-11-22T03:31:41.609+01:00 level=INFO msg="None of 6 existing backups were pruned." storage=Local
 "#;
-        let reading = backup(logs, NOW).unwrap();
+        let reading = backup(logs, &[ARCHIVE], NOW).unwrap();
         assert_eq!(
             vec![
                 ("Last backup", "9h 48m ago"),
                 ("Took", "1m"),
-                ("Result", "Success")
+                ("Result", "Success"),
+                ("Archives", "1 · 474.0 MiB")
             ],
             figures(&reading)
         );
@@ -1833,12 +1862,13 @@ time=2026-11-21T03:31:00.000+01:00 level=INFO msg="Stored copy of backup `/tmp/a
 time=2026-11-22T03:30:00.000+01:00 level=INFO msg="Now running script on schedule 30 3 * * *"
 time=2026-11-22T03:30:05.000+01:00 level=ERROR msg="Fatal error running command: archive failed" error="no space left on device"
 "#;
-        let reading = backup(logs, NOW).unwrap();
+        let reading = backup(logs, &[], NOW).unwrap();
         assert_eq!(
             vec![
                 ("Last backup", "1d 9h ago"),
                 ("Took", "1m"),
-                ("Result", "Failed")
+                ("Result", "Failed"),
+                ("Archives", "0 · 0 B")
             ],
             figures(&reading)
         );
@@ -1852,21 +1882,61 @@ time=2026-11-22T03:30:05.000+01:00 level=ERROR msg="Fatal error running command:
         assert_eq!(expected, reading.rows);
         let never = backup(
             "time=2026-11-22T00:23:02.005+01:00 level=INFO msg=\"scheduled\"\n",
+            &[],
             NOW,
         )
         .unwrap();
         assert_eq!(
-            vec![("Last backup", "—"), ("Took", "—"), ("Result", "Unknown")],
+            vec![
+                ("Last backup", "—"),
+                ("Took", "—"),
+                ("Result", "Unknown"),
+                ("Archives", "0 · 0 B")
+            ],
             figures(&never)
         );
         let cut = "time=2026-11-22T03:30:00.000+01:00 level=INFO msg=\"Now running script\"\n";
         assert_eq!(
             ("Result", "Interrupted"),
-            figures(&backup(cut, NOW).unwrap())[2]
+            figures(&backup(cut, &[], NOW).unwrap())[2]
         );
         assert_eq!(
             ("Result", "Running"),
-            figures(&backup(cut, 1_795_314_600).unwrap())[2]
+            figures(&backup(cut, &[], 1_795_314_600).unwrap())[2]
+        );
+    }
+
+    const ARCHIVE: Archive = Archive {
+        at: 1_795_314_701,
+        size: 497_025_024,
+    };
+
+    #[test]
+    fn the_archives_tell_the_last_backup_once_the_logs_are_gone() {
+        let restarted =
+            "time=2026-11-22T10:20:30.342+01:00 level=INFO msg=\"Successfully scheduled backup\"\n";
+        let older = Archive {
+            at: ARCHIVE.at - 86_400,
+            size: 1_000,
+        };
+        assert_eq!(
+            vec![
+                ("Last backup", "9h 48m ago"),
+                ("Took", "—"),
+                ("Result", "Success"),
+                ("Archives", "2 · 474.0 MiB")
+            ],
+            figures(&backup(restarted, &[older, ARCHIVE], NOW).unwrap())
+        );
+        let two_days = NOW + 2 * 86_400;
+        let missed = backup(restarted, &[ARCHIVE], two_days).unwrap();
+        assert_eq!(("Result", "Missed"), figures(&missed)[2]);
+        assert_eq!(
+            vec![failure(
+                "The nightly backup left no archive",
+                "Last archive 2d 9h ago"
+            )],
+            missed.rows
         );
     }
 

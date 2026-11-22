@@ -71,6 +71,7 @@ services:
     volumes:
       - ./web:/web:ro
       - ${DATA_ROOT}/media:/media:ro
+      - ${BACKUP_ROOT}/:/backup:ro
       - ${APPDATA_ROOT}/dashboard:/state
     healthcheck:
       test:
