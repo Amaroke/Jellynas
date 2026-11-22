@@ -48,9 +48,8 @@ fn encode(input: &str) -> String {
     output
 }
 
-const STARR: [&str; 4] = [
+const STARR: [&str; 3] = [
     "/api/v3/indexer",
-    "/api/v3/indexerstatus",
     "/api/v3/downloadclient",
     "/api/v3/health",
 ];
@@ -288,9 +287,7 @@ impl Client {
                     &mut found,
                     "RADARR",
                     STARR,
-                    |[indexers, statuses, clients, health]| {
-                        parse::starr_links(&indexers, &statuses, &clients, &health, seconds())
-                    },
+                    |[indexers, clients, health]| parse::starr_links(&indexers, &clients, &health),
                 )?;
                 Ok(found)
             }
@@ -317,9 +314,7 @@ impl Client {
                     &mut found,
                     "SONARR",
                     STARR,
-                    |[indexers, statuses, clients, health]| {
-                        parse::starr_links(&indexers, &statuses, &clients, &health, seconds())
-                    },
+                    |[indexers, clients, health]| parse::starr_links(&indexers, &clients, &health),
                 )?;
                 Ok(found)
             }

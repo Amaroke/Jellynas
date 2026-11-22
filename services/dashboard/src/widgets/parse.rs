@@ -584,13 +584,7 @@ pub fn prowlarr_links(
     Ok((found, said(health)))
 }
 
-pub fn starr_links(
-    indexers: &Value,
-    statuses: &Value,
-    clients: &Value,
-    health: &Value,
-    now: u64,
-) -> Linked {
+pub fn starr_links(indexers: &Value, clients: &Value, health: &Value) -> Linked {
     let on =
         |item: &Value, keys: &[&str]| keys.iter().any(|key| item[*key].as_bool() == Some(true));
     let mut found = Vec::new();
@@ -601,7 +595,8 @@ pub fn starr_links(
             None => (full.clone(), None),
         };
         let mut item = link("indexer", indexer, name, hint)?;
-        let until = failing_until(statuses, item.id, now);
+        let failing = unavailable(health, "IndexerStatusCheck", &full)?
+            || unavailable(health, "IndexerLongTermStatusCheck", &full)?;
         item.state = if !on(
             indexer,
             &[
@@ -611,13 +606,12 @@ pub fn starr_links(
             ],
         ) {
             "off"
-        } else if until.is_some() {
+        } else if failing {
             "failing"
         } else {
             "on"
         }
         .into();
-        item.until = until.filter(|_| item.state == "failing");
         found.push(item);
     }
     found.sort_by_key(|item| item.name.to_lowercase());
@@ -1934,15 +1928,17 @@ time=2026-11-22T03:30:05.000+01:00 level=ERROR msg="Fatal error running command:
             {"id": 1, "name": "Nyaa.si (Prowlarr)", "enableRss": false, "enableAutomaticSearch": false, "enableInteractiveSearch": false},
             {"id": 4, "name": "Slow (Prowlarr)", "enableRss": true, "enableAutomaticSearch": true, "enableInteractiveSearch": true}
         ]);
-        let statuses = json!([{"indexerId": 4, "disabledTill": "2026-11-22T13:00:00Z"}]);
         let clients = json!([{"id": 1, "name": "qBittorrent", "enable": false}, {"id": 2, "name": "Aria", "enable": true}]);
-        let health = json!([{"source": "DownloadClientCheck", "type": "warning", "message": "No download client is available"}]);
-        let (found, said) = starr_links(&indexers, &statuses, &clients, &health, NOON).unwrap();
+        let health = json!([
+            {"source": "DownloadClientCheck", "type": "warning", "message": "No download client is available"},
+            {"source": "IndexerStatusCheck", "type": "warning", "message": "Indexers unavailable due to failures: Slow (Prowlarr)"}
+        ]);
+        let (found, said) = starr_links(&indexers, &clients, &health).unwrap();
         assert_eq!(
             vec![
                 ("indexer", "C411", "on", None),
                 ("indexer", "Nyaa.si", "off", None),
-                ("indexer", "Slow", "failing", Some(NOON + 3600)),
+                ("indexer", "Slow", "failing", None),
                 ("client", "Aria", "on", None),
                 ("client", "qBittorrent", "off", None),
             ],
@@ -1951,10 +1947,10 @@ time=2026-11-22T03:30:05.000+01:00 level=ERROR msg="Fatal error running command:
         assert_eq!(Some("from Prowlarr".to_string()), found[0].hint);
         assert_eq!(None, found[3].hint);
         let down = json!([{"source": "DownloadClientStatusCheck", "type": "warning", "message": "Clients indisponibles : Aria"}]);
-        let (found, _) = starr_links(&indexers, &statuses, &clients, &down, NOON).unwrap();
+        let (found, _) = starr_links(&indexers, &clients, &down).unwrap();
         assert_eq!(("client", "Aria", "failing", None), links(&found)[3]);
         let all = json!([{"source": "DownloadClientStatusCheck", "type": "error", "message": "Tous les clients sont indisponibles"}]);
-        let (found, _) = starr_links(&indexers, &statuses, &clients, &all, NOON).unwrap();
+        let (found, _) = starr_links(&indexers, &clients, &all).unwrap();
         assert_eq!(
             vec![
                 ("client", "Aria", "failing", None),
@@ -1962,13 +1958,17 @@ time=2026-11-22T03:30:05.000+01:00 level=ERROR msg="Fatal error running command:
             ],
             links(&found)[3..].to_vec()
         );
+        assert_eq!(2, said.len());
+        let long = json!([{"source": "IndexerLongTermStatusCheck", "type": "error", "message": "Tous les indexeurs sont indisponibles depuis plus de 6 heures"}]);
+        let (found, _) = starr_links(&indexers, &clients, &long).unwrap();
         assert_eq!(
-            vec![Health {
-                level: "warning".into(),
-                message: "No download client is available".into()
-            }],
-            said
+            vec![
+                ("indexer", "C411", "failing", None),
+                ("indexer", "Nyaa.si", "off", None),
+                ("indexer", "Slow", "failing", None)
+            ],
+            links(&found)[..3].to_vec()
         );
-        assert!(starr_links(&indexers, &statuses, &json!(null), &health, NOON).is_err());
+        assert!(starr_links(&indexers, &json!(null), &health).is_err());
     }
 }
