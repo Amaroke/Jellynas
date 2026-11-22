@@ -23,6 +23,7 @@ services:
       dashboard.icon: prowlarr.svg
       dashboard.href: https://prowlarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/prowlarr:/config
     healthcheck:

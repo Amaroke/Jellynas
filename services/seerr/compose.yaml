@@ -28,6 +28,7 @@ services:
       dashboard.icon: seerr.svg
       dashboard.href: https://seerr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/seerr:/app/config
     healthcheck:

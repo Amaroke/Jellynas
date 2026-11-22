@@ -24,6 +24,7 @@ services:
       dashboard.icon: autobrr.svg
       dashboard.href: https://autobrr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/autobrr:/config
     healthcheck:

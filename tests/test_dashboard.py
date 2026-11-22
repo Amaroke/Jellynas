@@ -88,6 +88,12 @@ class DashboardLabelsTest(unittest.TestCase):
         for service, lines in services().items():
             self.assertIn(labels(lines).get("dashboard.switchable", "true"), {"true"}, service)
 
+    def test_doco_cd_leaves_the_running_state_of_every_switchable_service_to_the_dashboard(self):
+        for service, lines in services().items():
+            switchable = labels(lines).get("dashboard.switchable") == "true"
+            autostart = '      cd.doco.deployment.autostart: "false"' in section(lines, "labels")
+            self.assertEqual(switchable, autostart, service)
+
     def test_every_widget_is_a_known_kind(self):
         for service, lines in services().items():
             kind = labels(lines).get("dashboard.widget")

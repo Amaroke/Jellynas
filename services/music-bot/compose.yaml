@@ -26,6 +26,7 @@ services:
       dashboard.icon: discord.svg
       dashboard.widget: music-bot
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     healthcheck:
       test:
         - "CMD"

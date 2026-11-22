@@ -506,6 +506,12 @@ impl App {
                 return;
             }
         };
+        for id in shutdown::unstarted(&containers, self.shutdown().services()) {
+            println!("Starting the container {id} the deploy left unstarted");
+            if let Err(error) = self.docker.act(&id, "start") {
+                eprintln!("Cannot start the container {id}: {error}");
+            }
+        }
         let services = cards::services(&containers, self.shutdown().services());
         for id in shutdown::strays(&services) {
             println!("Stopping the Shut down container {id}");
