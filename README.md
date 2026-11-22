@@ -2190,14 +2190,13 @@ and [Sonarr](#sonarr).
 The Admin keeps a good ratio on C411, a French private tracker, with torrents
 grabbed only to seed, without touching the Library. The Account ratio comes
 first: the Farm spends download only over the Ratio floor, and leans on what
-costs nothing on C411, cross-seeds, Twins and freeleech. The Quests of C411 come
-next, each farmed behind a switch of the Dashboard. The Zen comes on its own
-with the rest:
+costs nothing on C411, cross-seeds, Twins and freeleech. The Zen comes on its
+own with the rest:
 
 - ratio, `services/ratio/ratio.py`, runs the Farm through the API of C411. It
-  grabs freeleech releases, Twins, fresh paid releases and small releases for
-  the Quests, each behind its switch, downloads a release from its Twin on a
-  public tracker when one exists, and never removes a torrent of the Farm.
+  grabs freeleech releases, Twins and fresh paid releases, each behind its
+  switch, downloads a release from its Twin on a public tracker when one exists,
+  and never removes a torrent of the Farm.
 - farm-board, `services/farm-board/board.py`, draws the board of the Farm with
   its switches for the Dashboard, and posts it to Discord.
 - cross-seed finds the torrents of qBittorrent on C411 and seeds them there too,
@@ -2326,9 +2325,7 @@ the Dashboard, see [Farm board](#farm-board).
 
 1. **Reads the account.** It reads the profile of C411 once per run with
    `C411_PROFILE_API_KEY`: uploaded and downloaded totals with the credit bought
-   with Zen, Zen, class, grade and the Quests done per path. Once a day it also
-   reads the bonus scales of the class, the seeding time and seeder buckets that
-   make the note of each torrent.
+   with Zen, Zen, class and grade.
 2. **Holds the Ratio floor.** Under the floor, 1.2 by default, or when the
    profile cannot be read, ratio spends no download on C411, whatever the
    switches say. While the "Pause Prowlarr" switch is on, it also moves each
@@ -2339,53 +2336,39 @@ the Dashboard, see [Farm board](#farm-board).
    ratio is back over the floor, ratio puts C411 back on its former profile.
 3. **Counts.** It keeps the Ledger in `${APPDATA_ROOT}/ratio/state.json`, which
    gives the Deficit or the Surplus of the C411 account. A torrent belongs to
-   C411 when its announce URL holds `RATIO_TRACKER`. It reads the category of
-   C411 of each C411 torrent once, Library and cross-seeds included, and keeps
-   it, so its counts match those of the Quests.
-4. **Validates the Quests.** It counts the progress of the Quests of the seed
-   and specialization paths from qBittorrent: the Seed count, the seeds older
-   than each step of seeding time, the seeds whose estimated note reaches each
-   share of its top, and the seeds of each category. A level counts as done once
-   its count reaches its target and the profile shows one more Quest done in its
-   path. The levels done on 2026-11-11 come from `DONE_AT_START`.
-5. **Grabs, only into the Farm.** While fewer than `RATIO_MAX_DOWNLOADING`
+   C411 when its announce URL holds `RATIO_TRACKER`.
+4. **Grabs, only into the Farm.** While fewer than `RATIO_MAX_DOWNLOADING`
    torrents of the Farm are downloading, 2 by default, and the Farm holds less
    than its budget, 100 GB by default, it reads the newest releases of C411 and
    grabs, each behind its switch: Twins, freeleech up to 5 GB, the most leechers
    first, and fresh paid releases at most 24 hours old with at least 5 leechers,
-   the most leechers per GB first. Then it hunts for the Quests: each category
-   whose switch is on fills up to the 50 seeds of its badge, Films & Vidéos up
-   to the next level of the Volume challenge, and the Seed count switch fills
-   any category up to the next level of the Seed count. A hunt reads its
-   category sorted by size, the smallest first, and grabs the cheapest releases
-   up to the grab size, 1 GB by default: freeleech before paid, then the rarest
-   for the class, then the smallest. A page that holds nothing new sends the
-   next hunt to the next page. Every paid grab shares the paid download of the
+   the most leechers per GB first. Every paid grab shares the paid download of the
    last 24 hours, 5 GB by default, and never spends past the floor. Every grab
    switch starts off, so a new NAS grabs nothing for the Farm until the Admin
    turns one on in the Dashboard. cross-seed still adds the C411 copy of what
    qBittorrent already holds, without downloading it.
-6. **Never removes a torrent of the Farm.** Once the Farm holds its budget,
+5. **Never removes a torrent of the Farm.** Once the Farm holds its budget,
    ratio grabs nothing more.
-7. **Drops Twins.** While its switch is on, once cross-seed seeds the C411 copy
+6. **Drops Twins.** While its switch is on, once cross-seed seeds the C411 copy
    of a Twin, ratio removes the Nyaa copy. The hardlink of cross-seed keeps the
    data. One hour after the grab, when the C411 copy is still missing, ratio
    downloads it from C411 with `C411_TORZNAB_API_KEY`, adds it stopped in the
    folder of the Nyaa copy, gives its files the Nyaa names and checks it. When
    that fails, it waits one hour, then twice longer, and gives up after the
    third failure, or at once when C411 refuses the torrent file.
-8. **Cleans the public torrents.** While its switch is on, a public torrent of
+7. **Cleans the public torrents.** While its switch is on, a public torrent of
    one of the five categories leaves after 14 days of seeding, or once a C411
    torrent seeds the same files, at least 6 hours after it finished.
-9. **Files every torrent.** qBittorrent holds five categories: `movies`,
+8. **Files every torrent.** qBittorrent holds five categories: `movies`,
    `shows` and `books` for Radarr, Sonarr and LazyLibrarian, `music`, which
    nothing uses since Aurral downloads from Soulseek, and `farm` for the grabs
    of ratio and the cross-seeds. The Library stays in
    its categories. The "Adopt the Library" switch, off by default, moves a C411
    torrent of the Library into the Farm 6 hours after it finished. ratio tags
    every public torrent `public`, and every C411 torrent with its Source:
-   `paid`, `free`, `library` or `quest`. The retired `volume-hunt`, `zen-hunt`,
-   `twin`, `freeleech` and `cross-seed` tags become `quest` and `free`.
+   `paid`, `free` or `library`. The retired `quest`, `volume-hunt` and
+   `zen-hunt` tags become `paid`, and `twin`, `freeleech` and `cross-seed`
+   become `free`.
 
 The Twins come from `RATIO_TWIN_INDEXER_IDS`, through Prowlarr. For each episode
 at most 24 hours old with at least one leecher, ratio searches its episode and
@@ -2397,11 +2380,8 @@ it is queried too often, and ratio then leaves it alone for as long as it asks,
 an hour when it does not say. Holding or releasing C411 at the floor still goes
 through meanwhile.
 
-The rare bonus of a torrent comes from the seeder buckets of the class, for
-example +0.5 for Swarm Keeper from 11 to 50 GB with 1 to 10 seeders, and 0 where
-the class gives nothing. The note of a torrent is 1 plus its seeding time bonus
-plus its rare bonus. Each Zen is worth 1 GB of upload in the shop of C411, a
-purchase only the Admin makes.
+Each Zen is worth 1 GB of upload in the shop of C411, a purchase only the Admin
+makes.
 
 To use it:
 
@@ -2410,7 +2390,7 @@ To use it:
 2. In `.env`, set `C411_PROFILE_API_KEY` and `C411_TORZNAB_API_KEY` to them,
    `RATIO_HOLD_INDEXER_IDS` to the id of C411 in Prowlarr and
    `RATIO_TWIN_INDEXER_IDS` to the id of Nyaa, then restart doco-cd. Its logs
-   name each grab, move, removal and Quest done:
+   name each grab, move and removal:
 
    ```sh
    docker compose logs ratio
@@ -2455,11 +2435,7 @@ each or 1024 GB for 1000, then a gauge of the ratio tiers, 0.8 where C411 blocks
 downloads, 1, the floor and 2, with how much upload reaches each tier above and
 how much download each tier under allows, and two curves over 30 days: the Zen
 paid each night with the balance, and the uploaded and downloaded totals.
-`?part=2` shows the Quests, one card per challenge with every level and its
-count: a switch for the Seed count, an indicator for the seeding time, the note
-and the diversity, and in the Volume challenge its ten categories, each with its
-switch. A challenge with every level done shows a locked completed badge in
-place of its switch. `?part=3` shows each switch and setting of the Farm with
+`?part=2` shows each switch and setting of the Farm with
 what it does, its disk split by Source and what each Source earned.
 `shot=<width>` sets the width in pixels for the pictures of Discord.
 
