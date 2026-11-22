@@ -7,7 +7,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 
 pub use fetch::Client;
-pub use format::epoch;
+pub use format::{bytes, epoch};
 
 use crate::stats::History;
 
@@ -67,6 +67,7 @@ pub struct Board {
     pub pulls: Option<Panel<Value>>,
     pub history: History,
     pub uptime: BTreeMap<String, Uptime>,
+    pub media: Option<Panel>,
 }
 
 pub fn settle<T: Clone>(

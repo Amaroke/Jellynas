@@ -37,6 +37,8 @@ pub type Snapshot = Arc<Vec<Service>>;
 
 const POLL: Duration = Duration::from_secs(20);
 const POINTS: usize = 90;
+const MEDIA: &str = "/media";
+const MEASURE: Duration = Duration::from_secs(1800);
 
 pub enum Outcome {
     Done,
@@ -240,6 +242,7 @@ impl App {
                 pulls,
                 history,
                 uptime,
+                media: board.media.clone(),
             });
         });
     }
@@ -303,6 +306,28 @@ impl App {
                 eprintln!("Cannot change {} in the Farm: {error}", control["name"]);
                 Outcome::Failed
             }
+        }
+    }
+
+    pub fn measure(&self) {
+        let root = std::env::var("MEDIA_ROOT").unwrap_or_else(|_| MEDIA.into());
+        loop {
+            let found =
+                crate::space::measure(std::path::Path::new(&root)).map(|(sizes, unreadable)| {
+                    if unreadable > 0 {
+                        eprintln!("Cannot read {unreadable} entries of the Media tree");
+                    }
+                    crate::space::reading(&sizes)
+                });
+            if let Err(error) = &found {
+                eprintln!("Cannot measure the Media tree: {error}");
+            }
+            self.board.send_modify(|board| {
+                let mut changed = (**board).clone();
+                changed.media = Some(widgets::settle(changed.media.as_ref(), found, now()));
+                *board = Arc::new(changed);
+            });
+            thread::sleep(MEASURE);
         }
     }
 

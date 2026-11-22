@@ -63,6 +63,7 @@ services:
       dashboard.href: https://dashboard.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
     volumes:
       - ./web:/web:ro
+      - ${DATA_ROOT}/media:/media:ro
       - ${APPDATA_ROOT}/dashboard:/state
     healthcheck:
       test:

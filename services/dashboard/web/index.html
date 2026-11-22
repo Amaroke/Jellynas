@@ -32,7 +32,10 @@ section h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; 
 .rows li { display: grid; gap: 2px; font-size: 12px; min-width: 0; }
 .rows .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rows .detail { color: var(--muted); }
-.rows meter { width: 100%; height: 4px; }
+.rows meter { width: 100%; height: 4px; appearance: none; border: none; border-radius: 2px; background: var(--line); }
+.rows meter::-webkit-meter-bar { height: 4px; border: none; border-radius: 2px; background: var(--line); }
+.rows meter::-webkit-meter-optimum-value { border-radius: 2px; background: var(--accent); }
+.rows meter::-moz-meter-bar { border-radius: 2px; background: var(--accent); }
 .rows li.art { grid-template-columns: 36px minmax(0, 1fr); column-gap: 8px; }
 .rows li.art img, .rows li.art .cover { grid-row: span 3; width: 36px; height: 54px; object-fit: cover; border-radius: 4px; background: var(--bg); }
 .rows li.art meter { grid-column: 2; }
@@ -47,6 +50,9 @@ section h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; 
 .posters .cover { width: 72px; height: 108px; border-radius: 6px; background: var(--bg); }
 .posters .idle .title { color: var(--muted); }
 .shelf { display: grid; gap: 4px; min-width: 0; }
+.space { display: grid; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; }
+.space .caption { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.space .rows { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); column-gap: 16px; }
 .shelf .caption { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .note { font-size: 12px; color: var(--restarting); }
 .note.failed { color: var(--unhealthy); }
@@ -296,7 +302,13 @@ function status() {
   return element("section", { id: "status", style: "--accent: var(--status)" },
     element("h2", {}, "Status"),
     element("div", {}, element("div", { class: "clock" }), element("div", { class: "date" })),
-    ...panel(board.host));
+    ...panel(board.host),
+    space());
+}
+
+function space() {
+  return element("div", { class: "space" }, element("span", { class: "caption" }, "Media tree"),
+    ...(board.media ? panel(board.media) : [element("span", { class: "note" }, "Measuring the Media tree")]));
 }
 
 function tick() {
@@ -314,7 +326,7 @@ function refresh() {
     node.replaceChildren(node.querySelector(".head"), ...panel(board.widgets[node.dataset.service], node.dataset.widget), ...usage(node.dataset.service, node.dataset.widget), uptime(node.dataset.name));
   }
   const host = document.getElementById("status");
-  if (host) host.replaceChildren(...[...host.children].slice(0, 2), ...panel(board.host));
+  if (host) host.replaceChildren(...[...host.children].slice(0, 2), ...panel(board.host), space());
   for (const block of main.querySelectorAll(".native")) {
     const typing = document.activeElement && document.activeElement.tagName === "INPUT" && block.contains(document.activeElement);
     if (typing) continue;
