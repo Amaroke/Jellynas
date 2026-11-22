@@ -1,5 +1,6 @@
 use crate::api::{Api, drift, merged, report, rules};
 use serde_json::{Map, Value, json};
+use std::collections::HashMap;
 
 fn sections() -> Vec<(&'static str, Option<&'static str>, Map<String, Value>)> {
     vec![
@@ -130,12 +131,28 @@ fn toggle(api: &impl Api, playlist: &Value, field: &str, path: &str) -> Result<b
     Ok(true)
 }
 
+fn prefixed(owner: &str, name: &str) -> Option<String> {
+    let prefix = format!("{owner} - ");
+    if name.starts_with(&prefix) {
+        return None;
+    }
+    Some(format!("{prefix}{name}"))
+}
+
 fn playlists(api: &impl Api) -> Result<usize, String> {
     let wanted = rules(json!({
         "syncEnabled": false,
         "syncIntervalHours": 0,
         "keepRemovedTracks": true,
     }));
+    let owners: HashMap<i64, String> = api
+        .get("/users")?
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|user| Some((user["id"].as_i64()?, user["username"].as_str()?.to_string())))
+        .collect();
     let status = api.get("/playlists/status")?;
     let mut fixed = 0;
     for playlist in status["staticPlaylists"]
@@ -156,19 +173,30 @@ fn playlists(api: &impl Api) -> Result<usize, String> {
         )? {
             changes.insert("showTrackAvailability".to_string(), json!(true));
         }
+        let mut body = Map::new();
         let source = &playlist["importSource"];
         if source.is_object() {
             let drifted = drift(source, &wanted);
             if !drifted.is_empty() {
-                api.send(
-                    "PUT",
-                    &format!("/playlists/static-playlists/{id}"),
-                    &json!({ "importSource": Value::Object(drifted.clone()) }),
-                )?;
+                body.insert("importSource".to_string(), Value::Object(drifted.clone()));
                 changes.extend(drifted);
             }
         }
         let name = playlist["name"].as_str().unwrap_or("?");
+        let owner = playlist["ownerUserId"]
+            .as_i64()
+            .and_then(|owner| owners.get(&owner));
+        if let Some(named) = owner.and_then(|owner| prefixed(owner, name)) {
+            body.insert("name".to_string(), json!(named));
+            changes.insert("name".to_string(), json!(named));
+        }
+        if !body.is_empty() {
+            api.send(
+                "PUT",
+                &format!("/playlists/static-playlists/{id}"),
+                &Value::Object(body),
+            )?;
+        }
         fixed += report("Aurral", &format!("playlist {name}"), &[&changes]);
     }
     Ok(fixed)
@@ -341,5 +369,26 @@ mod tests {
             vec!["PUT /playlists/static-playlists/b/track-availability"],
             fake.paths()
         );
+    }
+
+    #[test]
+    fn a_playlist_is_named_after_its_owner_once() {
+        let mut bare = playlist("a", Value::Null);
+        bare["name"] = json!("Road trip");
+        bare["ownerUserId"] = json!(3);
+        let mut named = playlist("b", Value::Null);
+        named["name"] = json!("friend - Chill");
+        named["ownerUserId"] = json!(3);
+        let mut fake = api(
+            kept(),
+            json!([{"id": 3, "username": "friend", "role": "user", "permissions": permissions()}]),
+        );
+        fake.pages.insert(
+            "/playlists/status".to_string(),
+            json!({"staticPlaylists": [bare, named]}),
+        );
+        assert_eq!(Ok(1), enforce(&fake));
+        assert_eq!(vec!["PUT /playlists/static-playlists/a"], fake.paths());
+        assert_eq!(json!({"name": "friend - Road trip"}), fake.body(0));
     }
 }
