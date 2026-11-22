@@ -38,6 +38,10 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/farm/controls", post(farm_control))
         .route("/quick-actions/{key}", post(quick_action))
         .route("/seerr/requests/{id}/{action}", post(answer_request))
+        .route(
+            "/connections/{service}/{kind}/{id}/{action}",
+            post(switch_link),
+        )
         .route("/healthz", get(health))
         .with_state(app)
 }
@@ -225,6 +229,18 @@ async fn answer_request(
     headers: HeaderMap,
 ) -> StatusCode {
     act(peer, &headers, move || app.answer_request(id, &action)).await
+}
+
+async fn switch_link(
+    State(app): State<Arc<App>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Path((service, kind, id, action)): Path<(String, String, u64, String)>,
+    headers: HeaderMap,
+) -> StatusCode {
+    act(peer, &headers, move || {
+        app.switch_link(&service, &kind, id, &action)
+    })
+    .await
 }
 
 async fn health(State(app): State<Arc<App>>) -> StatusCode {

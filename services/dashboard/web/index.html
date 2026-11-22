@@ -152,7 +152,7 @@ section h2::before { content: ""; width: 8px; height: 8px; border-radius: 2px; b
 .links { display: grid; gap: 0; }
 .links .caption { margin: 8px 0 2px; }
 .links .caption:first-child { margin-top: 0; }
-.link { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; min-width: 0; }
+.link { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; min-width: 0; }
 .links .caption + .link { border-top: none; }
 .link .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--running); }
 .link[data-state="off"] .dot, .link[data-state="unknown"] .dot { background: var(--stopped); }
@@ -161,6 +161,9 @@ section h2::before { content: ""; width: 8px; height: 8px; border-radius: 2px; b
 .link .what { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .link .what small { color: var(--muted); font-size: 12px; margin-left: 6px; }
 .link .says { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.link .switches { display: flex; gap: 2px; justify-content: flex-end; min-width: 50px; }
+.link .icon-button { width: 24px; height: 24px; font-size: 13px; }
+.link .failed { grid-column: 2 / -1; color: var(--unhealthy); font-size: 12px; }
 .link[data-state="paused"] .says { color: var(--restarting); }
 .link[data-state="failing"] .says { color: var(--unhealthy); }
 .said { margin: 0; font-size: 12px; padding: 6px 8px; border-radius: 6px; color: var(--restarting); background: color-mix(in srgb, var(--restarting) 12%, transparent); }
@@ -185,6 +188,7 @@ const sections = JSON.parse(document.getElementById("sections").textContent);
 const main = document.querySelector("main");
 const errors = new Map();
 const answers = new Map();
+const switching = new Map();
 const opened = new Set();
 const busy = new Set();
 const missing = new Set();
@@ -395,6 +399,47 @@ function looks(service) {
   return broken + connections + (service.shutdown || service.state === "running" ? 0 : 1) + (errors.has(service.service) ? 1 : 0);
 }
 
+async function switchLink(service, link, action) {
+  const key = `${service.service} ${link.kind} ${link.id}`;
+  switching.set(key, "pending");
+  refresh();
+  const response = await fetch(`/connections/${encodeURIComponent(service.service)}/${link.kind}/${link.id}/${action}`, { method: "POST", headers: { "X-Dashboard": "1" } }).catch(() => null);
+  if (response && response.ok) switching.delete(key);
+  else {
+    const said = `Cannot ${action === "retry" ? "retry" : `turn ${action}`} ${link.name}`;
+    switching.set(key, said);
+    setTimeout(() => {
+      if (switching.get(key) !== said) return;
+      switching.delete(key);
+      refresh();
+    }, 15000);
+  }
+  refresh();
+}
+
+function switches(service, link) {
+  const key = `${service.service} ${link.kind} ${link.id}`;
+  const pending = switching.get(key) === "pending";
+  const node = element("span", { class: "switches" });
+  if (link.state === "failing") {
+    const retry = element("button", { type: "button", class: "icon-button", "data-focus": `${key} retry`, "aria-label": `Retry ${link.name}`, title: `Retry ${link.name}` }, "↻");
+    retry.disabled = pending;
+    retry.onclick = () => switchLink(service, link, "retry");
+    node.append(retry);
+  }
+  if (link.kind !== "proxy" && link.hint !== "from Prowlarr" && ["on", "off", "failing"].includes(link.state)) {
+    const on = link.state !== "off";
+    const power = element("button", { type: "button", class: `icon-button power ${on ? "on" : ""}`, "data-focus": `${key} power`, role: "switch", "aria-checked": String(on), "aria-label": `${link.name} on`, title: on ? `Turn off ${link.name}` : `Turn on ${link.name}` }, "⏻");
+    power.disabled = pending;
+    power.onclick = () => {
+      if (on && !confirm(`Turn off ${link.name} in ${service.name}?`)) return;
+      switchLink(service, link, on ? "off" : "on");
+    };
+    node.append(power);
+  }
+  return node;
+}
+
 function says(link) {
   if (link.state === "failing") {
     if (link.kind === "proxy") return "Unavailable";
@@ -412,11 +457,16 @@ function connections(service) {
   for (const [kind, title] of KINDS) {
     const own = links.filter(link => link.kind === kind);
     if (!own.length) continue;
-    node.append(element("span", { class: "caption" }, title), ...own.map(link =>
-      element("div", { class: "link", "data-state": link.state },
+    node.append(element("span", { class: "caption" }, title), ...own.map(link => {
+      const row = element("div", { class: "link", "data-state": link.state },
         element("span", { class: "dot", "aria-hidden": "true" }),
         element("span", { class: "what" }, link.name, link.hint ? element("small", {}, link.hint) : ""),
-        element("span", { class: "says" }, says(link)))));
+        element("span", { class: "says" }, says(link)),
+        switches(service, link));
+      const failed = switching.get(`${service.service} ${link.kind} ${link.id}`);
+      if (failed && failed !== "pending") row.append(element("span", { class: "failed" }, failed));
+      return row;
+    }));
   }
   if (!links.length) node.append(element("span", { class: "caption" }, "No indexer nor download client read yet"));
   return [node, ...health.map(item => element("p", { class: `said ${item.level === "error" ? "error" : ""}` }, item.message))];

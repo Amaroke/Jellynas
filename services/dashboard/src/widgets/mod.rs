@@ -50,6 +50,18 @@ pub struct Link {
     pub until: Option<u64>,
 }
 
+impl Link {
+    pub fn allows(&self, action: &str) -> bool {
+        let switchable = self.kind != "proxy" && self.hint.as_deref() != Some("from Prowlarr");
+        match action {
+            "on" => switchable && self.state == "off",
+            "off" => switchable && matches!(self.state.as_str(), "on" | "failing"),
+            "retry" => self.state == "failing",
+            _ => false,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Health {
     pub level: String,
@@ -150,6 +162,40 @@ mod tests {
             health: vec![],
             metrics: vec![],
         }
+    }
+
+    #[test]
+    fn a_connection_turns_on_off_or_retries_only_from_a_state_that_allows_it() {
+        let synced = |kind: &str, state: &str, hint: Option<&str>| {
+            let link = Link {
+                kind: kind.into(),
+                id: 1,
+                name: "C411".into(),
+                hint: hint.map(String::from),
+                state: state.into(),
+                until: None,
+            };
+            ["on", "off", "retry", "delete"]
+                .into_iter()
+                .filter(|action| link.allows(action))
+                .collect::<Vec<_>>()
+        };
+        let allowed = |kind: &str, state: &str| synced(kind, state, None);
+        assert_eq!(vec!["off"], allowed("indexer", "on"));
+        assert_eq!(vec!["on"], allowed("client", "off"));
+        assert_eq!(vec!["off", "retry"], allowed("indexer", "failing"));
+        assert_eq!(Vec::<&str>::new(), allowed("indexer", "paused"));
+        assert_eq!(Vec::<&str>::new(), allowed("client", "unknown"));
+        assert_eq!(vec!["retry"], allowed("proxy", "failing"));
+        assert_eq!(Vec::<&str>::new(), allowed("proxy", "on"));
+        assert_eq!(
+            vec!["retry"],
+            synced("indexer", "failing", Some("from Prowlarr"))
+        );
+        assert_eq!(
+            Vec::<&str>::new(),
+            synced("indexer", "on", Some("from Prowlarr"))
+        );
     }
 
     #[test]

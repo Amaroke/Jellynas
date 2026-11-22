@@ -584,6 +584,22 @@ pub fn prowlarr_links(
     Ok((found, said(health)))
 }
 
+pub fn switched(widget: &str, kind: &str, item: &Value, on: bool) -> Value {
+    let mut item = item.clone();
+    match (widget, kind) {
+        ("prowlarr", "indexer") | (_, "client") => item["enable"] = Value::Bool(on),
+        (_, "indexer") => {
+            let rss = on && item["supportsRss"].as_bool() != Some(false);
+            let search = on && item["supportsSearch"].as_bool() != Some(false);
+            item["enableRss"] = Value::Bool(rss);
+            item["enableAutomaticSearch"] = Value::Bool(search);
+            item["enableInteractiveSearch"] = Value::Bool(search);
+        }
+        _ => {}
+    }
+    item
+}
+
 pub fn starr_links(indexers: &Value, clients: &Value, health: &Value) -> Linked {
     let on =
         |item: &Value, keys: &[&str]| keys.iter().any(|key| item[*key].as_bool() == Some(true));
@@ -1831,6 +1847,32 @@ time=2026-11-22T03:30:05.000+01:00 level=ERROR msg="Fatal error running command:
             ("Result", "Running"),
             figures(&backup(cut, 1_795_314_600).unwrap())[2]
         );
+    }
+
+    #[test]
+    fn switching_a_connection_flips_only_its_enable_flags() {
+        let prowlarr = json!({"id": 3, "name": "C411", "enable": true, "appProfileId": 1});
+        assert_eq!(
+            json!({"id": 3, "name": "C411", "enable": false, "appProfileId": 1}),
+            switched("prowlarr", "indexer", &prowlarr, false)
+        );
+        let client = json!({"id": 1, "name": "qBittorrent", "enable": false, "priority": 1});
+        assert_eq!(
+            json!({"id": 1, "name": "qBittorrent", "enable": true, "priority": 1}),
+            switched("radarr", "client", &client, true)
+        );
+        let starr = json!({"id": 2, "enableRss": false, "enableAutomaticSearch": false, "enableInteractiveSearch": false, "supportsRss": false, "supportsSearch": true});
+        assert_eq!(
+            json!({"id": 2, "enableRss": false, "enableAutomaticSearch": true, "enableInteractiveSearch": true, "supportsRss": false, "supportsSearch": true}),
+            switched("sonarr", "indexer", &starr, true)
+        );
+        let on = switched("sonarr", "indexer", &starr, true);
+        assert_eq!(
+            json!({"id": 2, "enableRss": false, "enableAutomaticSearch": false, "enableInteractiveSearch": false, "supportsRss": false, "supportsSearch": true}),
+            switched("sonarr", "indexer", &on, false)
+        );
+        let proxy = json!({"id": 1, "name": "Gluetun"});
+        assert_eq!(proxy, switched("prowlarr", "proxy", &proxy, false));
     }
 
     fn links(found: &[Link]) -> Vec<(&str, &str, &str, Option<u64>)> {
