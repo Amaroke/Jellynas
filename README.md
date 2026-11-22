@@ -171,7 +171,7 @@ mkdir -p "$BACKUP_ROOT" \
   "$DATA_ROOT"/media/{movies,shows,anime,music,aurral,books,manga} \
   "$DATA_ROOT"/media/{movies,shows}/.recycle \
   "$APPDATA_ROOT"/{seerr,lldap,authelia,aurral,recyclarr,autobrr,cross-seed} \
-  "$APPDATA_ROOT"/{ratio,farm-board,discord-posts,pr-radar,slskd,suwayomi} \
+  "$APPDATA_ROOT"/{ratio,discord-posts,pr-radar,slskd,suwayomi} \
   "$APPDATA_ROOT"/dashboard
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
@@ -293,7 +293,6 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with
 | Radarr        | `https://radarr.lan.<DOMAIN>`          | Local network |
 | Sonarr        | `https://sonarr.lan.<DOMAIN>`          | Local network |
 | slskd         | `https://slskd.lan.<DOMAIN>`           | Local network |
-| ratio         | `https://ratio.lan.<DOMAIN>/graphs`    | Local network |
 | Actions       | `https://actions.lan.<DOMAIN>/actions` | Local network |
 | PR radar      | `https://prs.lan.<DOMAIN>/pulls`       | Local network |
 | Beszel        | `https://beszel.lan.<DOMAIN>`          | Local network |
@@ -349,7 +348,8 @@ docker compose -f services/doco-cd/compose.yaml up -d
 Each deploy runs from a copy of the merged revision, kept in the data volume of
 doco-cd. It recreates the services whose compose definition or image changed,
 and those that mount a file of the repo that changed, such as
-`services/ratio/ratio.py`. It rebuilds Caddy and policy from their Dockerfile,
+`services/cross-seed/config.js`. It rebuilds the services built from their
+Dockerfile, such as Caddy, policy, ratio and the Dashboard,
 and removes the services commented out in `compose.yaml`. A failed deploy is
 retried at the next poll.
 
@@ -833,7 +833,7 @@ inside the container and be lost.
 
 Each finished torrent keeps seeding from the torrents tree, to give back to
 other peers. A torrent of C411 never stops and nothing removes it. ratio removes
-a public torrent after two weeks, or sooner once the same files seed on C411.
+a public torrent after a week, or sooner once it uploaded its own size.
 Radarr and Sonarr import by hardlink, so a movie or an episode takes its space
 once while its torrent seeds, forever for C411. In Tools >
 Options, set:
@@ -848,8 +848,8 @@ Options, set:
   connections nor the upload slots have a limit, in all or per torrent, and no
   swarm waits for a free slot
 - BitTorrent > Torrent Queueing: Unchecked. A queued torrent never announces, so
-  it uploads nothing and C411 pays it no Zen. ratio unchecks it itself. Each
-  tool already limits its own downloads, ratio to 2 at a time for the Farm
+  it uploads nothing and C411 pays it no Zen. ratio unchecks it itself. Radarr
+  and Sonarr limit their own downloads, and the Farm only stops at its budget
 - BitTorrent > Seeding Limits: All unchecked. ratio unchecks them itself, since
   it removes the public torrents and keeps the Farm seeding
 - Advanced > Network interface: `tun0`, so qBittorrent only ever uses the VPN,
@@ -920,8 +920,8 @@ every tracker, so its searches and torrent files go through the VPN. Click
 Leave "Seed Ratio" and "Seed Time" empty on every indexer, in Indexers, edit it,
 "Show Advanced". With the global seeding limits of qBittorrent off, no torrent
 ever stops, so Radarr and Sonarr never remove one: a torrent of C411
-seeds forever, and ratio removes a public one after two weeks, or once the same
-files seed on C411.
+seeds forever, and ratio removes a public one after a week, or once it uploaded
+its own size.
 
 ## Radarr
 
@@ -1810,12 +1810,11 @@ first: the Farm spends download only over the Ratio floor, and leans on what
 costs nothing on C411, cross-seeds, Twins and freeleech. The Zen comes on its
 own with the rest:
 
-- ratio, `services/ratio/ratio.py`, runs the Farm through the API of C411. It
-  grabs freeleech releases, Twins and fresh paid releases, each behind its
-  switch, downloads a release from its Twin on a public tracker when one exists,
-  and never removes a torrent of the Farm.
-- farm-board, `services/farm-board/board.py`, draws the board of the Farm with
-  its switches for the Dashboard, and posts it to Discord.
+- ratio, `services/ratio`, runs the Farm through the API of C411. It grabs
+  Twins and freeleech releases, each behind its switch, and never spends a paid
+  download for the Farm.
+- The Dashboard draws the board of the Farm with its switches, and posts it to
+  Discord, see [Farm board](#farm-board).
 - cross-seed finds the torrents of qBittorrent on C411 and seeds them there too,
   from hardlinks in `/data/torrents/cross-seed`, without downloading them again.
   qBittorrent tells it about every finished torrent.
@@ -1823,8 +1822,8 @@ own with the rest:
   IRC. C411 does not.
 
 Radarr and Sonarr only import their own category, so a torrent of the Farm never
-reaches the Library. None of these tools sees the media tree. ratio and farm-board
-see no folder at all, cross-seed sees only the torrents tree.
+reaches the Library. None of these tools sees the media tree. ratio sees no
+folder at all, cross-seed sees only the torrents tree.
 
 ### Risks
 
@@ -1892,6 +1891,8 @@ cross-seed, single episodes included. cross-seed then searches C411 at once,
 while its swarm is still hungry, and adds each match in the `farm` category.
 Once a day, it also searches again every torrent of qBittorrent it first saw
 less than 15 days ago, music and books included, each at most once every 3 days.
+Every 10 minutes, it reads the RSS of C411 and adds each new release whose files
+qBittorrent already holds.
 Leave public indexers out of `CROSS_SEED_INDEXER_IDS`, a public torrent brings
 no ratio.
 
@@ -1900,71 +1901,74 @@ shows the `curl` command it ran. cross-seed then names the torrent in its logs.
 
 ### ratio
 
-ratio, `services/ratio/ratio.py`, runs every 10 minutes, and at once when a
-switch or a setting of the Farm changes. It works for C411 only and reads it
-through its own API, ten calls a minute at most and 30 per run, the rest waiting
-for the next run. Every HTTPS call of ratio goes through the proxy of Gluetun,
-so C411 only sees the VPN address. Every switch and setting below lives in
-the Dashboard, see [Farm board](#farm-board).
+ratio, `services/ratio`, is written in Rust and built from its Dockerfile. It
+runs every minute, and at once when a switch or a setting of the Farm changes.
+It works for C411 only and reads it through its own API, ten calls a minute at
+most and 30 per run, the rest waiting for the next run. Every HTTPS call of
+ratio goes through the proxy of Gluetun, so C411 only sees the VPN address.
+Every switch and setting below lives in the Farm section of the Dashboard.
 
 1. **Reads the account.** It reads the profile of C411 once per run with
    `C411_PROFILE_API_KEY`: uploaded and downloaded totals with the credit bought
    with Zen, Zen, class and grade.
-2. **Holds the Ratio floor.** Under the floor, 1.2 by default, or when the
-   profile cannot be read, ratio spends no download on C411, whatever the
-   switches say. While the "Pause Prowlarr" switch is on, it also moves each
+2. **Holds the Ratio floor.** Under the floor, 2 by default, or when the profile
+   cannot be read, ratio spends no download on C411, whatever the switches say.
+   While the "Hold Prowlarr under the floor" switch is on, it also moves each
    indexer of `RATIO_HOLD_INDEXER_IDS` onto a sync profile named Paused, which
    it creates with RSS, automatic and interactive search off. Prowlarr pushes it
-   to Radarr and Sonarr, whose sync level must stay Full Sync, so they
-   stop downloading from C411. Every torrent keeps seeding. Once the Account
-   ratio is back over the floor, ratio puts C411 back on its former profile.
+   to Radarr and Sonarr, whose sync level must stay Full Sync, so they stop
+   downloading from C411. Every torrent keeps seeding, and Twins and freeleech
+   go on. Once the Account ratio is back over the floor, ratio puts C411 back on
+   its former profile.
 3. **Counts.** It keeps the Ledger in `${APPDATA_ROOT}/ratio/state.json`, which
    counts every torrent under its Origin, with its tracker, c411, nyaa or
    other, for the Library, and gives the Deficit or the Surplus of the C411
    account. A torrent belongs to C411 when its announce URL holds
-   `RATIO_TRACKER`.
-4. **Grabs, only into the Farm.** While fewer than `RATIO_MAX_DOWNLOADING`
-   torrents of the Farm are downloading, 2 by default, and the Farm holds less
-   than its budget, 100 GB by default, it reads the newest releases of C411 and
-   grabs, each behind its switch: Twins, freeleech up to 5 GB, the most leechers
-   first, and fresh paid releases at most 24 hours old with at least 5 leechers,
-   the most leechers per GB first. Every paid grab shares the paid download of the
-   last 24 hours, 5 GB by default, and never spends past the floor. Every grab
-   switch starts off, so a new NAS grabs nothing for the Farm until the Admin
-   turns one on in the Dashboard. cross-seed still adds the C411 copy of what
-   qBittorrent already holds, without downloading it.
-5. **Never removes a torrent of the Farm.** Once the Farm holds its budget,
-   ratio grabs nothing more.
-6. **Drops Twins.** While its switch is on, once cross-seed seeds the C411 copy
-   of a Twin, ratio removes the Nyaa copy. The hardlink of cross-seed keeps the
-   data. One hour after the grab, when the C411 copy is still missing, ratio
-   downloads it from C411 with `C411_TORZNAB_API_KEY`, adds it stopped in the
-   folder of the Nyaa copy, gives its files the Nyaa names and checks it. When
-   that fails, it waits one hour, then twice longer, and gives up after the
-   third failure, or at once when C411 refuses the torrent file.
+   `RATIO_TRACKER`. A state file it cannot read stops ratio instead of being
+   wiped.
+4. **Grabs, only into the Farm.** While the Farm holds less than its budget,
+   100 GB by default, it reads the newest releases of C411 and grabs, each
+   behind its switch, Twins and freeleech releases up to the freeleech max size,
+   5 GB by default, the most leechers first. Nothing limits how many download at
+   once. Every grab switch starts off, so a new NAS grabs nothing for the Farm
+   until the Admin turns one on in the Dashboard. cross-seed still adds the C411
+   copy of what qBittorrent already holds, without downloading it.
+5. **Never removes a torrent of the Farm** that seeds on C411. Once the Farm
+   holds its budget, ratio grabs nothing more.
+6. **Seeds the Twins on C411.** As soon as the Nyaa copy of a Twin finishes,
+   ratio downloads the C411 copy with `C411_TORZNAB_API_KEY`, adds it stopped in
+   the folder of the Nyaa copy, gives its files the Nyaa names, checks it and
+   starts it once complete. When that fails, it tries again 10 minutes later,
+   then twice longer, and gives up after the third failure, or at once when
+   C411 refuses the torrent file.
 7. **Cleans the public torrents.** While its switch is on, a public torrent of
-   one of the five categories leaves after 14 days of seeding, or once a C411
-   torrent seeds the same files, at least 6 hours after it finished.
+   one of the five categories leaves after 7 days of seeding, or once it
+   uploaded its own size, at least one hour after it finished so Radarr and
+   Sonarr can import it, whether a C411 copy exists or not. The Nyaa copy of a
+   Twin stays until its C411 copy seeds, and its files stay with that copy.
 8. **Files every torrent.** qBittorrent holds five categories: `movies`,
-   `shows` and `books` for Radarr, Sonarr and LazyLibrarian, on hold, `music`, which
-   nothing uses since Aurral downloads from Soulseek, and `farm` for the grabs
-   of ratio and the cross-seeds. The Library stays in
-   its categories. The "Adopt the Library" switch, off by default, moves a C411
-   torrent of the Library into the Farm 6 hours after it finished. ratio gives
-   each torrent one tag naming where it comes from: `radarr`, `sonarr` or
-   `lazylibrarian` for their categories, `cross-seed` for a torrent under
-   `/data/torrents/cross-seed`, and `farm` for the rest of the Farm. It removes
-   every other tag, and deletes it from qBittorrent.
+   `shows` and `books` for Radarr, Sonarr and LazyLibrarian, on hold, `music`,
+   which nothing uses since Aurral downloads from Soulseek, and `farm` for the
+   grabs of ratio and the cross-seeds. The Library stays in its categories. The
+   "Adopt the Library" switch, off by default, moves a C411 torrent of the
+   Library into the Farm 6 hours after it finished. ratio gives each torrent one
+   tag naming where it comes from: `radarr`, `sonarr` or `lazylibrarian` for
+   their categories, `cross-seed` for a torrent under `/data/torrents/cross-seed`,
+   and `farm` for the rest of the Farm. It removes every other tag, and deletes
+   it from qBittorrent.
 
-The Twins come from `RATIO_TWIN_INDEXER_IDS`, through Prowlarr. For each episode
-at most 24 hours old with at least one leecher, ratio searches its episode and
-language, for example `S03E06 VOSTFR`, and keeps a result of the same release
-group whose size is within 5 %, since Nyaa rounds its sizes. It then downloads
-both torrent files and compares the length of every file. Up to 10 episodes are
-checked per run, each one again 2 hours later at most. Prowlarr answers 429 when
-it is queried too often, and ratio then leaves it alone for as long as it asks,
-an hour when it does not say. Holding or releasing C411 at the floor still goes
-through meanwhile.
+The Twins come from `RATIO_TWIN_INDEXER_IDS`, through Prowlarr. A Twin is the
+same release on a public tracker, so its download costs nothing on C411, then
+its C411 copy seeds the same files. For each release of C411 at most 8 hours old
+with at least one leecher, an episode, a season pack or a movie, ratio searches
+its episode, season or year with its language, for example `S03E06 VOSTFR`, and
+keeps a result of the same release group whose size is within 5 %, since Nyaa
+rounds its sizes. It then downloads both torrent files and compares the length
+of every file. A release is checked every 10 minutes during its first hour,
+then every 30 minutes until it is 8 hours old, up to 30 lookups per run.
+Prowlarr answers 429 when it is queried too often, and ratio then leaves it
+alone for as long as it asks, an hour when it does not say. Holding or releasing
+C411 at the floor still goes through meanwhile.
 
 Each Zen is worth 1 GB of upload in the shop of C411, a purchase only the Admin
 makes.
@@ -1997,63 +2001,48 @@ total with the download of the last 24 hours, the Zen balance, the Zen paid that
 night and the Seed count. It serves everything the board shows at
 `http://ratio:8000/board`, and takes a change of switch or setting at
 `http://ratio:8000/controls`, on the Compose network only. The switches and
-settings live in `${APPDATA_ROOT}/ratio/controls.json`. The settings of `.env`
-only give their first value.
+settings live in `${APPDATA_ROOT}/ratio/controls.json`, which drops any control
+ratio no longer knows. The settings of `.env` only give their first value.
 
 To start the Deficit over, stop ratio, delete its state file and start it again.
-Every other limit above is fixed in `settings_from_env` of
-`services/ratio/ratio.py`.
+Every other limit above is fixed in `services/ratio/src/farm.rs`.
 
 ### Farm board
 
-farm-board, `services/farm-board/board.py`, draws the board of the Farm and
-posts it to a channel of the Discord server dedicated to the NAS, the one of the
-[Discord alerts](#discord-alerts).
+The Farm section of the Dashboard draws the board of the Farm from
+`http://ratio:8000/board`: the Account ratio, the upload with its real upload of
+the last 24 hours, the download with the last 24 hours, the Zen, the Seed count
+and the effective GB available, the download left before the block at 0.8 once
+every Zen is traded for upload, 1 GB each or 1024 GB for 1000, then a gauge of
+the ratio tiers, 0.8 where C411 blocks downloads, 1, the floor and 2, with how
+much upload reaches each tier above and how much download each tier under
+allows, two curves over 30 days, the Zen paid each night with the balance and
+the uploaded and downloaded totals, each switch and setting of the Farm with
+what it does, its disk split by Origin and what each Origin earned. A switch or
+a setting goes to ratio, which runs at once.
 
-The board, `services/farm-board/page.py`, sits at
-`https://ratio.lan.<DOMAIN>/graphs`, in English or with `?lang=fr` in French,
-from the last run of ratio. It loads no script but the one that measures its
-height for the pictures of Discord. `?part=1` shows the account: the Account
-ratio, the upload with its real upload of the last 24 hours, the download with
-the last 24 hours, the Zen, the Seed count and the effective GB available, the
-download left before the block at 0.8 once every Zen is traded for upload, 1 GB
-each or 1024 GB for 1000, then a gauge of the ratio tiers, 0.8 where C411 blocks
-downloads, 1, the floor and 2, with how much upload reaches each tier above and
-how much download each tier under allows, and two curves over 30 days: the Zen
-paid each night with the balance, and the uploaded and downloaded totals.
-`?part=2` shows each switch and setting of the Farm with
-what it does, its disk split by Origin and what each Origin earned.
-`shot=<width>` sets the width in pixels for the pictures of Discord.
-
-The Farm section of the Dashboard draws the same board from `/board.json` of
-farm-board. A switch or a setting goes to farm-board, which passes it to ratio,
-which runs at once and refreshes the Discord message. On the board page, a
-switch or a setting is a plain form that shows the same part again. It refuses a
-form sent from another site. Caddy routes `/graphs` and `/controls` of that lan
-name to farm-board, from the local network only.
-
-Every hour, a headless Chromium measures the account part at a few widths, keeps
-the one that fits in the smallest square, and takes it square, twice the pixels
-for sharpness, on a dark background. farm-board puts the picture of the account
-part, `?part=1`, in one message, in violet, or in rose when the downloads of
-C411 are paused under the Ratio floor. Each day at midnight it posts a new
-message, then edits that one every hour until the next midnight, and at once
-when a switch or a setting changes or when the Account ratio crosses a tier.
-While ratio has not filled its board yet, after a restart, farm-board publishes
+The Dashboard also posts the account part of the board, in French, to a channel
+of the Discord server dedicated to the NAS, the one of the
+[Discord alerts](#discord-alerts). It draws the picture itself, from SVG to PNG
+with IBM Plex Sans, without any browser. The message is violet, or rose when
+the downloads of C411 are paused under the Ratio floor. Each day it posts a new
+message, then edits that one every hour until the next day, and at once when a
+switch or a setting changes or when the Account ratio crosses a tier. While
+ratio has not filled its board yet, after a restart, the Dashboard publishes
 nothing and tries again every minute. The id of the message of the day sits in
-`${APPDATA_ROOT}/farm-board/state.json`. "Actualiser le Farm board" in the Quick
-actions of the Dashboard publishes it at once. Its container is capped at 512
-MB.
+`${APPDATA_ROOT}/dashboard/farm-discord.json`. "Farm board" in the Quick actions
+of the Dashboard publishes it at once. Without a webhook, the board stays off
+Discord.
 
 1. In Discord, in the server of the NAS, create a text channel for the Farm.
 2. In Server Settings > Integrations > Webhooks, click "New Webhook", pick that
    channel and copy its URL, `https://discord.com/api/webhooks/<id>/<token>`.
 3. In `.env`, set `DISCORD_FARM_WEBHOOK_ID` and `DISCORD_FARM_WEBHOOK_TOKEN` to
    both parts of the URL, then restart doco-cd to apply `.env`.
-4. Its logs name each post and edit:
+4. The logs of the Dashboard name each post and edit:
 
    ```sh
-   docker compose logs farm-board
+   docker compose logs dashboard | grep "Farm board"
    ```
 
 ## Observation

@@ -18,7 +18,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const STATE: &str = "/state/state.json";
 const CONTROLS: &str = "/state/controls.json";
 const CYCLE: Duration = Duration::from_secs(60);
-const BOARD_REFRESH: &str = "http://farm-board:8000/refresh";
 
 fn now() -> f64 {
     SystemTime::now()
@@ -82,21 +81,6 @@ fn listed(qbt: &dyn Qbt) -> Result<Torrents, String> {
         .collect())
 }
 
-fn tell_board() {
-    let sent = http::agent(None, 10).and_then(|agent| {
-        http::call(
-            &agent,
-            "POST",
-            BOARD_REFRESH,
-            &[],
-            Some(("text/plain", vec![])),
-        )
-    });
-    if let Err(error) = sent {
-        println!("Cannot tell farm-board to refresh: {error}");
-    }
-}
-
 fn spent(outcome: Result<(), Fail>) -> bool {
     match outcome {
         Ok(()) => true,
@@ -113,7 +97,6 @@ fn spent(outcome: Result<(), Fail>) -> bool {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_once(
     qbt: &dyn Qbt,
     prowlarr: &dyn Indexers,
@@ -122,7 +105,6 @@ fn run_once(
     controls: &Snapshot,
     state: &mut State,
     now: f64,
-    notify: &dyn Fn(),
 ) -> Result<Value, String> {
     let settings = base.with(controls);
     farm::prepare(qbt, &settings)?;
@@ -158,16 +140,6 @@ fn run_once(
     let torrents = listed(qbt)?;
     let seeds = ledger::seeded_on_c411(state, &settings, &torrents);
     ledger::record_day(state, &settings, seeds, account.as_ref(), now);
-    let tier = ledger::tier_index(account.as_ref(), &settings);
-    if let (Some(tier), Some(before)) = (tier, state.tier)
-        && tier != before
-    {
-        println!("The Account ratio crossed a tier, farm-board refreshes the Discord message");
-        notify();
-    }
-    if tier.is_some() {
-        state.tier = tier;
-    }
     Ok(ledger::board_of(
         state,
         &settings,
@@ -296,7 +268,6 @@ fn main() {
             &snapshot,
             &mut state,
             now(),
-            &tell_board,
         ) {
             Ok(board) => {
                 let current = shared
@@ -327,10 +298,9 @@ fn main() {
 mod tests {
     use super::*;
     use farm::fakes::*;
-    use std::cell::Cell;
 
     #[test]
-    fn a_run_reads_the_account_records_the_day_and_tells_the_board_of_a_new_tier() {
+    fn a_run_reads_the_account_and_records_the_day() {
         let qbt = FakeQbt::default();
         *qbt.torrents.borrow_mut() = vec![torrent("A", farm::FARM)];
         let c411 = FakeC411 {
@@ -342,11 +312,7 @@ mod tests {
             }),
             ..FakeC411::default()
         };
-        let mut state = State {
-            tier: Some(1),
-            ..State::default()
-        };
-        let told = Cell::new(0);
+        let mut state = State::default();
         let controls =
             Controls::load(Path::new("/nonexistent/controls.json")).snapshot(&settings());
         let board = run_once(
@@ -357,11 +323,8 @@ mod tests {
             &controls,
             &mut state,
             1_800_000_000.0,
-            &|| told.set(told.get() + 1),
         )
         .unwrap();
-        assert_eq!(1, told.get());
-        assert_eq!(Some(4), state.tier);
         assert_eq!(3.0, board["account"]["ratio"]);
         assert!(!state.paused);
         assert!(state.transfers.contains_key("a"));

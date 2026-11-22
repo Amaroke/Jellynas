@@ -7,7 +7,9 @@ publish = false
 [dependencies]
 axum = "0.8"
 futures-util = { version = "0.3", default-features = false }
+jiff = { version = "1.0", features = ["tzdb-bundle-always"] }
 minijinja = { version = "3.1", features = ["json", "serde"] }
+resvg = { version = "0.50.0", default-features = false, features = ["text"] }
 ring = "0.17"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1.0", features = ["derive"] }

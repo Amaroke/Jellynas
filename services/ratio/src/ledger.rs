@@ -425,17 +425,6 @@ fn tiers_of(account: Option<&Account>, settings: &Settings) -> Vec<Value> {
     found.into_iter().map(|(_, tier)| tier).collect()
 }
 
-pub fn tier_index(account: Option<&Account>, settings: &Settings) -> Option<usize> {
-    let account = account.filter(|a| a.downloaded != 0)?;
-    let ratio = account.uploaded as f64 / account.downloaded as f64;
-    Some(
-        tiers_of(Some(account), settings)
-            .iter()
-            .filter(|tier| ratio >= tier["ratio"].as_f64().unwrap_or(f64::MAX))
-            .count(),
-    )
-}
-
 fn zen_gigabytes(zen: f64) -> f64 {
     let packs = (zen / ZEN_PACK.0).floor();
     packs * ZEN_PACK.1 + (zen - packs * ZEN_PACK.0)
@@ -631,8 +620,6 @@ mod tests {
         let tiers = tiers_of(Some(&account(150, 100)), &settings());
         let names: Vec<&str> = tiers.iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert_eq!(vec!["blocked", "even", "floor", "goal"], names);
-        assert_eq!(Some(2), tier_index(Some(&account(150, 100)), &settings()));
-        assert_eq!(None, tier_index(None, &settings()));
     }
 
     #[test]

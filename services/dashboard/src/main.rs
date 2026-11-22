@@ -1,6 +1,7 @@
 mod app;
 mod cards;
 mod docker;
+mod farm_post;
 mod icons;
 mod shutdown;
 mod space;
@@ -62,6 +63,18 @@ async fn main() {
     thread::spawn(move || measurer.measure());
     let pool = app.clone();
     thread::spawn(move || pool.watch_truenas());
+    if let Some(poster) = farm_post::Poster::new(
+        &env::var("DISCORD_FARM_WEBHOOK_ID").unwrap_or_default(),
+        &env::var("DISCORD_FARM_WEBHOOK_TOKEN").unwrap_or_default(),
+        state.join("farm-discord.json"),
+    ) {
+        let (wake, woken) = std::sync::mpsc::channel();
+        app.listen_farm(wake);
+        let farm = app.clone();
+        thread::spawn(move || farm.post_farm(poster, woken));
+    } else {
+        println!("No Discord webhook for the Farm, the Farm board stays off Discord");
+    }
     let poller = app.clone();
     thread::spawn(move || poller.poll());
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", PORT))

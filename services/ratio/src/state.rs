@@ -54,7 +54,6 @@ pub struct State {
     pub given_up: BTreeMap<String, f64>,
     pub restore: BTreeMap<String, i64>,
     pub daily: Vec<Day>,
-    pub tier: Option<usize>,
 }
 
 pub fn load_state(path: &Path) -> Result<State, String> {
@@ -301,7 +300,6 @@ mod tests {
         assert_eq!((10, 20), state.transfers["a"]);
         assert_eq!("c", state.twins["n"].0);
         assert_eq!(Some(1.4), state.daily[0].ratio);
-        assert_eq!(Some(2), state.tier);
         assert_eq!(1, state.restore["3"]);
     }
 
