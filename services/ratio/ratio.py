@@ -29,7 +29,7 @@ CATEGORIES = {
 }
 PUBLIC = "public"
 CROSS_SEED = "/data/torrents/cross-seed"
-ORIGINS = {"movies": "radarr", "shows": "sonarr", "books": "lazylibrarian", FARM: "ratio"}
+ORIGINS = {"movies": "radarr", "shows": "sonarr", "books": "lazylibrarian", FARM: FARM}
 SEEDING = ("uploading", "stalledUP", "queuedUP", "forcedUP")
 SHARE_LIMITS = ("max_ratio_enabled", "max_seeding_time_enabled", "max_inactive_seeding_time_enabled")
 HISTORY_DAYS = 30

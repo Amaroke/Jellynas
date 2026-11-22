@@ -2367,7 +2367,7 @@ the Dashboard, see [Farm board](#farm-board).
    torrent of the Library into the Farm 6 hours after it finished. ratio gives
    each torrent one tag naming where it comes from: `radarr`, `sonarr` or
    `lazylibrarian` for their categories, `cross-seed` for a torrent under
-   `/data/torrents/cross-seed`, and `ratio` for the rest of the Farm. It removes
+   `/data/torrents/cross-seed`, and `farm` for the rest of the Farm. It removes
    every other tag, and deletes it from qBittorrent.
 
 The Twins come from `RATIO_TWIN_INDEXER_IDS`, through Prowlarr. For each episode

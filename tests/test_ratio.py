@@ -676,7 +676,7 @@ class Tags(unittest.TestCase):
         run(qbt, switches={"clean_public": False})
         self.assertEqual(
             {t["hash"]: t["tags"] for t in qbt.list},
-            {"movie": "radarr", "show": "sonarr", "book": "lazylibrarian", "grab": "ratio", "twin": "ratio", "seed": "cross-seed", "manual": ""},
+            {"movie": "radarr", "show": "sonarr", "book": "lazylibrarian", "grab": "farm", "twin": "farm", "seed": "cross-seed", "manual": ""},
         )
 
     def test_every_tag_naming_no_origin_is_deleted(self):
