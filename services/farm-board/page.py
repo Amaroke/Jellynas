@@ -10,7 +10,7 @@ COLORS = {
     "radarr": "#fbbf24", "sonarr": "#38bdf8", "lazylibrarian": "#a78bfa", "farm": "#34d399", "cross-seed": "#f472b6",
     "unknown": "#94a3b8",
 }
-FADE = {"c411": "", "nyaa": "99", "other": "55"}
+FADE = {"nyaa": "99", "other": "55"}
 TIER_COLORS = ("#fb7185", "#fbbf24", "#facc15", "#34d399", "#a78bfa")
 BEHAVIOURS = ("free", "twins", "paid", "clean_public", "drop_twins", "hold", "adopt")
 NUMBER_STEPS = {"farm_size_gb": "1", "floor": "0.05", "daily_gb": "0.5"}
@@ -396,11 +396,11 @@ def settings(board, words, language):
 
 
 def color_of(f):
-    return COLORS.get(f["origin"], COLORS["unknown"]) + FADE.get(f["tracker"], FADE["other"])
+    return COLORS.get(f["origin"], COLORS["unknown"]) + FADE.get(f["tracker"], "")
 
 
 def name_of(f):
-    return f'{f["origin"]} · {f["tracker"]}'
+    return f'{f["origin"]} · {f["tracker"]}' if f["tracker"] else f["origin"]
 
 
 def donut(farm, words):
