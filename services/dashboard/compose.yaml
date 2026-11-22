@@ -54,6 +54,11 @@ services:
       FARM_BOARD_URL: http://farm-board:8000
       DISCORD_POSTS_URL: http://discord-posts:8000
       PR_RADAR_URL: http://pr-radar:8000
+      TRUENAS_URL: wss://host.docker.internal/api/current
+      TRUENAS_API_KEY: ${TRUENAS_API_KEY:-}
+      TRUENAS_FINGERPRINT: ${TRUENAS_FINGERPRINT:-}
+    extra_hosts:
+      - host.docker.internal:host-gateway
     labels:
       kuma.dashboard.docker.name: Dashboard
       dashboard.name: Dashboard

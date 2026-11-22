@@ -68,6 +68,7 @@ pub struct Board {
     pub history: History,
     pub uptime: BTreeMap<String, Uptime>,
     pub media: Option<Panel>,
+    pub truenas: Option<Panel>,
 }
 
 pub fn settle<T: Clone>(
