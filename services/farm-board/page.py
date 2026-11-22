@@ -237,11 +237,7 @@ form { margin: 0; display: inline; }
   .chart { flex: none; height: 140px; }
 }
 """
-SCRIPT = (
-    'const main = document.querySelector("main"); document.documentElement.dataset.height = main.offsetHeight; '
-    'if (parent !== window) { '
-    'new ResizeObserver(() => parent.postMessage({ratioBoardHeight: main.scrollHeight}, "*")).observe(main); }'
-)
+SCRIPT = 'document.documentElement.dataset.height = document.querySelector("main").offsetHeight;'
 SCRIPT_HASH = base64.b64encode(hashlib.sha256(SCRIPT.encode()).digest()).decode()
 
 

@@ -113,7 +113,13 @@
 	import lan beszel beszel:8090
 	import lan uptime-kuma uptime-kuma:3001
 	import lan dozzle dozzle:8080
-	import lan homepage homepage:3000
+	@homepage {
+		host homepage.lan.{$DOMAIN}
+		remote_ip {$LAN_SUBNET}
+	}
+	handle @homepage {
+		redir https://dashboard.lan.{$DOMAIN}:{$CADDY_HTTPS_PORT}{uri}
+	}
 	import lan dashboard dashboard:8000
 	handle {
 		abort

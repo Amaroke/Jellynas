@@ -42,7 +42,7 @@ guide is written so that an AI agent can follow it as well as a person.
 24. [Beszel](#beszel)
 25. [Uptime Kuma](#uptime-kuma)
 26. [Dozzle](#dozzle)
-27. [Homepage](#homepage)
+27. [Dashboard](#dashboard)
 28. [Backup](#backup)
 29. [Verify the NAS](#verify-the-nas)
 30. [Contributing](#contributing)
@@ -214,14 +214,14 @@ networks:
 
 qBittorrent, slskd and Suwayomi share the network of Gluetun, in the internal
 zone, and the Beszel agent the network of the Host. A service that needs
-Jellyfin, Seerr, Aurral or Authelia from another zone, such as Homepage, Uptime
-Kuma, the Music bot, or Aurral signing in with Authelia, reaches it through
-Caddy at its public name, so the zones only open towards the public services,
-never from them. lldap speaks LDAP, which Caddy cannot carry, so it sits in the
-zones of Jellyfin and of Authelia, the only two services that read the Accounts,
-and has no public name. The zones hand out IPv6 addresses too, and Jellyfin
-tries them first, so lldap listens on `::`. `python3 -m unittest` checks the
-members of each zone.
+Jellyfin, Seerr, Aurral or Authelia from another zone, such as the Dashboard,
+Uptime Kuma, the Music bot, or Aurral signing in with Authelia, reaches it
+through Caddy at its public name, so the zones only open towards the public
+services, never from them. lldap speaks LDAP, which Caddy cannot carry, so it
+sits in the zones of Jellyfin and of Authelia, the only two services that read
+the Accounts, and has no public name. The zones hand out IPv6 addresses too, and
+Jellyfin tries them first, so lldap listens on `::`. `python3 -m unittest`
+checks the members of each zone.
 
 Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS
 provider, swap the `caddy-dns/ovh` module in `services/caddy/Dockerfile` for its
@@ -306,7 +306,7 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with
 | Beszel        | `https://beszel.lan.<DOMAIN>`          | Local network |
 | Uptime Kuma   | `https://uptime-kuma.lan.<DOMAIN>`     | Local network |
 | Dozzle        | `https://dozzle.lan.<DOMAIN>`          | Local network |
-| Homepage      | `https://homepage.lan.<DOMAIN>`        | Local network |
+| Dashboard     | `https://dashboard.lan.<DOMAIN>`       | Local network |
 
 cross-seed has an API only, which the other containers reach at
 `http://cross-seed:2468`. The first certificates take a few minutes, follow them
@@ -1142,7 +1142,7 @@ VPN, never the home IP.
 
 In `.env`, set `SLSKD_USERNAME` and `SLSKD_PASSWORD` to the login of its web UI,
 distinct from the other tools, and `SLSKD_API_KEY` to a new key, which Aurral
-and Homepage use:
+and the Dashboard use:
 
 ```bash
 openssl rand -hex 24
@@ -1395,7 +1395,7 @@ doco-cd to apply `.env`:
 docker restart doco-cd
 ```
 
-Suwayomi asks for this login at every visit. Homepage uses it to read its
+Suwayomi asks for this login at every visit. The Dashboard uses it to read its
 figures, and policy to keep its settings. `./scripts/verify.sh` checks that the
 web UI asks for it.
 
@@ -1557,7 +1557,7 @@ flowchart LR
         UptimeKuma("Uptime Kuma<br/>checks, written by AutoKuma")
         Dozzle("Dozzle<br/>logs, read-only")
         Indexarr("Indexarr<br/>Library catalog, read-only")
-        Homepage("Homepage<br/>dashboard")
+        Dashboard("Dashboard<br/>watches and drives")
         Backup("Backup<br/>appdata, every night")
     end
 
@@ -1636,7 +1636,7 @@ flowchart LR
     class autobrr,crossseed,ratioscript ratioNode
     style ratio fill:#fce4ec,stroke:#ec407a,stroke-width:2px,color:#1f2937
     classDef observationNode fill:#ffffff,stroke:#00897b,color:#1f2937,stroke-width:1.5px
-    class Beszel,UptimeKuma,Dozzle,Indexarr,Homepage,Backup observationNode
+    class Beszel,UptimeKuma,Dozzle,Indexarr,Dashboard,Backup observationNode
     style observation fill:#e0f2f1,stroke:#00897b,stroke-width:2px,color:#1f2937
     classDef dataNode fill:#ffffff,stroke:#78909c,color:#1f2937,stroke-width:1.5px
     class Torrents,Library dataNode
@@ -2155,11 +2155,11 @@ alone and waits for the next night, as `docker compose logs discord-posts`
 shows.
 
 To update a message without waiting, click "Actualiser les messages Discord" in
-Actions rapides on Homepage, or run the same command by hand. For a piece of
-news, add a new file, such as
-`discord-posts/2026-11-new-folder.md`, and publish it with `news` as the
-channel. Any channel works the same way once `.env` holds
-`DISCORD_<CHANNEL>_WEBHOOK_ID` and `DISCORD_<CHANNEL>_WEBHOOK_TOKEN`.
+the Quick actions of the Dashboard, or run the same command by hand. For a piece
+of news, add a new file, such as `discord-posts/2026-11-new-folder.md`, and
+publish it with `news` as the channel. Any channel works the same way once
+`.env` holds `DISCORD_<CHANNEL>_WEBHOOK_ID` and
+`DISCORD_<CHANNEL>_WEBHOOK_TOKEN`.
 
 ## PR radar
 
@@ -2176,13 +2176,14 @@ posts to the PR channel of the Discord server dedicated to the NAS:
 The first run only remembers what is open, so it posts nothing. The state lives
 in `${APPDATA_ROOT}/pr-radar/state.json`.
 
-The Pull requests group of Homepage shows `https://prs.lan.<DOMAIN>/pulls`, the
-open pull requests, ready ones first, then those waiting on their CI or on an
-update, then those to fix, then the drafts. Each one gives its repo, author, CI,
-merge state, review, labels, size and age, and links to its files, its checks
-and its merge box on GitHub. `http://pr-radar:8000/status` gives the same counts
-as JSON. Uptime Kuma watches `/health`, which fails after three polls in a row
-that could not reach GitHub or Discord.
+The Pull requests section of the Dashboard, and
+`https://prs.lan.<DOMAIN>/pulls`, show the open pull requests, ready ones first,
+then those waiting on their CI or on an update, then those to fix, then the
+drafts. Each one gives its repo, author, CI, merge state, review, labels, size
+and age, and links to its files, its checks and its merge box on GitHub.
+`http://pr-radar:8000/status` gives the same counts as JSON. Uptime Kuma watches
+`/health`, which fails after three polls in a row that could not reach GitHub or
+Discord.
 
 1. In GitHub, Settings > Developer settings > Fine-grained tokens, create a
    token for All repositories, read-only, with the permissions Pull requests,
@@ -2204,15 +2205,15 @@ The Admin keeps a good ratio on C411, a French private tracker, with torrents
 grabbed only to seed, without touching the Library. The Account ratio comes
 first: the Farm spends download only over the Ratio floor, and leans on what
 costs nothing on C411, cross-seeds, Twins and freeleech. The Quests of C411 come
-next, each farmed behind a switch of Homepage. The Zen comes on its own with the
-rest:
+next, each farmed behind a switch of the Dashboard. The Zen comes on its own
+with the rest:
 
 - ratio, `services/ratio/ratio.py`, runs the Farm through the API of C411. It
   grabs freeleech releases, Twins, fresh paid releases and small releases for
   the Quests, each behind its switch, downloads a release from its Twin on a
   public tracker when one exists, and never removes a torrent of the Farm.
 - farm-board, `services/farm-board/board.py`, draws the board of the Farm with
-  its switches for Homepage, and posts it to Discord.
+  its switches for the Dashboard, and posts it to Discord.
 - cross-seed finds the torrents of qBittorrent on C411 and seeds them there too,
   from hardlinks in `/data/torrents/cross-seed`, without downloading them again.
   qBittorrent tells it about every finished torrent.
@@ -2335,7 +2336,7 @@ switch or a setting of the Farm changes. It works for C411 only and reads it
 through its own API, ten calls a minute at most and 30 per run, the rest waiting
 for the next run. Every HTTPS call of ratio goes through the proxy of Gluetun,
 so C411 only sees the VPN address. Every switch and setting below lives in
-Homepage, see [Farm board](#farm-board).
+the Dashboard, see [Farm board](#farm-board).
 
 1. **Reads the account.** It reads the profile of C411 once per run with
    `C411_PROFILE_API_KEY`: uploaded and downloaded totals with the credit bought
@@ -2456,40 +2457,41 @@ posts it to a channel of the Discord server dedicated to the NAS, the one of the
 
 The board, `services/farm-board/page.py`, sits at
 `https://ratio.lan.<DOMAIN>/graphs`, in English or with `?lang=fr` in French,
-from the last run of ratio. It loads no script but the one that tells Homepage
-its height. `?part=1` shows the account: the Account ratio, the upload with its
-real upload of the last 24 hours, the download with the last 24 hours, the Zen,
-the Seed count and the effective GB available, the download left before the
-block at 0.8 once every Zen is traded for upload, 1 GB each or 1024 GB for 1000,
-then a gauge of the ratio tiers, 0.8 where C411 blocks downloads, 1, the floor
-and 2, with how much upload reaches each tier above and how much download each
-tier under allows, and two curves over 30 days: the Zen paid each night with the
-balance, and the uploaded and downloaded totals. `?part=2` shows the Quests, one
-card per challenge with every level and its count: a switch for the Seed count,
-an indicator for the seeding time, the note and the diversity, and in the Volume
-challenge its ten categories, each with its switch. A challenge with every level
-done shows a locked completed badge in place of its switch. `?part=3` shows each
-switch and setting of the Farm with what it does, its disk split by Source and
-what each Source earned.
+from the last run of ratio. It loads no script but the one that measures its
+height for the pictures of Discord. `?part=1` shows the account: the Account
+ratio, the upload with its real upload of the last 24 hours, the download with
+the last 24 hours, the Zen, the Seed count and the effective GB available, the
+download left before the block at 0.8 once every Zen is traded for upload, 1 GB
+each or 1024 GB for 1000, then a gauge of the ratio tiers, 0.8 where C411 blocks
+downloads, 1, the floor and 2, with how much upload reaches each tier above and
+how much download each tier under allows, and two curves over 30 days: the Zen
+paid each night with the balance, and the uploaded and downloaded totals.
+`?part=2` shows the Quests, one card per challenge with every level and its
+count: a switch for the Seed count, an indicator for the seeding time, the note
+and the diversity, and in the Volume challenge its ten categories, each with its
+switch. A challenge with every level done shows a locked completed badge in
+place of its switch. `?part=3` shows each switch and setting of the Farm with
+what it does, its disk split by Source and what each Source earned.
 `shot=<width>` sets the width in pixels for the pictures of Discord.
 
-Homepage embeds the three parts, in French, in three iframes. A switch or a
-setting is a plain form: farm-board passes it to ratio, which runs at once,
-refreshes the Discord message and shows the same part again. It refuses a form
-sent from another site. Caddy routes `/graphs` and `/controls` of that lan name
-to farm-board, from the local network only.
+The Farm section of the Dashboard draws the same board from `/board.json` of
+farm-board. A switch or a setting goes to farm-board, which passes it to ratio,
+which runs at once and refreshes the Discord message. On the board page, a
+switch or a setting is a plain form that shows the same part again. It refuses a
+form sent from another site. Caddy routes `/graphs` and `/controls` of that lan
+name to farm-board, from the local network only.
 
 Every hour, a headless Chromium measures the account part at a few widths, keeps
 the one that fits in the smallest square, and takes it square, twice the pixels
-for sharpness, on the dark background of Homepage. farm-board puts the picture
-of the account part, `?part=1`, in one message, in violet, or in rose when the
-downloads of C411 are paused under the Ratio floor. Each day at midnight it
-posts a new message, then edits that one every hour until the next midnight, and
-at once when a switch or a setting changes or when the Account ratio crosses a
-tier. While ratio has not filled its board yet, after a restart, farm-board
-publishes nothing and tries again every minute. The id of the message of the day
-sits in `${APPDATA_ROOT}/farm-board/state.json`. "Actualiser le Farm board" in
-Actions rapides on Homepage publishes it at once. Its container is capped at 512
+for sharpness, on a dark background. farm-board puts the picture of the account
+part, `?part=1`, in one message, in violet, or in rose when the downloads of
+C411 are paused under the Ratio floor. Each day at midnight it posts a new
+message, then edits that one every hour until the next midnight, and at once
+when a switch or a setting changes or when the Account ratio crosses a tier.
+While ratio has not filled its board yet, after a restart, farm-board publishes
+nothing and tries again every minute. The id of the message of the day sits in
+`${APPDATA_ROOT}/farm-board/state.json`. "Actualiser le Farm board" in the Quick
+actions of the Dashboard publishes it at once. Its container is capped at 512
 MB.
 
 1. In Discord, in the server of the NAS, create a text channel for the Farm.
@@ -2698,48 +2700,37 @@ docker compose restart dozzle
 
 Open `https://dozzle.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in.
 
-## Homepage
+## Dashboard
 
 Requires [Bazarr](#bazarr), [Suwayomi](#suwayomi), [Private tracker
 ratio](#private-tracker-ratio), [Beszel](#beszel) and [Uptime
 Kuma](#uptime-kuma).
 
-Homepage is the start page of the Admin: one tile per service, grouped as in
-[Architecture](#architecture), with a link to its lan name and its live figures,
-such as the Requests waiting in Seerr, the queues of Radarr and Sonarr,
-the manga of Suwayomi, the torrents of qBittorrent, the public IP and the
-country of the VPN, and the free space of the data disk, plus the board of ratio
-in two iframes. Homarr or Dashy can replace it.
+The Dashboard, `services/dashboard`, is the start page of the Admin, on the
+local network only, with no sign-in. It shows one card per service, grouped in
+sections, with its state, its link, its uptime, its CPU and memory, and the live
+figures of its service, such as the Requests waiting in Seerr, with buttons to
+approve or decline them, the queues of Radarr and Sonarr, the torrents of
+qBittorrent, or the public IP and the country of the VPN. The Status section
+shows the Host, the pools and disks of TrueNAS and the space of the Media tree.
+The Farm, the Quick actions and the Pull requests have their own sections. A
+service with the `dashboard.switchable` label also gets an on and off control
+and a restart button, through its own socket proxy.
 
-Its config is `services/homepage/settings.yaml`,
-`services/homepage/services.yaml` and `services/homepage/widgets.yaml`. They
-hold no key and no personal value: Homepage reads each one from `.env`, through
-the `HOMEPAGE_VAR_` variables of `services/homepage/compose.yaml`. Homepage
-pastes each value into the YAML before reading it, so a value it reads must hold
-no single quote, or the whole page stays empty. This is why it reads qBittorrent
-with an API key rather than its password. Homepage calls the APIs itself, so no
-key ever reaches the browser. It sees no file of the data root, only the empty
-folder `<DATA_ROOT>/.homepage`, which gives it the free space of the data disk.
-`./scripts/verify.sh` checks that it mounts neither the media tree nor the
-torrents tree.
+Each card comes from the `dashboard.*` labels of its service in its
+`compose.yaml`, which hold no key. The Dashboard reads the keys from `.env` and
+calls the APIs itself, so no key ever reaches the browser. It mounts the Media
+tree read-only to measure it. `./scripts/verify.sh` checks that it cannot write
+to it and that it does not mount the torrents tree. The old name
+`https://homepage.lan.<DOMAIN>` redirects to it.
 
-### Login of Homepage
-
-Homepage asks for a password only, set in `.env`. In `.env`, set
-`HOMEPAGE_PASSWORD` to a strong password, distinct from the other tools, and
-`HOMEPAGE_AUTH_SECRET` to a new secret:
-
-```bash
-openssl rand -hex 32
-```
-
-### API keys of Homepage
+### API keys of the Dashboard
 
 Most keys are already in `.env` from the sections of their service. Add the
 others, then restart doco-cd to apply `.env`:
 
 - Jellyfin, `JELLYFIN_API_KEY`: Dashboard > Advanced > API Keys, click "+" and
-  name it `Homepage`
+  name it `Dashboard`
 - Seerr, `SEERR_API_KEY`: Settings > General, "API Key"
 - qBittorrent, `QBITTORRENT_API_KEY`: Tools > Options > WebUI > Authentication,
   generate the API key
@@ -2753,9 +2744,9 @@ others, then restart doco-cd to apply `.env`:
 - Bazarr, `BAZARR_API_KEY`: Settings > General > Security, "API Key"
 - Tdarr, `TDARR_API_KEY`: set in [Tdarr](#tdarr)
 - autobrr, `AUTOBRR_API_KEY`: Settings > API Keys, click "Add new" and name it
-  `Homepage`
+  `Dashboard`
 - Beszel, `BESZEL_EMAIL` and `BESZEL_PASSWORD`: set in [Beszel](#beszel)
-- TrueNAS, `TRUENAS_API_KEY`, read by the Dashboard only: in Credentials >
+- TrueNAS, `TRUENAS_API_KEY`: in Credentials >
   Users, add a user `dashboard` with the password disabled in the group
   `truenas_readonly_administrators`, then add an API key for it
 - TrueNAS, `TRUENAS_FINGERPRINT`: the SHA-256 fingerprint of the certificate of
@@ -2782,23 +2773,21 @@ At each start, Gluetun allows that key on one route only, `GET /v1/publicip/ip`,
 which gives the public IP and the country of the VPN. The key cannot stop the
 VPN nor read its settings.
 
-### Homepage and Uptime Kuma
+### Dashboard and Uptime Kuma
 
-The Uptime Kuma tile counts the services up and down from a status page. In
+The Uptime Kuma card counts the services up and down from a status page. In
 Uptime Kuma, Status Pages, click "New Status Page", enter `NAS` as the name and
 `nas` as the slug, add every monitor, and save. A monitor AutoKuma adds later,
 for a new service, goes on the status page by hand too. The status page is
 reachable on the lan name of Uptime Kuma without a login, so any device of the
-local network can read it.
+local network can read it. The uptime of each card comes from the monitor of the
+same name.
 
 ### Open
 
-Open `https://homepage.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in with
-`HOMEPAGE_PASSWORD`. The playback controls of Jellyfin stay off, so Homepage
-only reads the services. A tile whose service is down, or whose key is wrong,
-shows an error in place of its figures. The board shows the Farm.
-The tiles of Recyclarr, Caddy, LazyLibrarian and Indexarr show no figures, since
-Homepage has no widget for them.
+Open `https://dashboard.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. A card whose service
+is down, or whose key is wrong, keeps its shape and says why in place of its
+figures.
 
 ## Backup
 
