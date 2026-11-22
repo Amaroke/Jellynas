@@ -303,7 +303,13 @@ function status() {
     element("h2", {}, "Status"),
     element("div", {}, element("div", { class: "clock" }), element("div", { class: "date" })),
     ...panel(board.host),
+    ...pool(),
     space());
+}
+
+function pool() {
+  if (!board.truenas) return [];
+  return [element("div", { class: "space" }, element("span", { class: "caption" }, "TrueNAS"), ...panel(board.truenas))];
 }
 
 function space() {
@@ -326,7 +332,7 @@ function refresh() {
     node.replaceChildren(node.querySelector(".head"), ...panel(board.widgets[node.dataset.service], node.dataset.widget), ...usage(node.dataset.service, node.dataset.widget), uptime(node.dataset.name));
   }
   const host = document.getElementById("status");
-  if (host) host.replaceChildren(...[...host.children].slice(0, 2), ...panel(board.host), space());
+  if (host) host.replaceChildren(...[...host.children].slice(0, 2), ...panel(board.host), ...pool(), space());
   for (const block of main.querySelectorAll(".native")) {
     const typing = document.activeElement && document.activeElement.tagName === "INPUT" && block.contains(document.activeElement);
     if (typing) continue;

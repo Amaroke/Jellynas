@@ -39,6 +39,7 @@ const POLL: Duration = Duration::from_secs(20);
 const POINTS: usize = 90;
 const MEDIA: &str = "/media";
 const MEASURE: Duration = Duration::from_secs(1800);
+const POOL: Duration = Duration::from_secs(300);
 
 pub enum Outcome {
     Done,
@@ -243,6 +244,7 @@ impl App {
                 history,
                 uptime,
                 media: board.media.clone(),
+                truenas: board.truenas.clone(),
             });
         });
     }
@@ -306,6 +308,35 @@ impl App {
                 eprintln!("Cannot change {} in the Farm: {error}", control["name"]);
                 Outcome::Failed
             }
+        }
+    }
+
+    pub fn watch_truenas(&self) {
+        let url = std::env::var("TRUENAS_URL").unwrap_or_default();
+        let key = std::env::var("TRUENAS_API_KEY").unwrap_or_default();
+        let pin = std::env::var("TRUENAS_FINGERPRINT").unwrap_or_default();
+        if url.trim().is_empty() || key.trim().is_empty() {
+            println!("TRUENAS_URL or TRUENAS_API_KEY is not set, TrueNAS is not read");
+            return;
+        }
+        let Some(fingerprint) = crate::truenas::fingerprint(&pin) else {
+            eprintln!(
+                "TRUENAS_FINGERPRINT is not the SHA-256 of a certificate, TrueNAS is not read"
+            );
+            return;
+        };
+        loop {
+            let found = crate::truenas::read(url.trim(), key.trim(), fingerprint.clone())
+                .and_then(|found| crate::truenas::reading(&found, now()));
+            if let Err(error) = &found {
+                eprintln!("Cannot read TrueNAS: {error}");
+            }
+            self.board.send_modify(|board| {
+                let mut changed = (**board).clone();
+                changed.truenas = Some(widgets::settle(changed.truenas.as_ref(), found, now()));
+                *board = Arc::new(changed);
+            });
+            thread::sleep(POOL);
         }
     }
 
