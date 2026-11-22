@@ -12,7 +12,6 @@ services:
       PUID: ${PUID}
       PGID: ${PGID}
       TZ: ${TZ}
-      TDARR_API_KEY: ${TDARR_API_KEY}
     labels:
       kuma.bazarr.http.name: Bazarr
       kuma.bazarr.http.url: http://bazarr:6767/api/system/ping
@@ -30,7 +29,6 @@ services:
       - ${DATA_ROOT}/media/movies:/data/media/movies
       - ${DATA_ROOT}/media/shows:/data/media/shows
       - ${DATA_ROOT}/media/anime:/data/media/anime
-      - ./tdarr_requeue.py:/scripts/tdarr_requeue.py:ro
     healthcheck:
       test:
         - "CMD"

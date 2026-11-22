@@ -1556,7 +1556,6 @@ flowchart LR
     Recyclarr -->|profiles| Sonarr
     Radarr -.->|"new files"| Bazarr
     Sonarr -.->|"new files"| Bazarr
-    Bazarr -.->|requeue| Tdarr
     autobrr ~~~ crossseed ~~~ ratioscript
 
     style canvas fill:#ffffff,stroke:#e5e7eb,stroke-width:1px
@@ -2795,26 +2794,17 @@ French and Japanese ones. To switch it:
 #### Subtitles embedded by Tdarr
 
 The Library holds no subtitle file: Tdarr embeds each one into its video, so a
-Friend who downloads a video gets its subtitles. When Bazarr finds a subtitle
-after Tdarr has processed the video, it puts the video back in the Tdarr queue
-with `services/bazarr/tdarr_requeue.py`, which reads `TDARR_API_KEY` from
-`.env`. In Settings > Subtitles:
+Friend who downloads a video gets its subtitles. A subtitle that Bazarr finds
+after Tdarr has processed the video stays out of it until the video goes
+through Tdarr again. In Settings > Subtitles:
 
 1. Under "Embedded Subtitles", leave "Use Embedded Subtitles" checked, so an
    embedded track counts as found and is never downloaded again.
 2. Under "Upgrading Subtitles", uncheck "Upgrade Previously Downloaded
    Subtitles". An upgrade would add a second track of the same language to the
    video.
-3. Under "Post-Processing", check "Custom Post-Processing", leave the score
-   thresholds unchecked, and enter this command:
-
-   ```sh
-   python3 /scripts/tdarr_requeue.py "{{episode}}"
-   ```
-
+3. Under "Post-Processing", leave "Custom Post-Processing" unchecked.
 4. Save.
-
-Bazarr writes the outcome of each command in System > Logs.
 
 ## Contributing
 
