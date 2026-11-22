@@ -4,9 +4,7 @@ mod docker;
 mod farm_post;
 mod icons;
 mod shutdown;
-mod space;
 mod stats;
-mod truenas;
 mod web;
 mod widgets;
 
@@ -59,10 +57,6 @@ async fn main() {
     ));
     let watcher = app.clone();
     thread::spawn(move || watcher.watch());
-    let measurer = app.clone();
-    thread::spawn(move || measurer.measure());
-    let pool = app.clone();
-    thread::spawn(move || pool.watch_truenas());
     if let Some(poster) = farm_post::Poster::new(
         &env::var("DISCORD_FARM_WEBHOOK_ID").unwrap_or_default(),
         &env::var("DISCORD_FARM_WEBHOOK_TOKEN").unwrap_or_default(),

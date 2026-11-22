@@ -1757,8 +1757,7 @@ publication. A failure on one channel leaves the others
 alone and waits for the next night, as `docker compose logs discord-posts`
 shows.
 
-To update a message without waiting, click "Actualiser les messages Discord" in
-the Quick actions of the Dashboard, or run the same command by hand. For a piece
+To update a message without waiting, run the same command by hand. For a piece
 of news, add a new file, such as `discord-posts/2026-11-new-folder.md`, and
 publish it with `news` as the channel. Any channel works the same way once
 `.env` holds `DISCORD_<CHANNEL>_WEBHOOK_ID` and
@@ -2030,9 +2029,8 @@ message, then edits that one every hour until the next day, and at once when a
 switch or a setting changes or when the Account ratio crosses a tier. While
 ratio has not filled its board yet, after a restart, the Dashboard publishes
 nothing and tries again every minute. The id of the message of the day sits in
-`${APPDATA_ROOT}/dashboard/farm-discord.json`. "Farm board" in the Quick actions
-of the Dashboard publishes it at once. Without a webhook, the board stays off
-Discord.
+`${APPDATA_ROOT}/dashboard/farm-discord.json`. Without a webhook, the board stays
+off Discord.
 
 1. In Discord, in the server of the NAS, create a text channel for the Farm.
 2. In Server Settings > Integrations > Webhooks, click "New Webhook", pick that
@@ -2263,8 +2261,7 @@ proxy and download client of Prowlarr, Radarr and Sonarr as on, off, failing or
 paused by ratio with their health warnings, and buttons to turn an indexer or a
 download client on or off and to retry a failing one. A warning that only says
 every download client or every indexer is off counts as no trouble, since a
-switch turned them off. Then come the pools and disks of
-TrueNAS and the space of the Media tree. The Quick actions, the Pull requests
+switch turned them off. The Pull requests, folded by default,
 and the Farm follow the table. The Dashboard serves its own font, IBM Plex Sans,
 under the SIL Open Font License. It installs as a web app: the install button of
 the address bar in Chrome or Edge, "Add to Home screen" on Android, Share then
@@ -2272,9 +2269,8 @@ the address bar in Chrome or Edge, "Add to Home screen" on Android, Share then
 
 Each row comes from the `dashboard.*` labels of its service in its
 `compose.yaml`, which hold no key. The Dashboard reads the keys from `.env` and
-calls the APIs itself, so no key ever reaches the browser. It mounts the Media
-tree read-only to measure it. `./scripts/verify.sh` checks that it cannot write
-to it and that it does not mount the torrents tree. The old name
+calls the APIs itself, so no key ever reaches the browser. `./scripts/verify.sh`
+checks that it mounts neither the Media tree nor the torrents tree. The old name
 `https://homepage.lan.<DOMAIN>` redirects to it.
 
 ### API keys of the Dashboard
@@ -2300,15 +2296,6 @@ others, then restart doco-cd to apply `.env`:
   from Settings > API Keys in autobrr, named `Dashboard` with read access on
   Filters and Releases
 - Beszel, `BESZEL_EMAIL` and `BESZEL_PASSWORD`: set in [Beszel](#beszel)
-- TrueNAS, `TRUENAS_API_KEY`: in Credentials >
-  Users, add a user `dashboard` with the password disabled in the group
-  `truenas_readonly_administrators`, then add an API key for it
-- TrueNAS, `TRUENAS_FINGERPRINT`: the SHA-256 fingerprint of the certificate of
-  the web interface, as below, set again after each renewal
-
-```sh
-openssl x509 -in /etc/certificates/truenas_default.crt -noout -fingerprint -sha256
-```
 
 ```sh
 docker restart doco-cd

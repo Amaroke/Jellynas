@@ -36,7 +36,6 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/icons/{file}", get(icon))
         .route("/services/{service}/{action}", post(control))
         .route("/farm/controls", post(farm_control))
-        .route("/quick-actions/{key}", post(quick_action))
         .route("/seerr/requests/{id}/{action}", post(answer_request))
         .route(
             "/connections/{service}/{kind}/{id}/{action}",
@@ -211,15 +210,6 @@ async fn farm_control(
     Json(control): Json<Value>,
 ) -> StatusCode {
     act(peer, &headers, move || app.farm_control(&control)).await
-}
-
-async fn quick_action(
-    State(app): State<Arc<App>>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Path(key): Path<String>,
-    headers: HeaderMap,
-) -> StatusCode {
-    act(peer, &headers, move || app.quick_action(&key)).await
 }
 
 async fn answer_request(

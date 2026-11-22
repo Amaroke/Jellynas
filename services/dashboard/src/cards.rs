@@ -6,7 +6,6 @@ use std::collections::{BTreeSet, HashMap};
 #[serde(rename_all = "kebab-case")]
 pub enum Section {
     Status,
-    QuickActions,
     PullRequests,
     Watch,
     Downloads,
@@ -30,9 +29,8 @@ pub struct Card {
 }
 
 impl Section {
-    pub const ALL: [Section; 9] = [
+    pub const ALL: [Section; 8] = [
         Section::Status,
-        Section::QuickActions,
         Section::PullRequests,
         Section::Watch,
         Section::Downloads,
@@ -45,7 +43,6 @@ impl Section {
     pub fn title(self) -> &'static str {
         match self {
             Section::Status => "Status",
-            Section::QuickActions => "Quick actions",
             Section::PullRequests => "Pull requests",
             Section::Watch => "Watch",
             Section::Downloads => "Downloads",

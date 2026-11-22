@@ -30,6 +30,7 @@ main { padding: 0 calc(24px + env(safe-area-inset-right)) calc(48px + env(safe-a
 @media (max-width: 600px) { header { padding: calc(14px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 6px calc(16px + env(safe-area-inset-left)); } main { padding: 0 calc(16px + env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); } }
 section h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
 section h2::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--accent); }
+section.folded > .native { display: none; }
 
 .alert { background: color-mix(in srgb, var(--unhealthy) 14%, var(--card)); border: 1px solid var(--unhealthy); border-radius: var(--radius); padding: 10px 14px; display: grid; gap: 4px; }
 .alert b { color: var(--unhealthy); }
@@ -137,7 +138,6 @@ section h2::before { content: ""; width: 8px; height: 8px; border-radius: 2px; b
 .posters .idle .title { color: var(--muted); }
 .shelf { display: grid; gap: 6px; min-width: 0; }
 .caption { font-size: 12px; font-weight: 500; color: var(--muted); }
-.space .rows { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); column-gap: 16px; }
 .note { font-size: 12px; color: var(--restarting); }
 .note.failed { color: var(--unhealthy); }
 .answer { display: flex; gap: 6px; grid-column: 2; margin-top: 2px; }
@@ -190,12 +190,13 @@ const errors = new Map();
 const answers = new Map();
 const switching = new Map();
 const opened = new Set();
+const folded = new Set(["pull-requests"]);
 const busy = new Set();
 const missing = new Set();
 const RAIL = [["jellyfin", "Jellyfin"], ["music-bot", "Music bot"], ["seerr", "Requests"], ["qbittorrent", "Downloads"]];
 const LINKED = new Set(["aurral", "prowlarr", "radarr", "sonarr"]);
 const KINDS = [["worker", "Worker"], ["indexer", "Indexers"], ["proxy", "Proxies"], ["client", "Download clients"]];
-const NATIVE = new Set(["quick-actions", "pull-requests", "farm"]);
+const NATIVE = new Set(["pull-requests", "farm"]);
 const ARTWORK = new Set(["jellyfin", "music-bot"]);
 
 function element(tag, attributes = {}, ...children) {
@@ -586,14 +587,9 @@ function table(services) {
   return node;
 }
 
-function health(found) {
-  if (!found || !found.error) return "running";
-  return found.reading && found.updated ? "restarting" : "unhealthy";
-}
-
-function block(title, service, nodes, found) {
-  const heading = service && service.href ? element("a", { href: service.href, "data-focus": `${service.service} rail` }, title) : element("span", {}, title);
-  return element("article", { class: "block", "data-state": service ? stateOf(service) : health(found), style: `--accent: var(--${service ? service.section : "status"})` },
+function block(title, service, nodes) {
+  const heading = service.href ? element("a", { href: service.href, "data-focus": `${service.service} rail` }, title) : element("span", {}, title);
+  return element("article", { class: "block", "data-state": stateOf(service), style: `--accent: var(--${service.section})` },
     element("h4", {}, element("span", { class: "dot" }), heading), ...nodes);
 }
 
@@ -609,9 +605,6 @@ function rail(services) {
   for (const service of services.filter(item => LINKED.has(item.widget))) {
     node.append(block(service.name, service, [...connections(service), ...trouble(board.widgets[service.service])]));
   }
-  if (board.truenas) node.append(block("TrueNAS", null, panel(board.truenas), board.truenas));
-  node.append(element("article", { class: "block space", style: "--accent: var(--status)" }, element("h4", {}, "Media tree"),
-    ...(board.media ? panel(board.media) : [element("span", { class: "note" }, "Measuring the Media tree")])));
   return node;
 }
 
@@ -627,7 +620,16 @@ function natives() {
   return sections.filter(section => NATIVE.has(section.slug)).flatMap(section => {
     const extra = native(section.slug);
     if (!extra) return [];
-    return [element("section", { style: `--accent: var(--${section.slug})`, "data-slug": section.slug }, element("h2", {}, section.title), extra)];
+    const node = element("section", { style: `--accent: var(--${section.slug})`, "data-slug": section.slug, class: folded.has(section.slug) ? "folded" : "" });
+    const fold = element("button", { type: "button", class: "icon-button more", "aria-expanded": String(!folded.has(section.slug)), "aria-label": `Fold ${section.title}`, title: "Fold" }, "▾");
+    fold.onclick = () => {
+      if (folded.has(section.slug)) folded.delete(section.slug);
+      else folded.add(section.slug);
+      node.classList.toggle("folded", folded.has(section.slug));
+      fold.setAttribute("aria-expanded", String(!folded.has(section.slug)));
+    };
+    node.append(element("h2", {}, section.title, fold), extra);
+    return [node];
   });
 }
 
