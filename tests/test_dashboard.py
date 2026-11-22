@@ -42,6 +42,7 @@ WIDGETS = {
     "beszel",
     "uptime-kuma",
 }
+DOCKER_WIDGETS = {"doco-cd", "backup"}
 SECTIONS = {"Status", "Quick actions", "Pull requests", "Watch", "Downloads", "Farm", "Automation", "Observation", "Hosting"}
 
 
@@ -108,7 +109,7 @@ class DashboardLabelsTest(unittest.TestCase):
         for service, lines in services().items():
             kind = labels(lines).get("dashboard.widget")
             if kind:
-                self.assertIn(kind, WIDGETS, service)
+                self.assertIn(kind, WIDGETS | DOCKER_WIDGETS, service)
 
     def test_the_dashboard_knows_where_every_widget_lives(self):
         environment = "\n".join(section(all_services()["dashboard"], "environment"))

@@ -43,6 +43,34 @@ pub fn duration(seconds: u64) -> String {
     }
 }
 
+pub fn epoch(text: &str) -> Option<u64> {
+    let number = |range: std::ops::Range<usize>| text.get(range)?.parse::<i64>().ok();
+    let (year, month, day) = (number(0..4)?, number(5..7)?, number(8..10)?);
+    let (hour, minute, second) = (number(11..13)?, number(14..16)?, number(17..19)?);
+    let zone = text[19..].trim_start_matches(|c: char| c == '.' || c.is_ascii_digit());
+    let offset = match zone {
+        "Z" | "z" => 0,
+        _ => {
+            let sign = match zone.get(..1)? {
+                "+" => 1,
+                "-" => -1,
+                _ => return None,
+            };
+            let hours: i64 = zone.get(1..3)?.parse().ok()?;
+            let minutes: i64 = zone.get(4..6)?.parse().ok()?;
+            sign * (hours * 3600 + minutes * 60)
+        }
+    };
+    let shifted = if month <= 2 { year - 1 } else { year };
+    let era = shifted.div_euclid(400);
+    let of_era = shifted - era * 400;
+    let of_year = (153 * ((month + 9) % 12) + 2) / 5 + day - 1;
+    let of_cycle = of_era * 365 + of_era / 4 - of_era / 100 + of_year;
+    let days = era * 146_097 + of_cycle - 719_468;
+    let seconds = days * 86400 + hour * 3600 + minute * 60 + second - offset;
+    u64::try_from(seconds).ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -79,5 +107,14 @@ mod tests {
         assert_eq!("45m", duration(45 * 60 + 12));
         assert_eq!("14h 43m", duration(52994));
         assert_eq!("3d 4h", duration(3 * 86400 + 4 * 3600 + 59));
+    }
+
+    #[test]
+    fn instants_read_rfc3339_with_any_offset() {
+        assert_eq!(Some(0), epoch("1970-01-01T00:00:00Z"));
+        assert_eq!(Some(1_795_335_977), epoch("2026-11-22T08:26:17.955548255Z"));
+        assert_eq!(Some(1_795_314_701), epoch("2026-11-22T03:31:41.565+01:00"));
+        assert_eq!(Some(1_709_210_096), epoch("2024-02-29T12:34:56Z"));
+        assert_eq!(None, epoch("yesterday"));
     }
 }

@@ -19,6 +19,20 @@ fn now() -> u64 {
         .map_or(0, |elapsed| elapsed.as_secs())
 }
 
+fn latest_deploy(containers: &Value) -> u64 {
+    containers
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|container| {
+            container["Labels"]["cd.doco.deployment.timestamp"]
+                .as_str()
+                .and_then(widgets::epoch)
+        })
+        .max()
+        .unwrap_or(0)
+}
+
 pub type Snapshot = Arc<Vec<Service>>;
 
 const POLL: Duration = Duration::from_secs(20);
@@ -83,6 +97,16 @@ impl App {
 
     fn read(&self, service: &Service) -> widgets::parse::Parsed {
         match (&service.card.widget, &service.card.monitor) {
+            (Some(kind), _) if kind == "doco-cd" => {
+                let containers = self.docker.containers()?;
+                let since = latest_deploy(&containers).saturating_sub(60);
+                let logs = self.docker.logs(&service.id, since, 1000)?;
+                widgets::parse::deploy(&containers, &logs, now())
+            }
+            (Some(kind), _) if kind == "backup" => {
+                let logs = self.docker.logs(&service.id, 0, 200)?;
+                widgets::parse::backup(&logs, now())
+            }
             (Some(kind), _) => self.client.widget(kind),
             (None, Some(url)) => self.client.monitor(url),
             (None, None) => Err("no widget".into()),

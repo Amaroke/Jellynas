@@ -167,12 +167,12 @@ class NetworkZonesTest(unittest.TestCase):
         self.assertIn("      - /var/run/docker.sock:/var/run/docker.sock:ro", proxy)
         self.assertIn('      POST: "0"', proxy)
 
-    def test_the_dashboard_proxy_only_starts_stops_and_restarts(self):
+    def test_the_dashboard_proxy_only_starts_stops_restarts_and_reads_logs(self):
         proxy = all_services()["dashboard-socket-proxy"]
         self.assertIn("      - /var/run/docker.sock:/var/run/docker.sock:ro", proxy)
         self.assertIn('      POST: "0"', proxy)
         allowed = {line.split(":")[0].strip() for line in section(proxy, "environment") if line.strip().endswith('"1"')}
-        self.assertEqual({"CONTAINERS", "EVENTS", "INFO", "PING", "VERSION", "ALLOW_START", "ALLOW_STOP", "ALLOW_RESTARTS"}, allowed)
+        self.assertEqual({"CONTAINERS", "EVENTS", "INFO", "PING", "VERSION", "ALLOW_START", "ALLOW_STOP", "ALLOW_RESTARTS", "ALLOW_LOGS"}, allowed)
         self.assertEqual([], ports(proxy))
 
     def test_only_caddy_publishes_a_port_to_the_network(self):
