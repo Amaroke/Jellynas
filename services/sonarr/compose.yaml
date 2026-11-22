@@ -27,9 +27,7 @@ services:
       cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/sonarr:/config
-      - ${DATA_ROOT}/media/shows:/data/media/shows
-      - ${DATA_ROOT}/media/anime:/data/media/anime
-      - ${DATA_ROOT}/torrents:/data/torrents
+      - ${DATA_ROOT}/:/data
     healthcheck:
       test:
         - "CMD"
