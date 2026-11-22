@@ -22,7 +22,6 @@ include:
   - services/recyclarr/compose.yaml
   # - services/tdarr/compose.yaml
   # - services/bazarr/compose.yaml
-  - services/indexarr/compose.yaml
   - services/autobrr/compose.yaml
   - services/cross-seed/compose.yaml
   - services/ratio/compose.yaml

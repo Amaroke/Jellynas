@@ -31,20 +31,19 @@ guide is written so that an AI agent can follow it as well as a person.
 13. [slskd](#slskd)
 14. [Recyclarr](#recyclarr)
 15. [Requests](#requests)
-16. [Indexarr](#indexarr)
-17. [Music bot](#music-bot)
-18. [Discord messages](#discord-messages)
-19. [PR radar](#pr-radar)
-20. [Private tracker ratio](#private-tracker-ratio)
-21. [Observation](#observation)
-22. [Beszel](#beszel)
-23. [Uptime Kuma](#uptime-kuma)
-24. [Dozzle](#dozzle)
-25. [Dashboard](#dashboard)
-26. [Backup](#backup)
-27. [Verify the NAS](#verify-the-nas)
-28. [On hold](#on-hold)
-29. [Contributing](#contributing)
+16. [Music bot](#music-bot)
+17. [Discord messages](#discord-messages)
+18. [PR radar](#pr-radar)
+19. [Private tracker ratio](#private-tracker-ratio)
+20. [Observation](#observation)
+21. [Beszel](#beszel)
+22. [Uptime Kuma](#uptime-kuma)
+23. [Dozzle](#dozzle)
+24. [Dashboard](#dashboard)
+25. [Backup](#backup)
+26. [Verify the NAS](#verify-the-nas)
+27. [On hold](#on-hold)
+28. [Contributing](#contributing)
 
 ## Prerequisites
 
@@ -294,7 +293,6 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with
 | Radarr        | `https://radarr.lan.<DOMAIN>`          | Local network |
 | Sonarr        | `https://sonarr.lan.<DOMAIN>`          | Local network |
 | slskd         | `https://slskd.lan.<DOMAIN>`           | Local network |
-| Indexarr      | `https://indexarr.lan.<DOMAIN>`        | Local network |
 | autobrr       | `https://autobrr.lan.<DOMAIN>`         | Local network |
 | ratio         | `https://ratio.lan.<DOMAIN>/graphs`    | Local network |
 | Actions       | `https://actions.lan.<DOMAIN>/actions` | Local network |
@@ -1512,7 +1510,6 @@ flowchart LR
         Beszel("Beszel<br/>resources")
         UptimeKuma("Uptime Kuma<br/>checks, written by AutoKuma")
         Dozzle("Dozzle<br/>logs, read-only")
-        Indexarr("Indexarr<br/>Library catalog, read-only")
         Dashboard("Dashboard<br/>watches and drives")
         Backup("Backup<br/>appdata, every night")
     end
@@ -1559,8 +1556,6 @@ flowchart LR
     Radarr -.->|"new files"| Bazarr
     Sonarr -.->|"new files"| Bazarr
     Bazarr -.->|requeue| Tdarr
-    Radarr -->|works| Indexarr
-    Sonarr -->|works| Indexarr
     autobrr ~~~ crossseed ~~~ ratioscript
 
     style canvas fill:#ffffff,stroke:#e5e7eb,stroke-width:1px
@@ -1592,7 +1587,7 @@ flowchart LR
     class autobrr,crossseed,ratioscript ratioNode
     style ratio fill:#fce4ec,stroke:#ec407a,stroke-width:2px,color:#1f2937
     classDef observationNode fill:#ffffff,stroke:#00897b,color:#1f2937,stroke-width:1.5px
-    class Beszel,UptimeKuma,Dozzle,Indexarr,Dashboard,Backup observationNode
+    class Beszel,UptimeKuma,Dozzle,Dashboard,Backup observationNode
     style observation fill:#e0f2f1,stroke:#00897b,stroke-width:2px,color:#1f2937
     classDef dataNode fill:#ffffff,stroke:#78909c,color:#1f2937,stroke-width:1.5px
     class Torrents,Library dataNode
@@ -1649,67 +1644,6 @@ pinned, so Renovate keeps them up to date:
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
 | Actions | actionlint checks the workflows, then zizmor audits their security |
-
-## Indexarr
-
-Requires [Radarr](#radarr) and [Sonarr](#sonarr).
-
-Indexarr is a catalog of the Library files for the Admin: every movie, show and
-anime with the resolution, the codec, the audio and subtitle tracks of its
-files, the statistics of the Library and the count of files with a problem. It
-sees only the movies, shows and anime folders, mounted read-only under the same
-paths as Radarr and Sonarr, so it can never change a file and no path mapping is
-needed. `./scripts/verify.sh` checks that it mounts nothing else and cannot
-write to them. MediaInfo or a Jellyfin plugin shows the same tracks, one file at
-a time.
-
-### Login of Indexarr
-
-The admin account of Indexarr comes from `.env`. In `.env`:
-
-1. Set `INDEXARR_USERNAME` and `INDEXARR_PASSWORD` to a username and a strong
-   password, distinct from the other tools, stored in your password manager.
-2. Set `INDEXARR_SESSION_SECRET` to a new secret, so a restart does not sign you
-   out:
-
-   ```bash
-   openssl rand -hex 32
-   ```
-
-3. Restart doco-cd to apply `.env`:
-
-   ```sh
-   docker restart doco-cd
-   ```
-
-Open `https://indexarr.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from a browser on the
-local network and sign in. The login always comes from `.env`, so change the
-password there, not in the web UI. `./scripts/verify.sh` checks that the web UI
-asks for the login.
-
-### TMDB and TVDB keys
-
-Radarr and Sonarr give Indexarr the title, the year and the poster of each work.
-The TMDB and TVDB keys add what they miss, such as the episode count of each
-season, which tells a show with missing episodes apart. Both are free and
-optional:
-
-1. On [themoviedb.org](https://www.themoviedb.org/settings/api), create an
-   account, request a developer key, and copy the "API Key" into `TMDB_API_KEY`,
-   not the read access token.
-2. On [thetvdb.com](https://thetvdb.com/api-information), create an account,
-   create a key for personal use, and copy it into `TVDB_API_KEY`.
-3. Restart doco-cd to apply `.env`.
-
-### Folders to scan
-
-The folders are set in `services/indexarr/compose.yaml`, not in the web UI:
-`/data/media/movies` for movies, `/data/media/shows` and `/data/media/anime` for
-series. With `RADARR_API_KEY` and `SONARR_API_KEY` set, Indexarr takes the list
-of works and files from Radarr and Sonarr, then reads the tracks of each file
-from these folders. It refreshes the catalog every 24 hours. To refresh it at
-once, after a large import, click "Scan" in its web UI. The first scan reads
-every file of the Library and takes a while.
 
 ## Music bot
 
