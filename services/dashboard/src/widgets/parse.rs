@@ -541,11 +541,16 @@ fn failing_until(statuses: &Value, id: u64, now: u64) -> Option<u64> {
         .find(|until| *until > now)
 }
 
-fn said(health: &Value) -> Vec<Health> {
+fn said(health: &Value, expected: &[&str]) -> Vec<Health> {
     health
         .as_array()
         .into_iter()
         .flatten()
+        .filter(|item| {
+            !item["source"]
+                .as_str()
+                .is_some_and(|source| expected.contains(&source))
+        })
         .filter_map(|item| {
             let level = item["type"].as_str()?;
             let message = item["message"].as_str()?;
@@ -630,7 +635,7 @@ pub fn prowlarr_links(
     }
     gateways.sort_by_key(|item| item.name.to_lowercase());
     found.extend(gateways);
-    Ok((found, said(health)))
+    Ok((found, said(health, &[])))
 }
 
 pub fn switched(widget: &str, kind: &str, item: &Value, on: bool) -> Value {
@@ -692,8 +697,22 @@ pub fn starr_links(indexers: &Value, clients: &Value, health: &Value) -> Linked 
         takers.push(item);
     }
     takers.sort_by_key(|item| item.name.to_lowercase());
+    let every_off = |kind: &str| {
+        found
+            .iter()
+            .chain(&takers)
+            .filter(|item| item.kind == kind)
+            .all(|item| item.state == "off")
+    };
+    let mut expected = Vec::new();
+    if every_off("indexer") {
+        expected.extend(["IndexerRssCheck", "IndexerSearchCheck"]);
+    }
+    if every_off("client") {
+        expected.push("DownloadClientCheck");
+    }
     found.extend(takers);
-    Ok((found, said(health)))
+    Ok((found, said(health, &expected)))
 }
 
 pub fn prowlarr(stats: &Value) -> Parsed {
@@ -2127,5 +2146,32 @@ time=2026-11-22T03:30:05.000+01:00 level=ERROR msg="Fatal error running command:
             links(&found)[..3].to_vec()
         );
         assert!(starr_links(&indexers, &json!(null), &health).is_err());
+    }
+
+    #[test]
+    fn a_warning_about_what_every_switch_turned_off_is_not_trouble() {
+        let indexers = json!([
+            {"id": 3, "name": "C411 (Prowlarr)", "enableRss": false, "enableAutomaticSearch": false, "enableInteractiveSearch": false}
+        ]);
+        let clients = json!([{"id": 1, "name": "qBittorrent", "enable": false}]);
+        let health = json!([
+            {"source": "DownloadClientCheck", "type": "warning", "message": "No download client is available"},
+            {"source": "IndexerRssCheck", "type": "warning", "message": "No indexers available with RSS sync enabled"},
+            {"source": "IndexerSearchCheck", "type": "warning", "message": "No indexers available with Automatic Search enabled"},
+            {"source": "RecyclingBinCheck", "type": "error", "message": "Unable to write to the recycling bin"}
+        ]);
+        let (_, said) = starr_links(&indexers, &clients, &health).unwrap();
+        assert_eq!(
+            vec!["Unable to write to the recycling bin"],
+            said.iter()
+                .map(|item| item.message.as_str())
+                .collect::<Vec<_>>()
+        );
+        let on = json!([{"id": 1, "name": "qBittorrent", "enable": true}]);
+        let (_, said) = starr_links(&indexers, &on, &health).unwrap();
+        assert!(
+            said.iter()
+                .any(|item| item.message == "No download client is available")
+        );
     }
 }

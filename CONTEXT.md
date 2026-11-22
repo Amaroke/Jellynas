@@ -84,14 +84,14 @@ private tracker.
 _Avoid_: seed limit, share limit
 
 **Farm**:
-The C411 torrents the NAS grabs only for what they earn on C411, the Account
-ratio first and the Quests next, cross-seeds included. It grabs nothing more
+The C411 torrents the NAS grabs only for the Account ratio they earn on C411,
+cross-seeds included. It grabs nothing more
 once its disk budget is full, and never lets a torrent go.
 _Avoid_: ratio, ratio folder, ratio torrents, cross-seed torrents, Zen reserve
 
 **Switch**:
 An on or off setting of the Farm that the Admin flips in the Dashboard, one per
-kind of grab, per Quest farm and per cleaning.
+kind of grab and per cleaning.
 _Avoid_: toggle, flag, button
 
 **Public torrent**:
@@ -103,27 +103,9 @@ _Avoid_: Nyaa torrent, free torrent
 The currency C411 pays for long seeding, traded for upload in its shop.
 _Avoid_: bonus points
 
-**Rare**:
-Said of a C411 torrent whose size and seeders fall in a bucket where the class
-of the Admin on C411 adds a bonus to its note.
-_Avoid_: dead, unpopular
-
-**Quest farm**:
-The grabbing of small C411 torrents into the Farm, behind a Switch, until the
-count of a Quest reaches its target: the Seed count, or the seeds of one
-category of C411.
-_Avoid_: Volume hunt, Zen hunt, rare hunt
-
 **Seed count**:
-How many C411 torrents the NAS seeds at once, whatever their size, which the
-Quests of C411 reward.
+How many C411 torrents the NAS seeds at once, whatever their size.
 _Avoid_: seeds, torrent count
-
-**Quest**:
-One level of a challenge of C411, rewarded once, when the Seed count, the
-seeding time, the note or the categories of the seeded torrents reach its
-target. Only the seed and specialization paths count for the Farm.
-_Avoid_: achievement
 
 **Account ratio**:
 The ratio C411 shows for the account of the Admin, every torrent ever included,
@@ -147,7 +129,7 @@ _Avoid_: mirror, duplicate
 
 **Source**:
 How a C411 torrent came to the NAS: a fresh paid grab, a free grab, a Library
-download from C411, or a Quest farm grab. A free grab costs no download on
+download from C411. A free grab costs no download on
 C411: a Twin, a freeleech grab or a cross-seed of the Library. It never changes,
 even when a Library torrent later moves to the Farm.
 _Avoid_: origin, kind, pool

@@ -13,9 +13,7 @@ from unittest import mock
 
 from ratio import (
     C411,
-    C411_CATEGORIES,
     DAY,
-    DONE_AT_START,
     GB,
     NUMBERS,
     SWITCHES,
@@ -26,34 +24,16 @@ from ratio import (
     Throttled,
     bdecode,
     load_state,
-    note_of,
     parse_torznab,
-    rare_coef,
     release_of,
     run_once,
     save_state,
-    scales_of,
     serve,
-    top_note,
 )
 
 NOW = 1_800_000_000
 TRACKER = "https://tracker.c411.org/announce"
 PUBLIC = "http://nyaa.tracker.wf/announce"
-SWARM_KEEPER = {
-    "slug": "swarm_keeper",
-    "bonusTiers": {
-        "seed_duration": [{"bucket": "7", "coef": 0.1}, {"bucket": "30", "coef": 0.25}, {"bucket": "90", "coef": 0.35}, {"bucket": "180", "coef": 0.5}],
-        "seeders_weight": [
-            {"bucket": "<1|1-10", "coef": 0.2}, {"bucket": "<1|11-24", "coef": 0.2}, {"bucket": "1-5|11-24", "coef": 0.2},
-            {"bucket": "1-5|1-10", "coef": 0.35}, {"bucket": "5-10|1-10", "coef": 0.35}, {"bucket": "11-50|1-10", "coef": 0.5},
-            {"bucket": ">100|1-10", "coef": 0.5}, {"bucket": "51-100|1-10", "coef": 0.5},
-        ],
-    },
-}
-SCALES = scales_of(SWARM_KEEPER)
-
-
 def torrent(hash, category="farm", size_gb=3, seeding_days=10, uploaded_gb=0, downloaded_gb=0, progress=1,
             seeders=100, tracker=TRACKER, completion_on=0, save_path=None, state="stalledUP", tags=""):
     return {
@@ -75,7 +55,7 @@ def torrent(hash, category="farm", size_gb=3, seeding_days=10, uploaded_gb=0, do
     }
 
 
-def release(infohash, leechers=40, seeders=1, size_gb=3, age_hours=0.5, title=None, free=False, category="films-videos"):
+def release(infohash, leechers=40, seeders=1, size_gb=3, age_hours=0.5, title=None, free=False):
     return {
         "infohash": infohash,
         "title": title or f"Release.{infohash}.1080p",
@@ -86,12 +66,7 @@ def release(infohash, leechers=40, seeders=1, size_gb=3, age_hours=0.5, title=No
         "leechers": leechers,
         "age_hours": age_hours,
         "free": free,
-        "category": category,
     }
-
-
-def small(infohash, size_gb=0.5, seeders=3, free=False, category="ebook"):
-    return release(infohash, leechers=0, seeders=seeders, size_gb=size_gb, free=free, category=category)
 
 
 class FakeQBittorrent:
@@ -110,6 +85,8 @@ class FakeQBittorrent:
         self.pinned = []
         self.cats = {name: {} for name in ("movies", "shows", "music", "books", "farm")}
         self.names = {}
+        self.tag_names = []
+        self.dropped_tags = []
 
     def torrents(self):
         return [dict(t) for t in self.list]
@@ -157,6 +134,12 @@ class FakeQBittorrent:
             if t["hash"] in hashes:
                 t["tags"] = ", ".join(x for x in (t["tags"], tag) if x)
 
+    def tags(self):
+        return list(self.tag_names)
+
+    def delete_tags(self, names):
+        self.dropped_tags += names
+
     def reset_share_limits(self, hashes):
         self.limited += hashes
 
@@ -203,10 +186,9 @@ class FakeProwlarr:
 
 
 class FakeC411:
-    def __init__(self, newest=(), hunt=None, uploaded_gb=60, downloaded_gb=30, zen=25, broken=False, earned=None,
-                 actual_gb=5, files=None, refused=(), failing=(), categories=None, voies=None, slug="swarm_keeper"):
+    def __init__(self, newest=(), uploaded_gb=60, downloaded_gb=30, zen=25, broken=False, earned=None,
+                 actual_gb=5, files=None, refused=(), failing=()):
         self.newest = list(newest)
-        self.hunt = hunt or {}
         self.uploaded = uploaded_gb * GB
         self.downloaded = downloaded_gb * GB
         self.zen = zen
@@ -216,15 +198,10 @@ class FakeC411:
         self.files = files or {}
         self.refused = set(refused)
         self.failing = set(failing)
-        self.known = categories or {}
-        self.voies = voies or {"seed": 3, "specialization": 6}
-        self.slug = slug
         self.reads = 0
-        self.scale_reads = 0
         self.calls_left = None
         self.log = []
         self.fetched = []
-        self.looked = []
 
     def allow(self, calls):
         self.calls_left = calls
@@ -242,24 +219,14 @@ class FakeC411:
             raise RuntimeError("Site is currently restricted")
         return {
             "uploaded": self.uploaded, "downloaded": self.downloaded, "zen": self.zen, "earned": self.earned,
-            "actual": self.actual, "credit": 50 * GB, "class": self.slug, "grade": ["bronze", 3],
-            "voies": dict(self.voies), "allowed": True,
+            "actual": self.actual, "credit": 50 * GB, "class": "swarm_keeper", "grade": ["bronze", 3],
+            "allowed": True,
         }
 
-    def catalog(self, now, category=None, sort="createdAt", order="desc", page=1):
+    def catalog(self, now):
         self.spend()
-        self.log.append(("catalog", category, sort, page))
-        if sort == "createdAt":
-            return list(self.newest), 1
-        pages = self.hunt.get(category or "all", [])
-        if pages and not isinstance(pages[0], list):
-            pages = [pages]
-        return (list(pages[page - 1]) if page <= len(pages) else []), len(pages)
-
-    def category(self, infohash):
-        self.spend()
-        self.looked.append(infohash)
-        return self.known.get(infohash, "films-videos")
+        self.log.append("catalog")
+        return list(self.newest)
 
     def download(self, infohash):
         self.spend()
@@ -270,12 +237,6 @@ class FakeC411:
         if infohash in self.failing:
             raise RuntimeError("C411 sent no torrent file")
         return torrent_file(infohash, self.files.get(infohash, [7]))
-
-    def scales(self, slug):
-        self.spend()
-        self.scale_reads += 1
-        return scales_of(SWARM_KEEPER)
-
 
 def under_floor():
     return FakeC411(uploaded_gb=30, downloaded_gb=30)
@@ -289,7 +250,6 @@ SETTINGS = {
     "farm_size": 100 * GB,
     "floor": 1.2,
     "daily": 2 * GB,
-    "max_size": GB,
     "paused_profile": "Paused",
     "free_max_size": 5 * GB,
     "paid_max_age_hours": 24,
@@ -322,8 +282,7 @@ def empty_state(**changes):
     return {
         "transfers": {}, "hunted": {}, "twins": {}, "free": {}, "checked": {}, "paused": False,
         "sources": {}, "history": {}, "zen": {}, "report": {}, "account": [], "received": [], "sent": [], "held": None, "backoff_until": 0,
-        "stuck": {}, "restore": {}, "categories": {}, "pages": {}, "daily": [], "given_up": {},
-        "done": list(DONE_AT_START), "scales": None, "tier": None, **changes,
+        "stuck": {}, "restore": {}, "daily": [], "given_up": {}, "tier": None, **changes,
     }
 
 
@@ -370,7 +329,6 @@ class Twins(unittest.TestCase):
         self.assertEqual(prowlarr.queries, ["S03E06 VOSTFR"])
         self.assertEqual(qbt.added, [("public", "farm")])
         self.assertEqual(state["twins"], {"public": ["episode", "farm", NOW, ""]})
-        self.assertEqual(state["categories"]["episode"], "films-videos")
         self.assertEqual(state["hunted"], {})
 
     def test_a_twin_is_grabbed_even_under_the_floor(self):
@@ -645,14 +603,14 @@ class Floor(unittest.TestCase):
 
     def test_a_paid_grab_never_spends_past_the_floor(self):
         qbt = FakeQBittorrent()
-        c411 = FakeC411(hunt={"ebook": [small("b", size_gb=0.4), small("a", size_gb=0.3)]}, uploaded_gb=42, downloaded_gb=34.5)
-        run(qbt, c411=c411, switches={"volume:ebook": True})
+        c411 = FakeC411([release("b", size_gb=0.4, leechers=40), release("a", size_gb=0.3, leechers=40)], uploaded_gb=42, downloaded_gb=34.5)
+        run(qbt, c411=c411, switches={"paid": True})
         self.assertEqual(qbt.added, [("a", "farm")])
 
     def test_a_c411_download_in_progress_counts_against_the_floor(self):
         qbt = FakeQBittorrent([torrent("movie", category="movies", size_gb=4, progress=0.5)])
-        c411 = FakeC411(hunt={"ebook": [small("rare")]}, uploaded_gb=42, downloaded_gb=33)
-        run(qbt, c411=c411, switches={"volume:ebook": True})
+        c411 = FakeC411([release("cheap", size_gb=0.5, leechers=40)], uploaded_gb=42, downloaded_gb=33)
+        run(qbt, c411=c411, switches={"paid": True})
         self.assertEqual(qbt.added, [])
 
 
@@ -673,177 +631,12 @@ class Throttling(unittest.TestCase):
         self.assertEqual(prowlarr.queries, ["S03E06 VOSTFR"])
 
     def test_once_the_calls_of_the_run_are_spent_the_rest_waits(self):
-        qbt = FakeQBittorrent([torrent("a"), torrent("b"), torrent("c")])
-        c411 = FakeC411()
-        state = run(qbt, c411=c411, c411_calls=4)
-        self.assertEqual(len(c411.looked), 1)
-        self.assertEqual(len(state["categories"]), 1)
-        run(qbt, state=state, now=NOW + 600, c411=c411, c411_calls=4)
-        self.assertEqual(len(state["categories"]), 3)
-
-
-class Quests(unittest.TestCase):
-    def test_a_category_switch_hunts_its_category_cheapest_first_freeleech_before_paid(self):
         qbt = FakeQBittorrent()
-        c411 = FakeC411(hunt={"ebook": [
-            small("big", size_gb=1.5), small("dead", seeders=0), small("dear", size_gb=0.8),
-            small("cheap", size_gb=0.2), small("free", size_gb=0.9, free=True),
-        ]})
-        state = run(qbt, c411=c411, switches={"volume:ebook": True}, max_downloading=3)
-        self.assertEqual(qbt.added, [("free", "farm"), ("cheap", "farm"), ("dear", "farm")])
-        self.assertEqual([e for e in c411.log if e[0] == "catalog" and e[1]], [("catalog", "ebook", "size", 1)])
-        self.assertEqual(state["sources"], {"free": "free", "cheap": "quest", "dear": "quest"})
-        self.assertEqual(state["categories"], {"free": "ebook", "cheap": "ebook", "dear": "ebook"})
-
-    def test_among_releases_of_one_size_the_rarest_for_swarm_keeper_comes_first(self):
-        qbt = FakeQBittorrent()
-        c411 = FakeC411(hunt={"ebook": [small("crowded", seeders=30), small("rare", seeders=3)]})
-        run(qbt, c411=c411, switches={"volume:ebook": True}, max_downloading=1)
-        self.assertEqual(qbt.added, [("rare", "farm")])
-
-    def test_a_category_stops_at_the_50_seeds_of_its_badge(self):
-        held = [torrent(f"e{i}", size_gb=0.1) for i in range(50)]
-        state = empty_state(categories={f"e{i}": "ebook" for i in range(50)})
-        c411 = FakeC411(hunt={"ebook": [small("more")]})
-        run(FakeQBittorrent(held), state=state, c411=c411, switches={"volume:ebook": True})
-        self.assertNotIn(("catalog", "ebook", "size", 1), c411.log)
-
-    def test_films_aims_at_the_next_level_of_the_volume_challenge(self):
-        held = [torrent(f"f{i}", size_gb=0.1) for i in range(75)]
-        state = empty_state(categories={f"f{i}": "films-videos" for i in range(75)})
-        c411 = FakeC411(hunt={"films-videos": [small("more", category="films-videos")]})
-        board, _ = run_board(FakeQBittorrent(held), state=state, c411=c411, switches={"volume:films-videos": True})
-        self.assertIn(("catalog", "films-videos", "size", 1), c411.log)
-        films = next(c for c in board["categories"] if c["slug"] == "films-videos")
-        self.assertEqual((films["count"], films["target"]), (75, 100))
-
-    def test_films_is_complete_only_once_its_last_level_is_validated(self):
-        held = [torrent(f"f{i}", size_gb=0.1) for i in range(100)] + [torrent(f"e{i}", size_gb=0.1) for i in range(50)]
-        categories = {**{f"f{i}": "films-videos" for i in range(100)}, **{f"e{i}": "ebook" for i in range(50)}}
-        board, _ = run_board(FakeQBittorrent(held), state=empty_state(categories=categories))
-        by_slug = {c["slug"]: c for c in board["categories"]}
-        self.assertEqual((by_slug["films-videos"]["target"], by_slug["films-videos"]["complete"]), (100, False))
-        self.assertTrue(by_slug["ebook"]["complete"])
-        board, _ = run_board(FakeQBittorrent(held), state=empty_state(categories=categories, done=[72, 73, 74, 75]))
-        films = next(c for c in board["categories"] if c["slug"] == "films-videos")
-        self.assertTrue(films["complete"])
-
-    def test_the_seed_count_switch_hunts_every_category_up_to_the_next_level(self):
-        held = [torrent(f"s{i}", size_gb=0.01) for i in range(199)]
-        c411 = FakeC411(hunt={"all": [small("one"), small("two")]})
-        qbt = FakeQBittorrent(held)
-        run(qbt, c411=c411, switches={"quantity_seed": True})
-        self.assertEqual(qbt.added, [("one", "farm")])
-        self.assertIn(("catalog", None, "size", 1), c411.log)
-
-    def test_a_page_with_nothing_new_moves_the_hunt_to_the_next_page(self):
-        qbt = FakeQBittorrent([torrent("old")])
-        c411 = FakeC411(hunt={"ebook": [[small("old")], [small("new")]]})
-        state = run(qbt, c411=c411, switches={"volume:ebook": True})
-        self.assertEqual(state["pages"], {"ebook": 2})
-        run(qbt, state=state, now=NOW + 600, c411=c411, switches={"volume:ebook": True})
-        self.assertEqual(qbt.added, [("new", "farm")])
-
-    def test_under_the_floor_only_freeleech_is_hunted(self):
-        qbt = FakeQBittorrent()
-        c411 = FakeC411(hunt={"ebook": [small("paid", size_gb=0.1), small("free", free=True)]}, uploaded_gb=30, downloaded_gb=30)
-        run(qbt, c411=c411, switches={"volume:ebook": True})
-        self.assertEqual(qbt.added, [("free", "farm")])
-
-    def test_a_quest_is_validated_once_its_count_is_reached_and_c411_counts_one_more(self):
-        held = [torrent(f"s{i}", size_gb=0.01) for i in range(200)]
-        state = run(FakeQBittorrent(held), c411=FakeC411(voies={"seed": 3, "specialization": 6}))
-        self.assertNotIn(44, state["done"])
-        state = run(FakeQBittorrent(held), state=state, now=NOW + 600, c411=FakeC411(voies={"seed": 4, "specialization": 6}))
-        self.assertIn(44, state["done"])
-
-    def test_a_count_reached_without_c411_validating_it_is_not_a_quest_done(self):
-        held = [torrent(f"s{i}", size_gb=0.01, seeding_days=8) for i in range(30)]
-        state = run(FakeQBittorrent(held), c411=FakeC411(voies={"seed": 3, "specialization": 6}))
-        self.assertEqual(state["done"], sorted(DONE_AT_START))
-
-    def test_the_board_shows_each_challenge_at_its_next_level(self):
-        held = [torrent(f"s{i}", size_gb=0.01, seeding_days=8, seeders=5) for i in range(30)]
-        board, _ = run_board(FakeQBittorrent(held))
-        by_key = {c["key"]: c for c in board["challenges"]}
-        self.assertEqual((by_key["quantity_seed"]["level"], by_key["quantity_seed"]["target"]), (3, 200))
-        self.assertEqual(by_key["quantity_seed"]["switch"], "quantity_seed")
-        self.assertEqual((by_key["duration_seed"]["current"], by_key["duration_seed"]["target"]), (30, 25))
-        self.assertIsNone(by_key["duration_seed"]["switch"])
-        self.assertEqual((by_key["vtr_min"]["level"], by_key["vtr_min"]["target"]), (2, 100))
-        self.assertTrue(by_key["category_diversity_seed"]["done"])
-
-    def test_the_board_shows_every_level_of_each_challenge(self):
-        held = [torrent(f"s{i}", size_gb=0.01) for i in range(160)]
-        board, _ = run_board(FakeQBittorrent(held))
-        steps = {c["key"]: c["steps"] for c in board["challenges"]}["quantity_seed"]
-        self.assertEqual(
-            [(s["level"], s["current"], s["target"], s["done"]) for s in steps],
-            [(1, 160, 100, True), (2, 160, 150, True), (3, 160, 200, False), (4, 160, 250, False), (5, 160, 300, False)],
-        )
-        self.assertEqual(steps[2]["description"], "200 seeds")
-
-    def test_a_level_validated_by_c411_stays_complete_when_the_seeds_drop(self):
-        board, _ = run_board(FakeQBittorrent([torrent(f"s{i}", size_gb=0.01) for i in range(30)]))
-        by_key = {c["key"]: c for c in board["challenges"]}
-        steps = by_key["quantity_seed"]["steps"]
-        self.assertEqual(
-            [(s["level"], s["current"], s["target"], s["done"]) for s in steps[:3]],
-            [(1, 100, 100, True), (2, 150, 150, True), (3, 30, 200, False)],
-        )
-        diversity = by_key["category_diversity_seed"]
-        self.assertEqual((diversity["done"], diversity["current"], diversity["target"]), (True, 5, 5))
-        self.assertTrue(all(s["current"] >= s["target"] for s in diversity["steps"]))
-
-
-class Scales(unittest.TestCase):
-    def test_the_rare_bonus_follows_the_size_and_seeder_buckets_of_the_class(self):
-        self.assertEqual(rare_coef(int(0.5 * GB), 5, SCALES), 0.2)
-        self.assertEqual(rare_coef(3 * GB, 5, SCALES), 0.35)
-        self.assertEqual(rare_coef(3 * GB, 30, SCALES), 0)
-        self.assertEqual(rare_coef(20 * GB, 2, SCALES), 0.5)
-        self.assertEqual(rare_coef(200 * GB, 2, SCALES), 0.5)
-
-    def test_the_note_adds_the_seeding_time_and_the_rare_bonus_up_to_its_top(self):
-        self.assertEqual(top_note(SCALES), 2.0)
-        self.assertEqual(note_of(torrent("a", size_gb=20, seeders=2, seeding_days=200), SCALES), 2.0)
-        self.assertEqual(note_of(torrent("b", size_gb=3, seeders=100, seeding_days=8), SCALES), 1.1)
-
-    def test_the_scales_of_the_class_are_read_once_a_day(self):
-        c411 = FakeC411()
-        state = run(FakeQBittorrent(), c411=c411)
-        self.assertEqual(state["scales"]["rare"], SCALES["rare"])
-        run(FakeQBittorrent(), state=state, now=NOW + 600, c411=c411)
-        self.assertEqual(c411.scale_reads, 1)
-        run(FakeQBittorrent(), state=state, now=NOW + DAY, c411=c411)
-        self.assertEqual(c411.scale_reads, 2)
-
-
-class Categories(unittest.TestCase):
-    def test_a_category_ratio_does_not_own_is_left_alone(self):
-        qbt = FakeQBittorrent([torrent("manual", category="mine")])
-        qbt.cats["mine"] = {}
-        run(qbt)
-        self.assertEqual(qbt.moved, [])
-        self.assertIn("mine", qbt.cats)
-
-    def test_the_c411_category_of_each_torrent_is_read_once(self):
-        qbt = FakeQBittorrent([torrent("movie", category="movies"), torrent("book"), torrent("public", tracker=PUBLIC)])
-        c411 = FakeC411(categories={"book": "ebook"})
-        state = run(qbt, c411=c411)
-        self.assertEqual(state["categories"], {"movie": "films-videos", "book": "ebook"})
-        run(qbt, state=state, now=NOW + 600, c411=c411)
-        self.assertEqual(sorted(c411.looked), ["book", "movie"])
-
-    def test_a_torrent_gone_from_qbittorrent_loses_its_category(self):
-        state = run(FakeQBittorrent(), state=empty_state(categories={"gone": "ebook"}))
-        self.assertEqual(state["categories"], {})
-
-    def test_the_categories_guessed_before_carry_over_except_emulation(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = os.path.join(folder, "state.json")
-            save_state(path, {"kinds": {"a": "Ebook", "b": "Emulation", "c": "Films & Vidéos"}})
-            self.assertEqual(load_state(path)["categories"], {"a": "ebook", "c": "films-videos"})
+        c411 = FakeC411([release("a", free=True, leechers=9), release("b", free=True, leechers=8)])
+        state = run(qbt, c411=c411, c411_calls=3, switches={"twins": False})
+        self.assertEqual(c411.fetched, ["a"])
+        run(FakeQBittorrent([torrent("a")]), state=state, now=NOW + 600, c411=c411, c411_calls=3, switches={"twins": False})
+        self.assertEqual(c411.fetched, ["a", "b"])
 
 
 class Tiers(unittest.TestCase):
@@ -870,18 +663,27 @@ class Tiers(unittest.TestCase):
 
 
 class Tags(unittest.TestCase):
-    def test_every_public_torrent_carries_the_public_tag(self):
+    def test_each_torrent_carries_one_tag_naming_where_it_comes_from(self):
         qbt = FakeQBittorrent([
-            torrent("public", category="movies", tracker=PUBLIC),
-            torrent("tagged", category="movies", tracker=PUBLIC, tags="public"),
+            torrent("movie", category="movies", tags="public, library"),
+            torrent("show", category="shows", tracker=PUBLIC),
+            torrent("book", category="books"),
+            torrent("grab", tags="free"),
+            torrent("twin", tracker=PUBLIC, seeding_days=1),
+            torrent("seed", save_path="/data/torrents/cross-seed/C411", tags="free"),
+            torrent("manual", category="", tags="mine"),
         ])
-        run(qbt)
-        self.assertEqual(qbt.tagged, [("public", "public")])
+        run(qbt, switches={"clean_public": False})
+        self.assertEqual(
+            {t["hash"]: t["tags"] for t in qbt.list},
+            {"movie": "radarr", "show": "sonarr", "book": "lazylibrarian", "grab": "farm", "twin": "farm", "seed": "cross-seed", "manual": ""},
+        )
 
-    def test_every_c411_torrent_carries_a_tag_of_its_source(self):
-        qbt = FakeQBittorrent([torrent("movie", category="movies", size_gb=200), torrent("free")])
-        run(qbt, state=empty_state(free={"free": NOW - 100}))
-        self.assertEqual(sorted(qbt.tagged), [("free", "free"), ("movie", "library")])
+    def test_every_tag_naming_no_origin_is_deleted(self):
+        qbt = FakeQBittorrent()
+        qbt.tag_names = ["cross-seed", "free", "quest", "radarr", "public"]
+        run(qbt)
+        self.assertEqual(sorted(qbt.dropped_tags), ["free", "public", "quest"])
 
     def test_a_c411_torrent_whose_tracker_is_down_is_not_public(self):
         qbt = FakeQBittorrent([torrent("c411", category="movies", tracker="", size_gb=200, seeding_days=20)])
@@ -1026,12 +828,12 @@ class Sources(unittest.TestCase):
         state = run(qbt, state=empty_state(transfers=transfers, free={"free": NOW - 100}))
         self.assertEqual(state["sources"], {"linked": "free", "free": "free", "movie": "library", "gone": "unknown"})
 
-    def test_a_retired_hunt_becomes_a_quest(self):
-        qbt = FakeQBittorrent([torrent("kept", tags="volume-hunt"), torrent("older", tags="zen-hunt")])
-        sources = {"kept": "volume-hunt", "older": "zen-hunt"}
-        state = run(qbt, state=empty_state(transfers={"kept": [GB, 0], "older": [GB, 0]}, sources=sources))
-        self.assertEqual(state["sources"], {"kept": "quest", "older": "quest"})
-        self.assertEqual([t["tags"] for t in qbt.list], ["quest", "quest"])
+    def test_a_retired_quest_or_hunt_becomes_a_paid_grab(self):
+        qbt = FakeQBittorrent([torrent("kept", tags="volume-hunt"), torrent("older", tags="zen-hunt"), torrent("quest", tags="quest")])
+        sources = {"kept": "volume-hunt", "older": "zen-hunt", "quest": "quest"}
+        transfers = {"kept": [GB, 0], "older": [GB, 0], "quest": [GB, 0]}
+        state = run(qbt, state=empty_state(transfers=transfers, sources=sources))
+        self.assertEqual(state["sources"], {"kept": "paid", "older": "paid", "quest": "paid"})
 
     def test_twin_freeleech_and_cross_seed_become_free(self):
         qbt = FakeQBittorrent([torrent("a", tags="twin"), torrent("b", tags="freeleech"), torrent("c", tags="cross-seed")])
@@ -1162,21 +964,19 @@ class Board(unittest.TestCase):
             torrent("public", size_gb=4, tracker=PUBLIC, seeding_days=1),
             torrent("movie", category="movies", size_gb=200),
         ])
-        state = empty_state(sources={"twin1": "free", "twin2": "free", "hunt": "quest"})
+        state = empty_state(sources={"twin1": "free", "twin2": "free", "hunt": "paid"})
         board, _ = run_board(qbt, state=state)
         self.assertEqual(board["farm"], {
             "budget_gb": 100,
-            "slices": [{"source": "public", "gb": 4}, {"source": "free", "gb": 3}, {"source": "quest", "gb": 0.5}],
+            "slices": [{"source": "public", "gb": 4}, {"source": "free", "gb": 3}, {"source": "paid", "gb": 0.5}],
         })
 
     def test_the_board_carries_the_account_the_seeds_and_the_controls(self):
         board, _ = run_board(FakeQBittorrent([torrent("a"), torrent("b", progress=0.5)]))
         account = board["account"]
         self.assertEqual((account["ratio"], account["zen"], account["credit_gb"], account["grade"]), (2.0, 25, 50, ["bronze", 3]))
-        self.assertEqual(account["voies"], {"seed": 3, "specialization": 6})
         self.assertEqual(board["seeds"], 1)
         self.assertEqual(board["controls"]["numbers"]["floor"], 1.2)
-        self.assertEqual([c["slug"] for c in board["categories"]][:3], ["films-videos", "ebook", "audio"])
 
     def test_the_board_sums_the_ledger_by_source_most_uploaded_first(self):
         qbt = FakeQBittorrent([
@@ -1195,9 +995,9 @@ class ControlsStore(unittest.TestCase):
             path = os.path.join(folder, "controls.json")
             controls = Controls(path)
             snapshot = controls.snapshot(SETTINGS)
-            grabs = ["free", "twins", "paid", "quantity_seed", "adopt", *(f"volume:{slug}" for slug in C411_CATEGORIES)]
+            grabs = ["free", "twins", "paid", "adopt"]
             self.assertEqual({name: False for name in grabs}, {name: snapshot["switches"][name] for name in grabs})
-            self.assertEqual(snapshot["numbers"], {"farm_size_gb": 100, "floor": 1.2, "daily_gb": 2, "max_size_gb": 1})
+            self.assertEqual(snapshot["numbers"], {"farm_size_gb": 100, "floor": 1.2, "daily_gb": 2})
             controls.change("paid", True)
             controls.change("floor", 1.5)
             again = Controls(path).snapshot(SETTINGS)
@@ -1296,15 +1096,8 @@ class Catalog(unittest.TestCase):
         now = datetime.datetime(2026, 11, 9, 11, 53, 21, tzinfo=datetime.UTC).timestamp()
         self.assertEqual(release_of(item, now), {
             "infohash": "abc", "title": "Hop.Frog.EPUB", "page": "", "link": "", "size": 27100, "seeders": 251,
-            "leechers": 2, "age_hours": 2.0, "free": True, "category": "ebook",
+            "leechers": 2, "age_hours": 2.0, "free": True,
         })
-
-    def test_scales_turn_the_buckets_of_the_class_into_ranges(self):
-        self.assertEqual(SCALES["duration"], [[7, 0.1], [30, 0.25], [90, 0.35], [180, 0.5]])
-        self.assertIn([10, 50, 1, 10, 0.5], SCALES["rare"])
-        self.assertIn([100, float("inf"), 1, 10, 0.5], SCALES["rare"])
-        self.assertIn([0, 1, 11, 24, 0.2], SCALES["rare"])
-
 
 class TorrentFiles(unittest.TestCase):
     def fetched_url(self, release):
@@ -1487,7 +1280,6 @@ PROFILE = {
     "class": {
         "slug": "swarm_keeper",
         "progress": {"questsCompleted": 9, "questsTotal": 40, "grade": {"tier": "bronze", "level": 3}},
-        "voies": {"seed": {"questsCompleted": 3}, "specialization": {"questsCompleted": 6}},
     },
     "zen": {"balance": 616, "totalEarned": 416, "totalSpent": 0},
     "transfer": {
@@ -1515,12 +1307,8 @@ class FakeC411Server(http.server.BaseHTTPRequestHandler):
             body = FEED
         elif self.path.startswith("/api?t=get&id=ab"):
             body = b"d4:infod6:lengthi1e4:name1:aee"
-        elif self.path.startswith("/api/torrents/ab"):
-            body = json.dumps({"data": {"infoHash": "AB", "category": {"id": 3, "name": "Audio"}}}).encode()
-        elif self.path.startswith("/api/torrents"):
-            body = json.dumps(CATALOG).encode()
         else:
-            body = json.dumps({"success": True, "classes": [{**SWARM_KEEPER, "canonicalSlug": "swarm_keeper"}]}).encode()
+            body = json.dumps(CATALOG).encode()
         self.send_response(200)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -1542,32 +1330,18 @@ class RealC411(unittest.TestCase):
         account = self.c411.account()
         self.assertEqual(account, {
             "uploaded": 84339821451, "downloaded": 70064908300, "actual": 19915312011, "credit": 64424509440,
-            "zen": 616, "earned": 416, "class": "swarm_keeper", "grade": ["bronze", 3],
-            "voies": {"seed": 3, "specialization": 6}, "allowed": True,
+            "zen": 616, "earned": 416, "class": "swarm_keeper", "grade": ["bronze", 3], "allowed": True,
         })
         self.assertEqual(FakeC411Server.calls, [("/api/user/profile", "Bearer profile")])
 
-    def test_the_catalog_asks_for_a_category_sorted_by_size(self):
-        releases, pages = self.c411.catalog(NOW, "ebook", "size", "asc", 3)
-        self.assertEqual(([r["infohash"] for r in releases], pages), (["ab"], 7))
-        self.assertEqual(
-            FakeC411Server.calls[0][0], "/api/torrents?sortBy=size&sortOrder=asc&perPage=50&page=3&category=2",
-        )
+    def test_the_catalog_reads_the_newest_releases(self):
+        releases = self.c411.catalog(NOW)
+        self.assertEqual([r["infohash"] for r in releases], ["ab"])
+        self.assertEqual(FakeC411Server.calls[0][0], "/api/torrents?sortBy=createdAt&sortOrder=desc&perPage=50&page=1")
 
-    def test_the_xxx_catalog_comes_from_torznab_since_the_json_api_hides_it(self):
-        releases, pages = self.c411.catalog(NOW, "xxx", "size", "asc", 3)
-        self.assertEqual(([(r["infohash"], r["category"]) for r in releases], pages), ([("abc", "xxx")], 3))
-        self.assertEqual(
-            FakeC411Server.calls[0], ("/api?t=search&cat=6000&limit=100&offset=200&apikey=torznab", "Bearer torznab"),
-        )
-
-    def test_a_torrent_tells_its_category_and_downloads_with_the_torznab_key(self):
-        self.assertEqual(self.c411.category("ab"), "audio")
+    def test_a_torrent_downloads_with_the_torznab_key(self):
         self.assertTrue(self.c411.download("ab").startswith(b"d4:info"))
-        self.assertEqual(FakeC411Server.calls[1], ("/api?t=get&id=ab&apikey=torznab", "Bearer torznab"))
-
-    def test_the_scales_of_the_class_are_read(self):
-        self.assertEqual(self.c411.scales("swarm_keeper")["rare"], SCALES["rare"])
+        self.assertEqual(FakeC411Server.calls[0], ("/api?t=get&id=ab&apikey=torznab", "Bearer torznab"))
 
     def test_a_run_spends_no_more_calls_than_allowed(self):
         self.c411.allow(1)

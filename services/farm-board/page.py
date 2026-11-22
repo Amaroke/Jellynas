@@ -5,16 +5,15 @@ import html
 import itertools
 
 HISTORY_DAYS = 30
-PARTS = ("1", "2", "3")
-ALL_CATEGORIES = "volume:all"
+PARTS = ("1", "2")
 COLORS = {
     "paid": "#f472b6", "free": "#34d399", "library": "#38bdf8",
-    "quest": "#fb923c", "unknown": "#94a3b8", "public": "#64748b",
+    "unknown": "#94a3b8", "public": "#64748b",
 }
 TIER_COLORS = ("#fb7185", "#fbbf24", "#facc15", "#34d399", "#a78bfa")
 BEHAVIOURS = ("free", "twins", "paid", "clean_public", "drop_twins", "hold", "adopt")
-NUMBER_STEPS = {"farm_size_gb": "1", "floor": "0.05", "daily_gb": "0.5", "max_size_gb": "0.01"}
-NUMBER_LIMITS = {"farm_size_gb": (1, 100000), "floor": (0.5, 5), "daily_gb": (0, 1000), "max_size_gb": (0.01, 1000)}
+NUMBER_STEPS = {"farm_size_gb": "1", "floor": "0.05", "daily_gb": "0.5"}
+NUMBER_LIMITS = {"farm_size_gb": (1, 100000), "floor": (0.5, 5), "daily_gb": (0, 1000)}
 TEXT = {
     "en": {
         "gb": "GB", "decimal": ".", "empty": "No history yet, ratio records its first day after its first run.",
@@ -25,19 +24,12 @@ TEXT = {
         "zen_chart": "Zen", "paid": "paid each night", "balance": "balance", "transfer": "Upload and download",
         "tiers": "Ratio tiers", "to_upload": "{v} to upload", "margin": "{v} of margin",
         "tier_names": {"blocked": "blocked", "even": "even", "floor": "floor", "goal": "goal"},
-        "voie": {"seed": "Seed path", "specialization": "Specialization path"},
-        "names": {
-            "quantity_seed": "Seed count", "duration_seed": "Seeding time", "vtr_min": "Seed note",
-            "category_volume_seed": "Category volume", "category_diversity_seed": "Diversity",
-        },
-        "level": "level {l} of {n}", "finished": "every level done", "indicator": "indicator", "complete": "completed",
-        "reached": "reached, waiting for C411 to count it",
-        "categories": "Category volume, a badge at 50 seeds", "on": "on", "off": "off", "all_categories": "Every category",
+        "on": "on", "off": "off",
         "behaviours": "Farm switches", "numbers_title": "Farm settings", "switches": {
             "free": "Freeleech", "twins": "Twins", "paid": "Fresh paid grabs", "clean_public": "Clean Public torrents",
             "drop_twins": "Drop Twins", "hold": "Hold Prowlarr under the floor", "adopt": "Adopt the Library",
         },
-        "numbers": {"farm_size_gb": "Farm budget (GB)", "floor": "Ratio floor", "daily_gb": "Paid download per day (GB)", "max_size_gb": "Quest grab size (GB)"},
+        "numbers": {"farm_size_gb": "Farm budget (GB)", "floor": "Ratio floor", "daily_gb": "Paid download per day (GB)"},
         "explain_switches": {
             "free": "Grabs the freeleech releases of C411 up to 5 GB, the most wanted first. Their download is not counted, their upload is.",
             "twins": "For each fresh episode of C411, downloads the same release from Nyaa. cross-seed then adds the C411 copy without any counted download.",
@@ -50,8 +42,7 @@ TEXT = {
         "explain_numbers": {
             "farm_size_gb": "Disk the Farm may fill. Once full, nothing more is grabbed and nothing is removed.",
             "floor": "Account ratio under which no paid download happens on C411, not even for the Library. Freeleech and Twins go on.",
-            "daily_gb": "Paid download allowed over the last 24 hours, shared by fresh grabs and Quests.",
-            "max_size_gb": "Largest torrent grabbed for a Quest. The smallest go first.",
+            "daily_gb": "Paid download allowed over the last 24 hours for fresh grabs.",
         },
         "save": "Save",
         "disk": "Farm disk", "free": "Free", "of": "of {budget} {gb}",
@@ -59,7 +50,7 @@ TEXT = {
         "week": "7 days: {down} down, {up} up, ratio {ratio}, {days} days in the Farm",
         "explain": {
             "paid": "Fresh release bought with download", "free": "No download counted on C411",
-            "library": "Movie or show of the Library", "quest": "Grabbed for a Quest",
+            "library": "Movie or show of the Library",
             "public": "Public tracker copy, leaves within two weeks", "unknown": "Source not recorded",
         },
     },
@@ -72,19 +63,12 @@ TEXT = {
         "zen_chart": "Zen", "paid": "payé chaque nuit", "balance": "solde", "transfer": "Envoi et réception",
         "tiers": "Paliers de ratio", "to_upload": "{v} à envoyer", "margin": "{v} de marge",
         "tier_names": {"blocked": "bloqué", "even": "équilibre", "floor": "plancher", "goal": "objectif"},
-        "voie": {"seed": "Voie seed", "specialization": "Voie spécialisation"},
-        "names": {
-            "quantity_seed": "Nombre de seeds", "duration_seed": "Durée de seed", "vtr_min": "Note des seeds",
-            "category_volume_seed": "Volume catégorie", "category_diversity_seed": "Diversité",
-        },
-        "level": "palier {l} sur {n}", "finished": "tous les paliers faits", "indicator": "indicateur", "complete": "complété",
-        "reached": "atteint, en attente de C411",
-        "categories": "Volume catégorie, un badge à 50 seeds", "on": "actif", "off": "coupé", "all_categories": "Toutes les catégories",
+        "on": "actif", "off": "coupé",
         "behaviours": "Interrupteurs de la Farm", "numbers_title": "Réglages de la Farm", "switches": {
             "free": "Freeleech", "twins": "Twins", "paid": "Grabs payants frais", "clean_public": "Nettoyage des Public torrents",
             "drop_twins": "Retrait des Twins", "hold": "Pause Prowlarr sous le plancher", "adopt": "Adoption de la Library",
         },
-        "numbers": {"farm_size_gb": "Budget de la Farm (Go)", "floor": "Plancher de ratio", "daily_gb": "Download payant par jour (Go)", "max_size_gb": "Taille des grabs de quête (Go)"},
+        "numbers": {"farm_size_gb": "Budget de la Farm (Go)", "floor": "Plancher de ratio", "daily_gb": "Download payant par jour (Go)"},
         "explain_switches": {
             "free": "Prend les sorties freeleech de C411 jusqu'à 5 Go, les plus demandées d'abord. Leur download n'est pas compté, leur upload si.",
             "twins": "Pour chaque épisode récent de C411, télécharge la même release sur Nyaa. cross-seed ajoute ensuite la copie C411 sans download compté.",
@@ -97,8 +81,7 @@ TEXT = {
         "explain_numbers": {
             "farm_size_gb": "Place disque que la Farm peut remplir. Une fois pleine, plus aucun grab, et rien n'est supprimé.",
             "floor": "Ratio du compte sous lequel aucun download payant n'est fait sur C411, même pour la Library. Freeleech et Twins continuent.",
-            "daily_gb": "Download payant permis sur les dernières 24 h, partagé entre les grabs frais et les Quêtes.",
-            "max_size_gb": "Taille maximale d'un torrent pris pour une Quête. Les plus petits passent en premier.",
+            "daily_gb": "Download payant permis sur les dernières 24 h pour les grabs frais.",
         },
         "save": "Valider",
         "disk": "Disque de la Farm", "free": "Libre", "of": "sur {budget} {gb}",
@@ -106,7 +89,7 @@ TEXT = {
         "week": "7 jours : {down} reçus, {up} envoyés, ratio {ratio}, {days} jours dans la Farm",
         "explain": {
             "paid": "Sortie fraîche payée en download", "free": "Aucun download compté sur C411",
-            "library": "Film ou série de la Library", "quest": "Pris pour une Quête",
+            "library": "Film ou série de la Library",
             "public": "Copie d'un tracker public, part sous deux semaines", "unknown": "Source non enregistrée",
         },
     },
@@ -139,7 +122,6 @@ main { display: flex; flex-direction: column; gap: 10px; height: 100vh; padding:
 .value { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
 .sub { color: var(--muted); font-size: 12px; min-height: 16px; }
 .ratio .value { color: var(--violet); } .zen .value { color: var(--amber); } .seeds .value { color: var(--green); } .available .value { color: var(--orange); }
-.quests { display: flex; flex-direction: column; gap: 10px; }
 .charts, .bottom { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
 .charts { flex: 1; min-height: 140px; }
 figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
@@ -170,39 +152,12 @@ polygon.area { stroke: none; fill-opacity: 0.14; }
 .tierlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
 .tierlist li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; color: var(--muted); }
 .tierlist li.ahead { color: var(--text); }
-.rows { display: flex; flex-direction: column; gap: 7px; }
-.row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; }
-.row .what { min-width: 0; }
-.row .title { font-weight: 600; }
-.row .hint { color: var(--muted); font-size: 11px; }
-.bar { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
-.bar span { display: block; height: 100%; background: var(--green); }
-.bar.done span { background: var(--violet); }
-.count { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
-.side { display: flex; gap: 8px; align-items: center; }
 form { margin: 0; display: inline; }
 .switch { font: inherit; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 3px 10px 3px 8px; cursor: pointer;
   border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(148, 163, 184, 0.12); color: var(--muted); white-space: nowrap; }
 .switch::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; background: currentColor; }
 .switch.on { background: rgba(52, 211, 153, 0.16); color: var(--green); border-color: rgba(52, 211, 153, 0.4); }
-.tag { font-size: 11px; color: var(--muted); white-space: nowrap; }
-.tag.complete { color: var(--green); font-weight: 600; }
-.head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; }
-.head .title { font-weight: 600; font-size: 14px; }
-.head .hint { grid-column: 1 / -1; }
 .hint { color: var(--muted); font-size: 11px; }
-.hint .wait { color: var(--green); }
-.steps { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; }
-.step { display: flex; flex-direction: column; gap: 3px; align-items: center; }
-.step .bar { width: 100%; }
-.step .goal { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.step.done .bar span { background: var(--violet); }
-.step.done .goal { color: var(--violet); }
-.step.reached .goal { color: var(--green); font-weight: 600; }
-.step.next .goal { color: var(--text); font-weight: 600; }
-.step.later .bar span { opacity: 0.45; }
-.cats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 7px 16px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line); }
-.cats .all { grid-column: 1 / -1; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 .setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 14px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); }
 .setting:first-child { border-top: none; padding-top: 2px; }
 .setting .title { font-weight: 600; }
@@ -404,92 +359,6 @@ def switch(name, on, label, words, part, language):
     )
 
 
-def progress_bar(current, target, done=False):
-    share = 100 if not target else min(100 * (current or 0) / target, 100)
-    return f'<div class="bar{" done" if done else ""}"><span style="width:{share:.1f}%"></span></div>'
-
-
-def step_state(step, first_open):
-    if step["done"]:
-        return "done"
-    if step["current"] >= step["target"]:
-        return "reached"
-    return "next" if step is first_open else "later"
-
-
-def steps_of(steps):
-    first_open = next((s for s in steps if not s["done"] and s["current"] < s["target"]), None)
-    cells = "".join(
-        f'<div class="step {step_state(s, first_open)}">{progress_bar(s["current"], s["target"])}'
-        f'<span class="goal">{escape(s["target"])}</span></div>'
-        for s in steps
-    )
-    return f'<div class="steps">{cells}</div>'
-
-
-def open_categories(board):
-    return [c for c in (board or {}).get("categories", []) if not c["complete"]]
-
-
-def category_side(c, switches, words, language):
-    if c["complete"]:
-        return f'<span class="tag complete">{escape(words["complete"])}</span>'
-    return switch(c["switch"], switches.get(c["switch"], False), "", words, "2", language)
-
-
-def category_master(board, switches, words, language):
-    targets = open_categories(board)
-    if not targets:
-        return ""
-    on = all(switches.get(c["switch"], False) for c in targets)
-    return (
-        f'<div class="row all"><div class="what title">{escape(words["all_categories"])}</div>'
-        f'<div class="side">{switch(ALL_CATEGORIES, on, "", words, "2", language)}</div></div>'
-    )
-
-
-def category_rows(board, switches, words, language):
-    rows = "".join(
-        f'<div class="row"><div class="what title">{escape(c["name"])}</div>'
-        f'<div class="side"><span class="count">{c["count"]} / {c["target"]}</span>'
-        f'{category_side(c, switches, words, language)}</div>'
-        f'{progress_bar(c["count"], c["target"], c["count"] >= c["target"])}</div>'
-        for c in board.get("categories", [])
-    )
-    return f'<div class="cats">{category_master(board, switches, words, language)}{rows}</div>'
-
-
-def challenge_card(c, board, switches, words, language):
-    level = words["finished"] if c["done"] else words["level"].format(l=c["level"], n=c["levels"])
-    voie = words["voie"].get(c.get("voie"), c.get("voie") or "")
-    if c["done"]:
-        side = f'<span class="tag complete">{escape(words["complete"])}</span>'
-    elif c["switch"]:
-        side = switch(c["switch"], switches.get(c["switch"], False), "", words, "2", language)
-    else:
-        side = f'<span class="tag">{escape(words["indicator"])}</span>'
-    hint = f"{escape(voie)}, {escape(level)}, {escape(c['description'])}"
-    if not c["done"] and c["current"] >= c["target"]:
-        hint += f', <span class="wait">{escape(words["reached"])}</span>'
-    steps = steps_of(c["steps"]) if c.get("steps") else progress_bar(c["current"], c["target"], c["done"])
-    cats = category_rows(board, switches, words, language) if c["key"] == "category_volume_seed" else ""
-    count = "" if c["done"] else f'<span class="count">{c["current"]} / {c["target"]}</span>'
-    return (
-        f'<figure class="challenge"><div class="head"><div class="title">{escape(words["names"].get(c["key"], c["key"]))}</div>'
-        f'<div class="side">{count}{side}</div>'
-        f'<div class="hint">{hint}</div></div>{steps}{cats}</figure>'
-    )
-
-
-def quests(board, words, language):
-    switches = (board.get("controls") or {}).get("switches", {})
-    challenges = board.get("challenges", [])
-    cards = "".join(challenge_card(c, board, switches, words, language) for c in challenges)
-    if board.get("categories") and not any(c["key"] == "category_volume_seed" for c in challenges):
-        cards += f'<figure><figcaption>{escape(words["categories"])}</figcaption>{category_rows(board, switches, words, language)}</figure>'
-    return f'<section class="quests">{cards}</section>'
-
-
 def setting_row(title, hint, control):
     return (
         f'<div class="setting"><div class="what"><div class="title">{escape(title)}</div>'
@@ -503,7 +372,7 @@ def number_form(name, value, words, language):
         f'<form method="post" action="/controls">'
         f'<input aria-label="{escape(words["numbers"][name])}" type="number" name="value" step="{NUMBER_STEPS[name]}" '
         f'min="{low}" max="{high}" value="{escape(value)}">'
-        f'<input type="hidden" name="name" value="{name}"><input type="hidden" name="part" value="3">'
+        f'<input type="hidden" name="name" value="{name}"><input type="hidden" name="part" value="2">'
         f'<input type="hidden" name="lang" value="{language}"><button class="save" type="submit">{escape(words["save"])}</button></form>'
     )
 
@@ -512,7 +381,7 @@ def settings(board, words, language):
     controls = board.get("controls") or {}
     switches = controls.get("switches", {})
     toggles = "".join(
-        setting_row(words["switches"][name], words["explain_switches"][name], switch(name, switches[name], "", words, "3", language))
+        setting_row(words["switches"][name], words["explain_switches"][name], switch(name, switches[name], "", words, "2", language))
         for name in BEHAVIOURS
         if name in switches
     )
@@ -601,9 +470,8 @@ def body_of(board, part, words, language):
     if not board or not board.get("history"):
         return f'<p class="empty">{escape(words["empty"])}</p>'
     first = f'<section class="kpis">{strip(board, words)}</section>{gauge(board, words)}{trends(board, words)}'
-    second = quests(board, words, language)
-    third = f'{settings(board, words, language)}<section class="bottom">{donut(board["farm"], words)}{earned(board.get("sources", []), words)}</section>'
-    return {"1": first, "2": second, "3": third}.get(part, first + second + third)
+    second = f'{settings(board, words, language)}<section class="bottom">{donut(board["farm"], words)}{earned(board.get("sources", []), words)}</section>'
+    return {"1": first, "2": second}.get(part, first + second)
 
 
 def board_page(board, part=None, language="en", width=None):
