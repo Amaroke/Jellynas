@@ -3,6 +3,7 @@ mod cards;
 mod docker;
 mod icons;
 mod shutdown;
+mod stats;
 mod web;
 mod widgets;
 

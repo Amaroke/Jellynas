@@ -44,6 +44,7 @@ fn reading(figures: Vec<(&str, String)>) -> Reading {
             })
             .collect(),
         rows: vec![],
+        metrics: vec![],
     }
 }
 
@@ -206,6 +207,7 @@ pub fn qbittorrent(torrents: &Value) -> Parsed {
         ("Seed", count(seeds as u64)),
         ("Upload", rate(up)),
     ]);
+    found.metrics = vec![("download", down), ("upload", up)];
     found.rows = leeches
         .into_iter()
         .take(ROWS)
@@ -418,6 +420,7 @@ pub fn host(systems: &Value, name: &str) -> Parsed {
             .map(|(label, value)| Figure { label, value })
             .collect(),
         rows: vec![],
+        metrics: vec![],
     })
 }
 
@@ -614,6 +617,10 @@ mod tests {
                 ("Stalled", "50.0% of 2.0 GiB", Some(0.5)),
             ],
             rows(&reading)
+        );
+        assert_eq!(
+            vec![("download", 2048.0), ("upload", 1000.0)],
+            reading.metrics
         );
     }
 

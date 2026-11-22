@@ -35,6 +35,18 @@ section h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; 
 .rows meter { width: 100%; height: 4px; }
 .note { font-size: 12px; color: var(--restarting); }
 .note.failed { color: var(--unhealthy); }
+.alert { background: color-mix(in srgb, var(--unhealthy) 14%, var(--card)); border: 1px solid var(--unhealthy); border-radius: var(--radius); padding: 10px 14px; display: grid; gap: 4px; }
+.alert b { color: var(--unhealthy); }
+.alert ul { margin: 0; padding-left: 18px; }
+.usage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.spark { display: grid; gap: 2px; font-size: 11px; color: var(--muted); min-width: 0; }
+.spark b { color: var(--text); font-weight: 600; }
+.spark svg, .throughput svg { width: 100%; height: 28px; display: block; overflow: visible; }
+.spark polyline, .throughput polyline { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.throughput { display: grid; gap: 4px; font-size: 11px; color: var(--muted); }
+.throughput svg { height: 70px; border-bottom: 1px solid var(--line); }
+.throughput .keys { display: flex; flex-wrap: wrap; gap: 2px 12px; white-space: nowrap; }
+.throughput .keys span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; background: currentColor; }
 #status { display: grid; gap: 12px; }
 #status .clock { font-size: 22px; font-weight: 600; }
 #status .date { color: var(--muted); }
@@ -105,6 +117,66 @@ function clock(seconds) {
   return new Date(seconds * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
+function bytes(value) {
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let unit = 0;
+  while (Math.abs(value) >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(unit ? 1 : 0)} ${units[unit]}`;
+}
+
+function line(points, top, color) {
+  const shape = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  const step = points.length > 1 ? 100 / (points.length - 1) : 0;
+  shape.setAttribute("points", points.map((value, index) => `${(index * step).toFixed(2)},${(100 - 95 * value / top).toFixed(2)}`).join(" "));
+  shape.style.stroke = color;
+  return shape;
+}
+
+function plot(series) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 100 100");
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("aria-hidden", "true");
+  const top = Math.max(1, ...series.flatMap(([points]) => points));
+  for (const [points, color] of series) if (points.length) svg.append(line(points, top, color));
+  return svg;
+}
+
+function usage(name) {
+  const series = (board.history || {})[name] || {};
+  const nodes = [];
+  if (series.download || series.upload) {
+    const down = series.download || [];
+    const up = series.upload || [];
+    nodes.push(element("div", { class: "throughput" },
+      element("div", { class: "keys" },
+        element("span", { style: "color: var(--downloads)" }, `Down ${bytes(down.at(-1) || 0)}/s`),
+        element("span", { style: "color: var(--watch)" }, `Up ${bytes(up.at(-1) || 0)}/s`),
+        element("span", {}, `peak ${bytes(Math.max(0, ...down, ...up))}/s`)),
+      plot([[down, "var(--downloads)"], [up, "var(--watch)"]])));
+  }
+  const sparks = [];
+  if (series.cpu && series.cpu.length) {
+    sparks.push(element("div", { class: "spark" }, element("span", {}, "CPU ", element("b", {}, `${series.cpu.at(-1).toFixed(1)}%`)), plot([[series.cpu, "var(--accent)"]])));
+  }
+  if (series.memory && series.memory.length) {
+    sparks.push(element("div", { class: "spark" }, element("span", {}, "RAM ", element("b", {}, bytes(series.memory.at(-1)))), plot([[series.memory, "var(--accent)"]])));
+  }
+  if (sparks.length) nodes.push(element("div", { class: "usage" }, ...sparks));
+  return nodes;
+}
+
+function alerts(services) {
+  const troubled = services.filter(service => !service.shutdown && (service.state === "unhealthy" || service.state === "restarting"));
+  if (!troubled.length) return [];
+  return [element("div", { class: "alert", role: "alert" },
+    element("b", {}, troubled.length === 1 ? "1 service needs attention" : `${troubled.length} services need attention`),
+    element("ul", {}, ...troubled.map(service => element("li", {}, `${service.name} is ${service.state}`))))];
+}
+
 function panel(found) {
   if (!found) return [];
   const nodes = [];
@@ -147,7 +219,7 @@ function tick() {
 
 function refresh() {
   for (const node of main.querySelectorAll("article.card")) {
-    node.replaceChildren(node.querySelector(".head"), ...panel(board.widgets[node.dataset.service]));
+    node.replaceChildren(node.querySelector(".head"), ...panel(board.widgets[node.dataset.service]), ...usage(node.dataset.service));
   }
   const host = document.getElementById("status");
   if (host) host.replaceChildren(...[...host.children].slice(0, 2), ...panel(board.host));
@@ -180,7 +252,7 @@ function card(service) {
     ? element("a", { class: "link", href: service.href }, icon, text)
     : element("span", { class: "link" }, icon, text);
   const head = element("div", { class: "head" }, link);
-  const node = element("article", { class: "card", "data-state": service.state, "data-service": service.service }, head, ...panel(board.widgets[service.service]));
+  const node = element("article", { class: "card", "data-state": service.state, "data-service": service.service }, head, ...panel(board.widgets[service.service]), ...usage(service.service));
   if (service.switchable) {
     const toggle = element("input", { type: "checkbox", role: "switch", "aria-label": `${service.name} on` });
     toggle.checked = !service.shutdown;
@@ -210,7 +282,7 @@ let board = JSON.parse(document.getElementById("board").textContent);
 function render(services) {
   current = services;
   for (const block of main.querySelectorAll(".native")) unmount(block);
-  main.replaceChildren(...sections.flatMap(section => {
+  main.replaceChildren(...alerts(services), ...sections.flatMap(section => {
     if (section.slug === "status") return [status()];
     const cards = services.filter(service => service.section === section.slug).map(card);
     const extra = native(section.slug);

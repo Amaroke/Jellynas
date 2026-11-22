@@ -305,6 +305,7 @@ impl Client {
                 },
             ],
             rows: vec![],
+            metrics: vec![],
         })
     }
 }
