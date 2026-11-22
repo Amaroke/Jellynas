@@ -45,7 +45,7 @@ WIDGETS = {
     "uptime-kuma",
 }
 DOCKER_WIDGETS = {"doco-cd", "backup"}
-SECTIONS = {"Status", "Quick actions", "Pull requests", "Watch", "Downloads", "Farm", "Automation", "Observation", "Hosting"}
+SECTIONS = {"Status", "Pull requests", "Watch", "Downloads", "Farm", "Automation", "Observation", "Hosting"}
 
 
 def services():
@@ -108,7 +108,7 @@ class DashboardLabelsTest(unittest.TestCase):
 
     def test_the_dashboard_knows_where_the_native_sections_come_from(self):
         environment = section(all_services()["dashboard"], "environment")
-        for line in ("RATIO_URL: http://ratio:8000", "DISCORD_POSTS_URL: http://discord-posts:8000", "PR_RADAR_URL: http://pr-radar:8000"):
+        for line in ("RATIO_URL: http://ratio:8000", "PR_RADAR_URL: http://pr-radar:8000"):
             self.assertIn(f"      {line}", environment)
 
     def test_every_monitor_is_a_web_address(self):

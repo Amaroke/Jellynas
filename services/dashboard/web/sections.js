@@ -49,7 +49,6 @@ const REVIEW = { APPROVED: "approved", CHANGES_REQUESTED: "changes requested", R
 const CI = { SUCCESS: ["green", "ok"], FAILURE: ["failing", "bad"], ERROR: ["failing", "bad"], PENDING: ["running", "wait"], EXPECTED: ["waiting", "wait"] };
 
 const unsaved = new Map();
-const outcomes = new Map();
 
 function number(value, digits) {
   if (value === null || value === undefined) return "-";
@@ -265,14 +264,11 @@ function ratioOf(up, down) {
 function earned(origins) {
   const rows = (name, swatch, origin) => [
     tag("tr", {}, tag("td", {}, swatch, name), ...[String(origin.torrents), size(origin.downloaded_gb), size(origin.uploaded_gb), number(origin.ratio, 2)].map(cell => tag("td", {}, cell))),
-    tag("tr", {}, tag("td", { class: "week", colspan: "5" },
-      `7 days: ${size(origin.week_downloaded_gb)} down, ${size(origin.week_uploaded_gb)} up, ratio ${number(origin.week_ratio, 2)}, ${number(origin.farm_days, 1)} days in the Farm`)),
   ];
   const body = origins.flatMap(origin => rows(nameOf(origin), tag("span", { class: "swatch", style: `background:${colorOf(origin)}` }), origin));
-  const keys = ["torrents", "downloaded_gb", "uploaded_gb", "week_downloaded_gb", "week_uploaded_gb", "farm_days"];
+  const keys = ["torrents", "downloaded_gb", "uploaded_gb"];
   const total = Object.fromEntries(keys.map(key => [key, origins.reduce((sum, origin) => sum + origin[key], 0)]));
   total.ratio = ratioOf(total.uploaded_gb, total.downloaded_gb);
-  total.week_ratio = ratioOf(total.week_uploaded_gb, total.week_downloaded_gb);
   const foot = origins.length ? rows("Total", null, total) : [];
   return tag("figure", { class: "panel earned" }, tag("figcaption", {}, "Earned by origin"),
     tag("div", { class: "scroll" }, tag("table", {},
@@ -289,26 +285,6 @@ function farmBlock(panel, draws) {
   const failures = [...unsaved.values()].map(text => tag("p", { class: "note failed" }, text));
   return tag("div", { class: "native farm" }, note(panel), ...failures, kpis(board), gauge(board), trends(board, draws), settings(board),
     tag("div", { class: "pair" }, donut(board.farm), earned(board.origins || [])));
-}
-
-function actionsBlock(panel) {
-  const actions = ((panel && panel.reading) || {}).actions || [];
-  const buttons = actions.map(action => {
-    const status = tag("span", { class: "sub" }, outcomes.get(action.key) || action.hint);
-    const button = tag("button", { type: "button", class: "action" },
-      tag("span", { class: "label" }, action.label), tag("span", { class: "value" }, "Refresh"), status);
-    button.onclick = () => {
-      button.disabled = true;
-      status.textContent = "Publishing";
-      send(`/quick-actions/${encodeURIComponent(action.key)}`).then(ok => {
-        outcomes.set(action.key, ok ? "Sent, publishing now" : "No answer, try again later");
-        button.disabled = false;
-        status.textContent = outcomes.get(action.key);
-      });
-    };
-    return button;
-  });
-  return tag("div", { class: "native" }, note(panel), tag("div", { class: "actions" }, ...buttons));
 }
 
 function age(created) {
@@ -350,7 +326,6 @@ function native(slug) {
   const draws = [];
   let node = null;
   if (slug === "farm") node = farmBlock(board.farm, draws);
-  if (slug === "quick-actions") node = actionsBlock(board.actions);
   if (slug === "pull-requests") node = pullsBlock(board.pulls);
   if (node) node.draws = draws;
   return node;

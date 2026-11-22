@@ -56,13 +56,7 @@ services:
       RATIO_URL: http://ratio:8000
       DISCORD_FARM_WEBHOOK_ID: ${DISCORD_FARM_WEBHOOK_ID:-}
       DISCORD_FARM_WEBHOOK_TOKEN: ${DISCORD_FARM_WEBHOOK_TOKEN:-}
-      DISCORD_POSTS_URL: http://discord-posts:8000
       PR_RADAR_URL: http://pr-radar:8000
-      TRUENAS_URL: wss://host.docker.internal/api/current
-      TRUENAS_API_KEY: ${TRUENAS_API_KEY:-}
-      TRUENAS_FINGERPRINT: ${TRUENAS_FINGERPRINT:-}
-    extra_hosts:
-      - host.docker.internal:host-gateway
     labels:
       kuma.dashboard.docker.name: Dashboard
       dashboard.name: Dashboard
@@ -72,7 +66,6 @@ services:
       dashboard.href: https://dashboard.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
     volumes:
       - ./web:/web:ro
-      - ${DATA_ROOT}/media:/media:ro
       - ${BACKUP_ROOT}/:/backup:ro
       - ${APPDATA_ROOT}/dashboard:/state
     healthcheck:
