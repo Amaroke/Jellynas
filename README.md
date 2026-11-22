@@ -2332,8 +2332,10 @@ the Dashboard, see [Farm board](#farm-board).
    stop downloading from C411. Every torrent keeps seeding. Once the Account
    ratio is back over the floor, ratio puts C411 back on its former profile.
 3. **Counts.** It keeps the Ledger in `${APPDATA_ROOT}/ratio/state.json`, which
-   gives the Deficit or the Surplus of the C411 account. A torrent belongs to
-   C411 when its announce URL holds `RATIO_TRACKER`.
+   counts every torrent under its Origin, with its tracker, c411, nyaa or
+   other, for the Library, and gives the Deficit or the Surplus of the C411
+   account. A torrent belongs to C411 when its announce URL holds
+   `RATIO_TRACKER`.
 4. **Grabs, only into the Farm.** While fewer than `RATIO_MAX_DOWNLOADING`
    torrents of the Farm are downloading, 2 by default, and the Farm holds less
    than its budget, 100 GB by default, it reads the newest releases of C411 and
@@ -2393,12 +2395,12 @@ To use it:
    docker compose logs ratio
    ```
 
-Once a day, the logs also hold one line per Source, with its torrents, the GB
-downloaded and uploaded and their ratio, the same over the last 7 days, and the
-days seeded in the Farm:
+Once a day, the logs also hold one line per Origin, with its
+torrents, the GB downloaded and uploaded and their ratio, the same over the last
+7 days, and the days seeded in the Farm:
 
 ```sh
-docker compose logs ratio | grep Source
+docker compose logs ratio | grep Origin
 ```
 
 ratio also keeps one entry per day in `daily` of its state file, the last 30
@@ -2433,7 +2435,7 @@ downloads, 1, the floor and 2, with how much upload reaches each tier above and
 how much download each tier under allows, and two curves over 30 days: the Zen
 paid each night with the balance, and the uploaded and downloaded totals.
 `?part=2` shows each switch and setting of the Farm with
-what it does, its disk split by Source and what each Source earned.
+what it does, its disk split by Origin and what each Origin earned.
 `shot=<width>` sets the width in pixels for the pictures of Discord.
 
 The Farm section of the Dashboard draws the same board from `/board.json` of

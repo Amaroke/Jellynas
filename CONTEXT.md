@@ -127,21 +127,22 @@ The same release, byte for byte, on a public tracker, downloaded there so that
 its C411 copy costs no download on C411.
 _Avoid_: mirror, duplicate
 
-**Source**:
-How a C411 torrent came to the NAS: a fresh paid grab, a free grab, a Library
-download from C411. A free grab costs no download on
-C411: a Twin, a freeleech grab or a cross-seed of the Library. It never changes,
-even when a Library torrent later moves to the Farm.
-_Avoid_: origin, kind, pool
+**Origin**:
+What added a torrent to qBittorrent, radarr, sonarr or lazylibrarian for the
+Library, farm for the Farm, or cross-seed. A Library torrent also names the
+tracker it came from, c411, nyaa or other, read from its whole tracker list. It
+follows the category of the torrent, so a Library torrent moved to the Farm
+counts for the Farm.
+_Avoid_: source, kind, pool
 
 **Ledger**:
-What every C411 torrent of the NAS downloaded and uploaded, removed torrents
-included.
+What every torrent qBittorrent holds downloaded and uploaded. A removed
+torrent leaves it.
 _Avoid_: history, stats
 
 **Deficit**:
-How much more the Ledger downloaded than it uploaded. Its opposite is the
-**Surplus**.
+How much more the C411 torrents of the Ledger downloaded than they uploaded.
+Its opposite is the **Surplus**.
 _Avoid_: debt, balance
 
 ### Hosting
