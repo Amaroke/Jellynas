@@ -23,6 +23,7 @@ services:
       dashboard.icon: beszel.svg
       dashboard.href: https://beszel.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/beszel:/beszel_data
       - beszel_socket:/beszel_socket
@@ -55,6 +56,7 @@ services:
       dashboard.section: Observation
       dashboard.icon: beszel.svg
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - beszel_socket:/beszel_socket
       - ${DATA_ROOT}/.beszel:/extra-filesystems/data__Data:ro

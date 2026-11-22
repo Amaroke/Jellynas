@@ -31,6 +31,7 @@ services:
       dashboard.name: Policy
       dashboard.section: Automation
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     healthcheck:
       test:
         - "CMD"

@@ -54,6 +54,22 @@ pub fn to_stop(event: &Value, shutdown: &BTreeSet<String>) -> Option<String> {
     (started && shutdown.contains(service)).then(|| actor["ID"].as_str().map(String::from))?
 }
 
+pub fn unstarted(containers: &Value, shutdown: &BTreeSet<String>) -> Vec<String> {
+    containers
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|container| container["State"] == "created")
+        .filter(|container| container["Labels"]["dashboard.switchable"] == "true")
+        .filter(|container| {
+            container["Labels"]["com.docker.compose.service"]
+                .as_str()
+                .is_some_and(|service| !shutdown.contains(service))
+        })
+        .filter_map(|container| container["Id"].as_str().map(String::from))
+        .collect()
+}
+
 pub fn strays(services: &[Service]) -> Vec<String> {
     services
         .iter()
@@ -81,6 +97,31 @@ mod tests {
 
     fn shut_down(services: &[&str]) -> BTreeSet<String> {
         services.iter().map(|service| service.to_string()).collect()
+    }
+
+    #[test]
+    fn a_switchable_container_the_deploy_left_unstarted_starts_unless_shut_down() {
+        let container = |service: &str, state: &str, switchable: &str| {
+            json!({
+                "Id": format!("id-{service}"),
+                "State": state,
+                "Labels": {
+                    "com.docker.compose.service": service,
+                    "dashboard.switchable": switchable,
+                },
+            })
+        };
+        let containers = json!([
+            container("aurral", "created", "true"),
+            container("tdarr", "created", "true"),
+            container("caddy", "created", "false"),
+            container("bazarr", "exited", "true"),
+            container("sonarr", "running", "true"),
+        ]);
+        assert_eq!(
+            vec!["id-aurral".to_string()],
+            unstarted(&containers, &shut_down(&["tdarr"]))
+        );
     }
 
     #[test]

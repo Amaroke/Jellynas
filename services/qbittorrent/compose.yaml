@@ -26,6 +26,7 @@ services:
       dashboard.icon: qbittorrent.svg
       dashboard.href: https://qbittorrent.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/qbittorrent:/config
       - ${DATA_ROOT}/torrents:/data/torrents

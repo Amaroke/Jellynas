@@ -24,6 +24,7 @@ services:
       dashboard.icon: radarr.svg
       dashboard.href: https://radarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/radarr:/config
       - ${DATA_ROOT}/media/movies:/data/media/movies

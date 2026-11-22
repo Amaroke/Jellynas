@@ -26,6 +26,7 @@ services:
       dashboard.section: Pull requests
       dashboard.icon: github.svg
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ./radar.py:/app/radar.py:ro
       - ${APPDATA_ROOT}/pr-radar:/state

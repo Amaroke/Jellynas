@@ -28,5 +28,6 @@ services:
         Board of the Farm on Discord, hourly and on each change
       dashboard.icon: discord.svg
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/farm-board:/state

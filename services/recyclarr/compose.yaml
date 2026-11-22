@@ -22,6 +22,7 @@ services:
       dashboard.description: Quality profiles, synced every night
       dashboard.icon: recyclarr.svg
       dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
     volumes:
       - ./recyclarr.yml:/config/recyclarr.yml:ro
       - ./settings.yml:/config/settings.yml:ro
