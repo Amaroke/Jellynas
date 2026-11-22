@@ -14,6 +14,7 @@ use std::{env, fs, process, thread};
 const PASS_AT: Time = time(4, 30, 0, 0);
 const STALE: Duration = Duration::from_secs(49 * 3600);
 const HEARTBEAT: &str = "/tmp/heartbeat";
+const RETRY: i64 = 30;
 
 enum App {
     Jellyfin(Http),
@@ -99,7 +100,12 @@ fn healthy(last_pass: Option<SystemTime>, now: SystemTime) -> bool {
         .is_some_and(|age| age < STALE)
 }
 
-fn next_pass(now: &ZonedDateTime) -> Result<ZonedDateTime, String> {
+fn next_pass(failed: bool, now: &ZonedDateTime) -> Result<ZonedDateTime, String> {
+    if failed {
+        return now
+            .checked_add(jiff::Span::new().seconds(RETRY))
+            .map_err(|error| error.to_string());
+    }
     let today = now
         .with()
         .time(PASS_AT)
@@ -143,7 +149,7 @@ fn main() {
             eprintln!("Cannot write the heartbeat: {error}");
         }
         let now = ZonedDateTime::now();
-        let next = next_pass(&now).unwrap_or_else(|error| {
+        let next = next_pass(failed, &now).unwrap_or_else(|error| {
             eprintln!("Cannot plan the next pass: {error}");
             process::exit(1);
         });
@@ -257,7 +263,7 @@ mod tests {
     fn a_pass_before_half_past_four_waits_for_the_same_night() {
         assert_eq!(
             at("2026-11-21T04:30:00+01:00[Europe/Paris]"),
-            next_pass(&at("2026-11-21T01:00:00+01:00[Europe/Paris]")).unwrap()
+            next_pass(false, &at("2026-11-21T01:00:00+01:00[Europe/Paris]")).unwrap()
         );
     }
 
@@ -265,7 +271,15 @@ mod tests {
     fn a_pass_from_half_past_four_waits_for_the_next_night() {
         assert_eq!(
             at("2026-11-22T04:30:00+01:00[Europe/Paris]"),
-            next_pass(&at("2026-11-21T04:30:00+01:00[Europe/Paris]")).unwrap()
+            next_pass(false, &at("2026-11-21T04:30:00+01:00[Europe/Paris]")).unwrap()
+        );
+    }
+
+    #[test]
+    fn a_failed_pass_tries_again_half_a_minute_later() {
+        assert_eq!(
+            at("2026-11-21T15:10:30+01:00[Europe/Paris]"),
+            next_pass(true, &at("2026-11-21T15:10:00+01:00[Europe/Paris]")).unwrap()
         );
     }
 
@@ -273,7 +287,7 @@ mod tests {
     fn the_pass_keeps_local_time_across_a_change_of_hour() {
         assert_eq!(
             at("2026-03-29T04:30:00+02:00[Europe/Paris]"),
-            next_pass(&at("2026-03-28T12:00:00+01:00[Europe/Paris]")).unwrap()
+            next_pass(false, &at("2026-03-28T12:00:00+01:00[Europe/Paris]")).unwrap()
         );
     }
 }

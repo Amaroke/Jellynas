@@ -1421,8 +1421,9 @@ Requires [Jellyfin](#jellyfin), [Radarr](#radarr), [Sonarr](#sonarr),
 policy keeps the settings of the apps the way this README sets them. At its
 start, then every day at 4:30 in the time zone of `TZ`, it reads them through
 the API of each app, and puts back only what differs, so a setting changed by
-hand in a Dashboard comes back the next night. Restart it to apply a rule at
-once:
+hand in a Dashboard comes back the next night. A pass that cannot reach an
+app, as when the whole stack starts at once, tries again 30 seconds later
+until it goes through. Restart it to apply a rule at once:
 
 ```sh
 docker restart policy
