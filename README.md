@@ -2750,8 +2750,8 @@ others, then restart doco-cd to apply `.env`:
   [Suwayomi](#suwayomi)
 - Bazarr, `BAZARR_API_KEY`: Settings > General > Security, "API Key"
 - Tdarr, `TDARR_API_KEY`: set in [Tdarr](#tdarr)
-- autobrr, `AUTOBRR_API_KEY`: Settings > API Keys, click "Add new" and name it
-  `Dashboard`
+- autobrr, `AUTOBRR_API_KEY`: Settings > API Keys, click "Add new", name it
+  `Dashboard` and give it read access on Filters and Releases
 - Beszel, `BESZEL_EMAIL` and `BESZEL_PASSWORD`: set in [Beszel](#beszel)
 - TrueNAS, `TRUENAS_API_KEY`: in Credentials >
   Users, add a user `dashboard` with the password disabled in the group
