@@ -1,5 +1,6 @@
 use crate::cards::{self, Service, State};
 use crate::docker::Docker;
+use crate::farm_post::{self, Poster};
 use crate::icons::Icons;
 use crate::shutdown::{self, Shutdown};
 use crate::stats::{self, History, Sample};
@@ -9,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -68,6 +70,8 @@ fn archives(folder: &Path) -> Vec<widgets::parse::Archive> {
 }
 const MEASURE: Duration = Duration::from_secs(1800);
 const POOL: Duration = Duration::from_secs(300);
+const FARM_RETRY: Duration = Duration::from_secs(60);
+const FARM_ACTION: &str = "farm-board";
 
 pub enum Outcome {
     Done,
@@ -87,6 +91,7 @@ pub struct App {
     shutdown: Mutex<Shutdown>,
     client: Client,
     farm_changes: AtomicU64,
+    farm_wake: Mutex<Option<Sender<()>>>,
     answers: AtomicU64,
     samples: Mutex<HashMap<String, (String, Sample)>>,
     history: Mutex<History>,
@@ -110,6 +115,7 @@ impl App {
             shutdown: Mutex::new(shutdown),
             client,
             farm_changes: AtomicU64::new(0),
+            farm_wake: Mutex::new(None),
             answers: AtomicU64::new(0),
             samples: Mutex::new(HashMap::new()),
             history: Mutex::new(History::default()),
@@ -186,7 +192,7 @@ impl App {
                 })
                 .collect();
             let host = scope.spawn(|| self.client.host());
-            let farm = scope.spawn(|| self.feed("FARM_BOARD", "/board.json", "the Farm"));
+            let farm = scope.spawn(|| self.feed("RATIO", "/board", "the Farm"));
             let actions =
                 scope.spawn(|| self.feed("DISCORD_POSTS", "/actions.json", "the Quick actions"));
             let pulls = scope.spawn(|| self.feed("PR_RADAR", "/pulls.json", "the Pull requests"));
@@ -215,8 +221,17 @@ impl App {
             )
         });
         let history = self.remember(&usage, &readings);
+        let tier_before = Self::farm_tier(previous.farm.as_ref());
         let farm = Some(widgets::settle(previous.farm.as_ref(), farm, now));
-        let actions = Some(widgets::settle(previous.actions.as_ref(), actions, now));
+        if farm_post::crossed(tier_before, Self::farm_tier(farm.as_ref())) {
+            println!("The Account ratio crossed a tier, the Farm board goes to Discord");
+            self.wake_farm();
+        }
+        let actions = Some(widgets::settle(
+            previous.actions.as_ref(),
+            actions.map(|found| self.with_farm_action(found)),
+            now,
+        ));
         let pulls = Some(widgets::settle(previous.pulls.as_ref(), pulls, now));
         let mut widgets: BTreeMap<String, Panel> = readings
             .into_iter()
@@ -324,8 +339,8 @@ impl App {
         if !valid {
             return Outcome::Invalid;
         }
-        let sent = self.client.send("FARM_BOARD", "/controls", control);
-        let farm = self.feed("FARM_BOARD", "/board.json", "the Farm");
+        let sent = self.client.send("RATIO", "/controls", control);
+        let farm = self.feed("RATIO", "/board", "the Farm");
         self.board.send_modify(|board| {
             self.farm_changes.fetch_add(1, Ordering::SeqCst);
             let mut changed = (**board).clone();
@@ -333,7 +348,10 @@ impl App {
             *board = Arc::new(changed);
         });
         match sent {
-            Ok(()) => Outcome::Done,
+            Ok(()) => {
+                self.wake_farm();
+                Outcome::Done
+            }
             Err(error) => {
                 eprintln!("Cannot change {} in the Farm: {error}", control["name"]);
                 Outcome::Failed
@@ -501,6 +519,10 @@ impl App {
         if !known {
             return Outcome::Unknown;
         }
+        if key == FARM_ACTION {
+            self.wake_farm();
+            return Outcome::Done;
+        }
         match self
             .client
             .send("DISCORD_POSTS", &format!("/actions/{key}"), &Value::Null)
@@ -510,6 +532,72 @@ impl App {
                 eprintln!("Cannot run the Quick action {key}: {error}");
                 Outcome::Failed
             }
+        }
+    }
+
+    fn farm_tier(panel: Option<&Panel<Value>>) -> Option<(usize, f64)> {
+        panel
+            .and_then(|panel| panel.reading.as_ref())
+            .and_then(farm_post::tier_of)
+    }
+
+    fn wake_farm(&self) {
+        if let Some(wake) = self
+            .farm_wake
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_ref()
+        {
+            let _ = wake.send(());
+        }
+    }
+
+    fn with_farm_action(&self, mut found: Value) -> Value {
+        let posting = self
+            .farm_wake
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_some();
+        if posting && let Some(actions) = found["actions"].as_array_mut() {
+            actions.push(serde_json::json!({
+                "key": FARM_ACTION,
+                "label": "Farm board",
+                "hint": "Message du jour",
+            }));
+        }
+        found
+    }
+
+    pub fn listen_farm(&self, wake: Sender<()>) {
+        *self
+            .farm_wake
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(wake);
+    }
+
+    pub fn post_farm(&self, poster: Poster, woken: Receiver<()>) {
+        loop {
+            let board = self.client.feed("RATIO", "/board");
+            let wait = match board {
+                Ok(board) if farm_post::ready(&board) => {
+                    match poster.post(&board, &jiff::ZonedDateTime::now()) {
+                        Ok(done) => println!("{done}"),
+                        Err(error) => {
+                            println!(
+                                "Cannot publish the Farm board, the next try is in one hour: {error}"
+                            )
+                        }
+                    }
+                    farm_post::until_next_hour(&jiff::ZonedDateTime::now())
+                }
+                Ok(_) => {
+                    println!("ratio has not filled its board yet, the next try is in one minute");
+                    FARM_RETRY
+                }
+                Err(_) => FARM_RETRY,
+            };
+            let _ = woken.recv_timeout(wait);
+            while woken.try_recv().is_ok() {}
         }
     }
 

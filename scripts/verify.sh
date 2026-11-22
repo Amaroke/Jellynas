@@ -565,7 +565,6 @@ check_no_torrents_mount tdarr
 check_no_media_mount autobrr
 check_no_media_tree cross-seed
 check_no_media_mount ratio
-check_no_media_mount farm-board
 check_no_media_mount discord-posts
 check_no_media_mount pr-radar
 check_no_media_mount beszel

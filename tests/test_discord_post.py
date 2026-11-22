@@ -9,7 +9,6 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
-from unittest import mock
 
 from discord_post import (
     MAX_LENGTH,
@@ -187,9 +186,9 @@ class DailyTest(unittest.TestCase):
 
 
 class ActionsTest(unittest.TestCase):
-    def start(self, farm_board="http://127.0.0.1:9/refresh"):
+    def start(self):
         self.wake = threading.Event()
-        server = serve(self.wake, farm_board, port=0)
+        server = serve(self.wake, port=0)
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         self.url = f"http://127.0.0.1:{server.server_address[1]}"
@@ -199,12 +198,11 @@ class ActionsTest(unittest.TestCase):
         with urllib.request.urlopen(request, timeout=10) as response:
             return response.url, response.read().decode()
 
-    def test_the_page_offers_both_buttons_in_post(self):
+    def test_the_page_offers_the_button_in_post(self):
         self.start()
         with urllib.request.urlopen(f"{self.url}/actions", timeout=10) as response:
             page = response.read().decode()
         self.assertIn('<form method="post" action="/actions/discord">', page)
-        self.assertIn('<form method="post" action="/actions/farm-board">', page)
         self.assertFalse(self.wake.is_set())
 
     def test_the_discord_button_wakes_the_publication(self):
@@ -215,22 +213,6 @@ class ActionsTest(unittest.TestCase):
         self.assertIn('class="discord running"', page)
         self.assertIn("Publication en cours", page)
 
-    def test_the_farm_board_button_asks_the_farm_board(self):
-        self.start("http://farm-board:8000/refresh")
-        with mock.patch("discord_post.ask_farm_board") as ask:
-            _, page = self.post("/actions/farm-board")
-        ask.assert_called_once_with("http://farm-board:8000/refresh")
-        self.assertFalse(self.wake.is_set())
-        self.assertIn('class="farm-board running"', page)
-        self.assertIn("Publication en cours", page)
-
-    def test_a_farm_board_that_does_not_answer_says_so(self):
-        self.start()
-        with contextlib.redirect_stdout(io.StringIO()):
-            _, page = self.post("/actions/farm-board")
-        self.assertIn('class="farm-board failed"', page)
-        self.assertIn("Pas de réponse", page)
-
     def post_json(self, path):
         request = urllib.request.Request(self.url + path, data=b"", method="POST", headers={"Accept": "application/json"})
         with urllib.request.urlopen(request, timeout=10) as response:
@@ -240,20 +222,13 @@ class ActionsTest(unittest.TestCase):
         self.start()
         with urllib.request.urlopen(f"{self.url}/actions.json", timeout=10) as response:
             found = json.load(response)
-        self.assertEqual(["discord", "farm-board"], [action["key"] for action in found["actions"]])
+        self.assertEqual(["discord"], [action["key"] for action in found["actions"]])
         self.assertEqual("Messages Discord", found["actions"][0]["label"])
 
     def test_a_json_client_gets_a_status_instead_of_the_page(self):
         self.start()
         self.assertEqual(202, self.post_json("/actions/discord"))
         self.assertTrue(self.wake.is_set())
-
-    def test_a_json_client_hears_that_the_farm_board_does_not_answer(self):
-        self.start()
-        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(urllib.error.HTTPError) as caught:
-            self.post_json("/actions/farm-board")
-        caught.exception.close()
-        self.assertEqual(502, caught.exception.code)
 
     def test_an_unknown_action_is_refused(self):
         self.start()

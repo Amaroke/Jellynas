@@ -27,13 +27,10 @@ POSTS = (
     ("tutos", "tempus.md"),
 )
 FAILURES = (OSError, ValueError, KeyError, http.client.HTTPException, SystemExit)
-FARM_BOARD = "http://farm-board:8000/refresh"
 ACTIONS = (
     ("discord", "Messages Discord", "Liens et bienvenue"),
-    ("farm-board", "Farm board", "Message du jour"),
 )
 ACTION_RUNNING = "Publication en cours"
-ACTION_FAILED = "Pas de réponse, réessaie plus tard"
 ACTIONS_PAGE = """<!doctype html>
 <html lang="fr">
 <meta charset="utf-8">
@@ -55,12 +52,10 @@ button::before {{ content: ""; position: absolute; left: 0; top: 10px; bottom: 1
 button:hover {{ border-color: var(--accent); background: linear-gradient(160deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.05)); }}
 button:focus-visible {{ outline: 2px solid var(--accent); outline-offset: 1px; }}
 .discord {{ --accent: #60a5fa; }}
-.farm-board {{ --accent: #a78bfa; }}
 .label {{ color: #94a3b8; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }}
 .value {{ font-size: 18px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; }}
 .sub {{ color: #94a3b8; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
 .running .sub {{ color: #34d399; }}
-.failed .sub {{ color: #fb7185; }}
 </style>
 <main>{cards}</main>
 """
@@ -172,8 +167,6 @@ def action_card(key, label, hint, done):
     state, text = "", hint
     if done == key:
         state, text = " running", ACTION_RUNNING
-    elif done == "error" and key == "farm-board":
-        state, text = " failed", ACTION_FAILED
     return (
         f'<form method="post" action="/actions/{key}"><button class="{key}{state}"><span class="label">{label}</span>'
         f'<span class="value">Actualiser</span><span class="sub">{text}</span></button></form>'
@@ -184,13 +177,7 @@ def actions_page(done):
     return ACTIONS_PAGE.format(cards="".join(action_card(key, label, hint, done) for key, label, hint in ACTIONS))
 
 
-def ask_farm_board(url):
-    request = urllib.request.Request(url, data=b"", method="POST")
-    with urllib.request.urlopen(request, timeout=10):
-        pass
-
-
-def serve(wake, farm_board=FARM_BOARD, port=8000):
+def serve(wake, port=8000):
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
             url = urllib.parse.urlsplit(self.path)
@@ -219,18 +206,11 @@ def serve(wake, farm_board=FARM_BOARD, port=8000):
             if self.path == "/actions/discord":
                 wake.set()
                 done = "discord"
-            elif self.path == "/actions/farm-board":
-                try:
-                    ask_farm_board(farm_board)
-                    done = "farm-board"
-                except FAILURES as error:
-                    print(f"Cannot ask for the Farm board: {error}")
-                    done = "error"
             else:
                 self.send_error(404)
                 return
             if "application/json" in self.headers.get("Accept", ""):
-                self.send_response(502 if done == "error" else 202)
+                self.send_response(202)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return

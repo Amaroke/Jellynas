@@ -53,7 +53,9 @@ services:
       BESZEL_SYSTEM: NAS
       UPTIME_KUMA_URL: http://uptime-kuma:3001
       UPTIME_KUMA_SLUG: nas
-      FARM_BOARD_URL: http://farm-board:8000
+      RATIO_URL: http://ratio:8000
+      DISCORD_FARM_WEBHOOK_ID: ${DISCORD_FARM_WEBHOOK_ID:-}
+      DISCORD_FARM_WEBHOOK_TOKEN: ${DISCORD_FARM_WEBHOOK_TOKEN:-}
       DISCORD_POSTS_URL: http://discord-posts:8000
       PR_RADAR_URL: http://pr-radar:8000
       TRUENAS_URL: wss://host.docker.internal/api/current

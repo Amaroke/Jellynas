@@ -22,10 +22,9 @@ include:
   - services/recyclarr/compose.yaml
   # - services/tdarr/compose.yaml
   # - services/bazarr/compose.yaml
-  - services/autobrr/compose.yaml
+  # - services/autobrr/compose.yaml
   - services/cross-seed/compose.yaml
   - services/ratio/compose.yaml
-  - services/farm-board/compose.yaml
   - services/discord-posts/compose.yaml
   - services/pr-radar/compose.yaml
   - services/beszel/compose.yaml

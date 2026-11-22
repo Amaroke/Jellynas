@@ -29,7 +29,7 @@ module.exports = {
 	excludeRecentSearch: "3 days",
 	action: "inject",
 	duplicateCategories: false,
-	rssCadence: "30 minutes",
+	rssCadence: "10 minutes",
 	searchCadence: "1 day",
 	delay: 30,
 	blockList: [],

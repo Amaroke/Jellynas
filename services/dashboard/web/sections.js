@@ -6,32 +6,30 @@ const ORIGINS = {
   radarr: "#fbbf24", sonarr: "#38bdf8", lazylibrarian: "#a78bfa", farm: "#34d399", "cross-seed": "#f472b6", unknown: "#94a3b8",
 };
 const TIERS = ["#fb7185", "#fbbf24", "#facc15", "#34d399", "#a78bfa"];
-const BEHAVIOURS = ["free", "twins", "paid", "clean_public", "drop_twins", "hold", "adopt"];
+const BEHAVIOURS = ["free", "twins", "clean_public", "hold", "adopt"];
 const NUMBERS = {
   farm_size_gb: { step: "1", min: 1, max: 100000 },
   floor: { step: "0.05", min: 0.5, max: 5 },
-  daily_gb: { step: "0.5", min: 0, max: 1000 },
+  free_max_gb: { step: "0.5", min: 0.5, max: 1000 },
 };
 const WORDS = {
   tierNames: { blocked: "blocked", even: "even", floor: "floor", goal: "goal" },
   switches: {
-    free: "Freeleech", twins: "Twins", paid: "Fresh paid grabs", clean_public: "Clean Public torrents",
-    drop_twins: "Drop Twins", hold: "Hold Prowlarr under the floor", adopt: "Adopt the Library",
+    free: "Freeleech", twins: "Twins", clean_public: "Clean Public torrents",
+    hold: "Hold Prowlarr under the floor", adopt: "Adopt the Library",
   },
-  numbers: { farm_size_gb: "Farm budget (GB)", floor: "Ratio floor", daily_gb: "Paid download per day (GB)" },
+  numbers: { farm_size_gb: "Farm budget (GB)", floor: "Ratio floor", free_max_gb: "Freeleech max size (GB)" },
   explainSwitches: {
-    free: "Grabs the freeleech releases of C411 up to 5 GB, the most wanted first. Their download is not counted, their upload is.",
-    twins: "For each fresh episode of C411, downloads the same release from Nyaa. cross-seed then adds the C411 copy without any counted download.",
-    paid: "Grabs C411 releases under 24 hours old with at least 5 leechers, the most leechers per GB first. Their download counts, within the paid download per day and never under the floor.",
-    clean_public: "Removes a public torrent after 14 days of seeding, or once its C411 copy seeds the same files.",
-    drop_twins: "Removes the Nyaa copy of a Twin once its C411 copy seeds. The hardlink keeps the files.",
+    free: "Grabs the freeleech releases of C411 up to the freeleech max size, the most wanted first. Their download is not counted, their upload is.",
+    twins: "For each C411 release under 8 hours old with a leecher, episode, season pack or movie, looks for the same files on Nyaa, every 10 minutes the first hour then every 30 minutes. Downloads the Nyaa copy, then adds the C411 copy on the same files without any counted download.",
+    clean_public: "Removes a public torrent after 7 days of seeding or once it uploaded its own size, whether a C411 copy exists or not. Its files stay while a C411 copy seeds them.",
     hold: "Under the floor, pauses C411 in Prowlarr so Radarr and Sonarr stop downloading there. Everything keeps seeding.",
     adopt: "Moves a C411 torrent of the Library into the Farm 6 hours after it finished, so it counts in the Farm budget.",
   },
   explainNumbers: {
     farm_size_gb: "Disk the Farm may fill. Once full, nothing more is grabbed and nothing is removed.",
-    floor: "Account ratio under which no paid download happens on C411, not even for the Library. Freeleech and Twins go on.",
-    daily_gb: "Paid download allowed over the last 24 hours for fresh grabs.",
+    floor: "Account ratio under which no paid download happens on C411, not even for the Library, and Prowlarr holds C411 while Hold is on. Freeleech and Twins go on.",
+    free_max_gb: "Largest freeleech release the Farm grabs.",
   },
   explainOrigins: {
     radarr: "Movie of the Library", sonarr: "Show of the Library", lazylibrarian: "Book of the Library",

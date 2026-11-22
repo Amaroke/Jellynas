@@ -1,7 +1,7 @@
 ---
 services:
   ratio:
-    image: python:3.14.5-alpine3.22
+    build: .
     container_name: ratio
     restart: unless-stopped
     networks:
@@ -11,7 +11,6 @@ services:
     cap_drop:
       - ALL
     user: ${PUID}:${PGID}
-    command: ["python", "-u", "/app/ratio.py"]
     environment:
       TZ: ${TZ}
       HTTPS_PROXY: http://gluetun:8888
@@ -26,8 +25,6 @@ services:
       C411_PROFILE_API_KEY: ${C411_PROFILE_API_KEY:-}
       C411_TORZNAB_API_KEY: ${C411_TORZNAB_API_KEY:-}
       RATIO_FLOOR: ${RATIO_FLOOR:-}
-      RATIO_DAILY_GB: ${RATIO_DAILY_GB:-}
-      RATIO_MAX_DOWNLOADING: ${RATIO_MAX_DOWNLOADING:-}
     labels:
       kuma.ratio.docker.name: Ratio
       docker-volume-backup.stop-during-backup: "true"
@@ -36,5 +33,4 @@ services:
       dashboard.switchable: "true"
       cd.doco.deployment.autostart: "false"
     volumes:
-      - ./ratio.py:/app/ratio.py:ro
       - ${APPDATA_ROOT}/ratio:/state

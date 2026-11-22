@@ -85,14 +85,6 @@
 	import lan bazarr bazarr:6767
 	import lan tdarr tdarr:8265
 	import lan autobrr autobrr:7474
-	@ratio {
-		host ratio.lan.{$DOMAIN}
-		remote_ip {$LAN_SUBNET}
-		path /graphs /controls
-	}
-	handle @ratio {
-		reverse_proxy farm-board:8000
-	}
 	@actions {
 		host actions.lan.{$DOMAIN}
 		remote_ip {$LAN_SUBNET}
