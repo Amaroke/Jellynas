@@ -29,8 +29,8 @@ guide is written so that an AI agent can follow it as well as a person.
 11. [Radarr](#radarr)
 12. [Sonarr](#sonarr)
 13. [slskd](#slskd)
-14. [Requests](#requests)
-15. [Recyclarr](#recyclarr)
+14. [Recyclarr](#recyclarr)
+15. [Requests](#requests)
 16. [Tdarr](#tdarr)
 17. [Bazarr](#bazarr)
 18. [Indexarr](#indexarr)
@@ -1455,6 +1455,111 @@ doco-cd builds into an image of 2 MB that runs in 1 MB of memory. To change a
 rule, edit the module of the app and open a pull request: the CI checks its
 format, its lints and its tests.
 
+## Recyclarr
+
+Requires [Radarr](#radarr) and [Sonarr](#sonarr).
+
+Recyclarr creates the quality profiles of Radarr and Sonarr, so that most
+downloads already match the Library format and Tdarr rarely has to re-encode. It
+sees no media file and only talks to the Radarr and Sonarr APIs, with the
+`RADARR_API_KEY` and `SONARR_API_KEY` already in `.env`. Profilarr can replace
+it, or the profiles of the [TRaSH Guides](https://trash-guides.info/) copied by
+hand. Its config is `services/recyclarr/recyclarr.yml`, with a few custom
+formats of our own in `services/recyclarr/custom-formats`.
+
+Each tool gets two profiles, built from the French profiles of the [TRaSH
+Guides](https://trash-guides.info/Radarr/radarr-setup-quality-profiles-french-en/):
+
+- **MULTi 1080p**, for movies and shows: French and original audio required,
+  H265 preferred, 1080p first.
+- **Anime 1080p**, for anime: a `MULTi` with French subtitles first, then a
+  VOSTFR, then any other `MULTi`.
+
+The profiles favour releases already in the Library format, so Tdarr rarely
+re-encodes, and refuse what Tdarr cannot fix: a missing French audio track.
+Quality always ranks before score, and H265 outweighs the release group, since
+it saves a lossy Tdarr pass. Change a rule in the config, never in Radarr or
+Sonarr, since each sync overwrites the profiles.
+
+### Sync
+
+Recyclarr syncs every day at midnight in the time zone of `TZ`, not at its
+start. Sync right away after the first start, or after changing anything under
+`services/recyclarr/`:
+
+```sh
+docker exec recyclarr recyclarr sync
+```
+
+Each tool ends with a `Completed` line and no error. Lines about `conflicting
+scores` are expected: they show the config overriding a TRaSH score. The logs of
+the container only show the schedule. Each nightly sync writes its own log under
+`$APPDATA_ROOT/recyclarr/logs/cli`.
+
+### Assign the profiles
+
+Recyclarr creates the profiles but never assigns them.
+
+1. In Settings > Profiles of Radarr and of Sonarr, delete the profiles that came
+   with the tool, so a new movie or show can only get a Recyclarr one.
+2. If a library was imported before, in Sonarr, Series, click "Select Series",
+   select every show, pick `MULTi 1080p` under "Quality Profile" at the bottom,
+   and save. Then select every anime, those with the "Anime" series type, and
+   pick `Anime 1080p`. In Radarr, Movies, do the same with `MULTi 1080p` for
+   every movie, then `Anime 1080p` for each Japanese animated movie.
+
+Radarr cannot tell an anime movie apart, so give `Anime 1080p` by hand to each
+anime movie Request too.
+
+### Check a release
+
+Interactive Search, in a movie or an episode, shows the score of each release
+and why any is refused. To score a release name without searching, use the parse
+endpoint of Radarr. The name must match a movie already in Radarr, here Your
+Name, otherwise no profile applies and the score stays at 0:
+
+```bash
+. <(grep -E '^(RADARR_API_KEY|DOMAIN|CADDY_HTTPS_PORT)=' .env)
+curl -s -G -H "X-Api-Key: $RADARR_API_KEY" \
+  --data-urlencode "title=Your.Name.2016.MULTi.1080p.WEB.x265-GROUP" \
+  "https://radarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/v3/parse"
+```
+
+The answer holds `customFormats` and `customFormatScore`. A score below -5000
+means refused. Sonarr answers the same on its own name with the name of an
+episode of a show it has.
+
+## Requests
+
+Requires [Seerr](#seerr) and [Recyclarr](#recyclarr).
+
+In Seerr, Settings > Services, click "Add Radarr Server":
+
+1. Check "Default Server" and enter `Radarr` as the name.
+2. Enter `radarr` as the hostname, `7878` as the port, leave SSL off, and paste
+   the Radarr API key.
+3. Click "Test", then pick `MULTi 1080p` as the quality profile,
+   `/data/media/movies` as the root folder, and "Released" as the minimum
+   availability.
+4. Leave "Enable Automatic Search" checked and save.
+
+Then click "Add Sonarr Server":
+
+1. Check "Default Server" and enter `Sonarr` as the name.
+2. Enter `sonarr` as the hostname, `8989` as the port, leave SSL off, and paste
+   the Sonarr API key.
+3. Click "Test". The quality profiles only load once the test succeeds. Pick
+   `MULTi 1080p` and `/data/media/shows` as the root folder.
+4. Set "Anime Series Type" to "Anime", pick `Anime 1080p` as the anime quality
+   profile and `/data/media/anime` as the anime root folder.
+5. Check "Season Folders" to match Sonarr, leave "Enable Automatic Search"
+   checked, and save.
+
+An approved Request is then searched by Radarr or Sonarr, downloaded by
+qBittorrent into the torrents tree, and copied into the movies, shows or anime
+folder, where Jellyfin picks it up. New episodes of a monitored show follow on
+their own.
+
 === TO BE REWORKED: everything below ===
 
 ## Architecture
@@ -1676,114 +1781,6 @@ pinned, so Renovate keeps them up to date:
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
 | Actions | actionlint checks the workflows, then zizmor audits their security |
-
-## Requests
-
-Requires [Seerr](#seerr), [Radarr](#radarr) and [Sonarr](#sonarr).
-
-In Seerr, Settings > Services, click "Add Radarr Server":
-
-1. Check "Default Server" and enter `Radarr` as the name.
-2. Enter `radarr` as the hostname, `7878` as the port, leave SSL off, and paste
-   the Radarr API key.
-3. Click "Test", then pick a quality profile, `/data/media/movies` as the root
-   folder, and "Released" as the minimum availability.
-4. Leave "Enable Automatic Search" checked and save.
-
-Then click "Add Sonarr Server":
-
-1. Check "Default Server" and enter `Sonarr` as the name.
-2. Enter `sonarr` as the hostname, `8989` as the port, leave SSL off, and paste
-   the Sonarr API key.
-3. Click "Test". The quality profiles only load once the test succeeds. Pick one
-   and `/data/media/shows` as the root folder.
-4. Set "Anime Series Type" to "Anime", pick the same quality profile for anime
-   and `/data/media/anime` as the anime root folder.
-5. Check "Season Folders" to match Sonarr, leave "Enable Automatic Search"
-   checked, and save.
-
-An approved Request is then searched by Radarr or Sonarr, downloaded by
-qBittorrent into the torrents tree, and copied into the movies, shows or anime
-folder, where Jellyfin picks it up. New episodes of a monitored show follow on
-their own.
-
-## Recyclarr
-
-Requires [Requests](#requests).
-
-Recyclarr creates the quality profiles of Radarr and Sonarr, so that most
-downloads already match the Library format and Tdarr rarely has to re-encode. It
-sees no media file and only talks to the Radarr and Sonarr APIs. Profilarr can
-replace it, or the profiles of the [TRaSH Guides](https://trash-guides.info/)
-copied by hand. Its config is `services/recyclarr/recyclarr.yml`, with a few
-custom formats of our own in `services/recyclarr/custom-formats`, and it syncs
-again every day at midnight.
-
-Each tool gets two profiles, built from the French profiles of the [TRaSH
-Guides](https://trash-guides.info/Radarr/radarr-setup-quality-profiles-french-en/):
-
-- **MULTi 1080p**, for movies and shows: French and original audio required,
-  H265 preferred, 1080p first.
-- **Anime 1080p**, for anime: a `MULTi` with French subtitles first, then a
-  VOSTFR, then any other `MULTi`.
-
-The profiles favour releases already in the Library format, so Tdarr rarely
-re-encodes, and refuse what Tdarr cannot fix: a missing French audio track.
-Quality always ranks before score, and H265 outweighs the release group, since
-it saves a lossy Tdarr pass. Change a rule in the config, never in Radarr or
-Sonarr, since each sync overwrites the profiles.
-
-### API keys of Recyclarr
-
-With `RADARR_API_KEY` and `SONARR_API_KEY` set in `.env`, start Recyclarr:
-
-```sh
-docker restart doco-cd
-```
-
-Sync right away instead of waiting for midnight:
-
-```sh
-docker compose exec recyclarr recyclarr sync
-```
-
-Each tool ends with a `Completed` line and no error. Lines about `conflicting
-scores` are expected: they show the config overriding a TRaSH score. Run the
-same command after changing anything under `services/recyclarr/`.
-
-### Assign the profiles
-
-Recyclarr creates the profiles but never assigns them.
-
-1. In Sonarr, Series, click "Select Series", select every show, pick `MULTi
-   1080p` under "Quality Profile" at the bottom, and save. Then select every
-   anime, those with the "Anime" series type, and pick `Anime 1080p`.
-2. In Radarr, Movies, select every movie and pick `MULTi 1080p`. Then select
-   each Japanese animated movie and pick `Anime 1080p`. Radarr cannot tell an
-   anime movie apart, so do this after each anime movie Request too.
-3. In Settings > Profiles of each tool, delete the profiles that came with it,
-   so a new movie or show can only get a Recyclarr one.
-4. In Seerr, Settings > Services, edit Radarr and pick `MULTi 1080p` as the
-   quality profile. Edit Sonarr, pick `MULTi 1080p` as the quality profile and
-   `Anime 1080p` as the anime quality profile.
-
-### Check a release
-
-Interactive Search, in a movie or an episode, shows the score of each release
-and why any is refused. To score a release name without searching, use the parse
-endpoint of Radarr. The name must match a movie already in Radarr, here Your
-Name, otherwise no profile applies and the score stays at 0:
-
-```bash
-. <(grep -E '^(RADARR_API_KEY|DOMAIN|CADDY_HTTPS_PORT)=' .env)
-curl -s -G -H "X-Api-Key: $RADARR_API_KEY" \
-  --data-urlencode "title=Your.Name.2016.MULTi.1080p.WEB.x265-GROUP" \
-  "https://radarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/v3/parse"
-```
-
-The answer holds `customFormats` and `customFormatScore`. A score below -5000
-means refused. Sonarr answers the same on its own name with the name of an
-episode of a show it has.
 
 ## Tdarr
 
