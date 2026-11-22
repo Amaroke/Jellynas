@@ -21,12 +21,21 @@ pub struct Row {
     pub title: String,
     pub detail: String,
     pub progress: Option<f64>,
+    pub image: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Poster {
+    pub title: String,
+    pub detail: String,
+    pub image: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Reading {
     pub figures: Vec<Figure>,
     pub rows: Vec<Row>,
+    pub posters: Vec<Poster>,
     #[serde(skip)]
     pub metrics: Vec<(&'static str, f64)>,
 }
@@ -78,6 +87,7 @@ mod tests {
                 value: value.into(),
             }],
             rows: vec![],
+            posters: vec![],
             metrics: vec![],
         }
     }

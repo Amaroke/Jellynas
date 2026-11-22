@@ -33,6 +33,14 @@ section h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; 
 .rows .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rows .detail { color: var(--muted); }
 .rows meter { width: 100%; height: 4px; }
+.rows li.art { grid-template-columns: 36px minmax(0, 1fr); column-gap: 8px; }
+.rows li.art img { grid-row: span 3; width: 36px; height: 54px; object-fit: cover; border-radius: 4px; background: var(--bg); }
+.rows li.art meter { grid-column: 2; }
+.posters { display: grid; grid-auto-flow: column; grid-auto-columns: 72px; gap: 8px; overflow-x: auto; margin: 0; padding: 0 0 4px; list-style: none; }
+.posters li { display: grid; gap: 2px; font-size: 11px; min-width: 0; }
+.posters img { width: 72px; height: 108px; object-fit: cover; border-radius: 6px; background: var(--bg); }
+.posters .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.posters .detail { color: var(--muted); }
 .note { font-size: 12px; color: var(--restarting); }
 .note.failed { color: var(--unhealthy); }
 .alert { background: color-mix(in srgb, var(--unhealthy) 14%, var(--card)); border: 1px solid var(--unhealthy); border-radius: var(--radius); padding: 10px 14px; display: grid; gap: 4px; }
@@ -55,7 +63,7 @@ section h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; 
 #status .figure b { font-size: 18px; }
 .card .link { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; flex: 1; min-width: 0; }
 .card a.link:hover .name { text-decoration: underline; }
-.card img, .card .letter { width: 32px; height: 32px; flex: none; border-radius: 8px; }
+.card .link img, .card .letter { width: 32px; height: 32px; flex: none; border-radius: 8px; }
 .card .letter { display: grid; place-items: center; background: var(--accent); color: var(--card); font-weight: 700; }
 .card .text { display: grid; min-width: 0; }
 .card .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -177,6 +185,12 @@ function alerts(services) {
     element("ul", {}, ...troubled.map(service => element("li", {}, `${service.name} is ${service.state}`))))];
 }
 
+function picture(src) {
+  const image = element("img", { src, alt: "", loading: "lazy", referrerpolicy: "no-referrer" });
+  image.addEventListener("error", () => { image.style.visibility = "hidden"; });
+  return image;
+}
+
 function panel(found) {
   if (!found) return [];
   const nodes = [];
@@ -188,9 +202,18 @@ function panel(found) {
   if (reading && reading.rows.length) {
     nodes.push(element("ul", { class: "rows" }, ...reading.rows.map(row => {
       const item = element("li", {}, element("span", { class: "title" }, row.title), element("span", { class: "detail" }, row.detail));
+      if (row.image) {
+        item.classList.add("art");
+        item.prepend(picture(row.image));
+      }
       if (row.progress !== null) item.append(element("meter", { min: "0", max: "1", value: String(row.progress) }));
       return item;
     })));
+  }
+  if (reading && reading.posters && reading.posters.length) {
+    nodes.push(element("ul", { class: "posters", "aria-label": "Latest additions" }, ...reading.posters.map(poster =>
+      element("li", { title: `${poster.title} · ${poster.detail}` }, picture(poster.image),
+        element("span", { class: "title" }, poster.title), element("span", { class: "detail" }, poster.detail)))));
   }
   if (found.error) {
     nodes.push(reading

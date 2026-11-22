@@ -13,12 +13,14 @@ def summary(player, playing, paused, channel):
         state = "Paused"
     else:
         state = "Idle"
+    track = player.current if player.current and (playing or paused) else None
     return {
         "state": state,
-        "track": player.current.label if player.current and (playing or paused) else "Nothing",
+        "track": track.label if track else "Nothing",
         "queue": len(player.queue),
         "shuffle": "On" if player.shuffle else "Off",
         "channel": channel or "None",
+        "artwork": (track.album_id or track.id) if track else None,
     }
 
 
@@ -26,7 +28,7 @@ class Status:
     def __init__(self, clock=time.monotonic):
         self.clock = clock
         self.beat = None
-        self.snapshot = {"state": "Idle", "track": "Nothing", "queue": 0, "shuffle": "Off", "channel": "None"}
+        self.snapshot = {"state": "Idle", "track": "Nothing", "queue": 0, "shuffle": "Off", "channel": "None", "artwork": None}
 
     def update(self, connected, snapshot):
         self.snapshot = snapshot

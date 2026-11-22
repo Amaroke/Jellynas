@@ -44,18 +44,19 @@ class StatusTest(unittest.TestCase):
 
     def test_status_shows_the_snapshot(self):
         player = Player()
-        player.add([Track("1", "One More Time", "Daft Punk", "Discovery", "/x.flac")] * 2)
+        player.add([Track("1", "One More Time", "Daft Punk", "Discovery", "/x.flac", "album-1")] * 2)
         player.start_shuffle()
         player.advance()
         self.status.update(True, summary(player, True, False, "Lounge"))
         code, body = fetch(self.url + "/status")
         self.assertEqual(200, code)
         self.assertEqual({"state": "Playing", "track": "Daft Punk - One More Time", "queue": 1,
-                          "shuffle": "On", "channel": "Lounge"}, body)
+                          "shuffle": "On", "channel": "Lounge", "artwork": "album-1"}, body)
 
     def test_idle_shows_nothing(self):
         player = Player()
-        self.assertEqual({"state": "Idle", "track": "Nothing", "queue": 0, "shuffle": "Off", "channel": "None"},
+        self.assertEqual({"state": "Idle", "track": "Nothing", "queue": 0, "shuffle": "Off", "channel": "None",
+                          "artwork": None},
                          summary(player, False, False, None))
 
 

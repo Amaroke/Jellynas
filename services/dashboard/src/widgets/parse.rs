@@ -1,10 +1,19 @@
 use super::format::{bytes, count, duration, percent, rate};
-use super::{Figure, Reading, Row};
+use super::{Figure, Poster, Reading, Row};
 use serde_json::Value;
 
 pub type Parsed = Result<Reading, String>;
 
 const ROWS: usize = 8;
+const POSTERS: usize = 8;
+
+fn artwork(images: &str, id: &str, height: u32) -> Option<String> {
+    let plain = !id.is_empty()
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-');
+    plain.then(|| format!("{images}/Items/{id}/Images/Primary?maxHeight={height}"))
+}
 
 fn field<'a>(value: &'a Value, key: &str) -> Result<&'a Value, String> {
     value
@@ -44,11 +53,12 @@ fn reading(figures: Vec<(&str, String)>) -> Reading {
             })
             .collect(),
         rows: vec![],
+        posters: vec![],
         metrics: vec![],
     }
 }
 
-fn playing(session: &Value) -> Option<Row> {
+fn playing(session: &Value, images: &str) -> Option<Row> {
     let item = session.get("NowPlayingItem")?;
     let name = item["Name"].as_str()?;
     let title = match item["SeriesName"].as_str() {
@@ -68,25 +78,107 @@ fn playing(session: &Value) -> Option<Row> {
         .as_str()
         .unwrap_or("someone")
         .to_string();
+    let method = match state["PlayMethod"].as_str() {
+        Some("Transcode") => Some("transcode"),
+        Some("DirectPlay") => Some("direct play"),
+        Some("DirectStream") => Some("direct stream"),
+        _ => None,
+    };
+    if let Some(method) = method {
+        detail.push_str(" · ");
+        detail.push_str(method);
+    }
     if state["IsPaused"].as_bool() == Some(true) {
         detail.push_str(" · paused");
     }
+    let image = item["SeriesId"]
+        .as_str()
+        .or(item["AlbumId"].as_str())
+        .or(item["Id"].as_str())
+        .and_then(|id| artwork(images, id, 160));
     let runtime = item["RunTimeTicks"].as_f64().filter(|ticks| *ticks > 0.0);
     let progress = runtime.and_then(|runtime| Some(state["PositionTicks"].as_f64()? / runtime));
     Some(Row {
         title,
         detail,
         progress,
+        image,
     })
 }
 
-pub fn jellyfin(counts: &Value, sessions: &Value) -> Parsed {
+fn addition(item: &Value, images: &str) -> Option<(String, Poster)> {
+    let (key, title, detail) = match item["SeriesId"].as_str() {
+        Some(series) => {
+            let detail = match (
+                item["ParentIndexNumber"].as_u64(),
+                item["IndexNumber"].as_u64(),
+            ) {
+                (Some(season), Some(episode)) => format!("S{season:02}E{episode:02}"),
+                _ => item["Name"].as_str()?.to_string(),
+            };
+            (series, item["SeriesName"].as_str()?, detail)
+        }
+        None => {
+            let detail = item["ProductionYear"]
+                .as_u64()
+                .map_or_else(|| "Movie".to_string(), |year| year.to_string());
+            (item["Id"].as_str()?, item["Name"].as_str()?, detail)
+        }
+    };
+    let poster = Poster {
+        title: title.to_string(),
+        detail,
+        image: artwork(images, key, 300)?,
+    };
+    Some((key.to_string(), poster))
+}
+
+pub fn jellyfin(counts: &Value, sessions: &Value, latest: &Value, images: &str) -> Parsed {
     let mut found = reading(vec![
         ("Movies", count(whole(counts, "MovieCount")?)),
         ("Series", count(whole(counts, "SeriesCount")?)),
         ("Episodes", count(whole(counts, "EpisodeCount")?)),
     ]);
-    found.rows = items(sessions)?.iter().filter_map(playing).collect();
+    found.rows = items(sessions)?
+        .iter()
+        .filter_map(|session| playing(session, images))
+        .collect();
+    let mut seen = Vec::new();
+    for (key, poster) in items(field(latest, "Items")?)?
+        .iter()
+        .filter_map(|item| addition(item, images))
+    {
+        if found.posters.len() == POSTERS {
+            break;
+        }
+        if !seen.contains(&key) {
+            seen.push(key);
+            found.posters.push(poster);
+        }
+    }
+    Ok(found)
+}
+
+pub fn music_bot(status: &Value, images: &str) -> Parsed {
+    let state = text(status, "state")?;
+    let channel = text(status, "channel")?;
+    let mut found = reading(vec![
+        ("State", state.clone()),
+        ("Queue", count(whole(status, "queue")?)),
+        ("Shuffle", text(status, "shuffle")?),
+        ("Channel", channel.clone()),
+    ]);
+    let track = text(status, "track")?;
+    if state != "Idle" && track != "Nothing" {
+        found.rows = vec![Row {
+            title: track,
+            detail: format!("{state} in {channel}"),
+            progress: None,
+            image: status["artwork"]
+                .as_str()
+                .and_then(|id| artwork(images, id, 160)),
+        }];
+    }
     Ok(found)
 }
 
@@ -220,6 +312,7 @@ pub fn qbittorrent(torrents: &Value) -> Parsed {
                     bytes(number(torrent, "size")?)
                 ),
                 progress: Some(progress),
+                image: None,
             })
         })
         .collect::<Result<_, _>>()?;
@@ -248,6 +341,7 @@ fn queue(details: &Value, title: impl Fn(&Value) -> String) -> Result<Vec<Row>, 
                 title: title(entry),
                 detail,
                 progress: (size > 0.0).then_some(1.0 - remaining),
+                image: None,
             };
             (status == "downloading", remaining, row)
         })
@@ -420,6 +514,7 @@ pub fn host(systems: &Value, name: &str) -> Parsed {
             .map(|(label, value)| Figure { label, value })
             .collect(),
         rows: vec![],
+        posters: vec![],
         metrics: vec![],
     })
 }
@@ -437,6 +532,8 @@ mod tests {
             .collect()
     }
 
+    const IMAGES: &str = "https://jellyfin.example.org";
+
     #[test]
     fn jellyfin_counts_the_library_and_lists_what_plays() {
         let counts =
@@ -445,22 +542,29 @@ mod tests {
             {
                 "UserName": "alice",
                 "NowPlayingItem": {
+                    "Id": "e1",
                     "Name": "Who Is Alive?",
                     "SeriesName": "Severance",
+                    "SeriesId": "s1",
                     "ParentIndexNumber": 2,
                     "IndexNumber": 3,
                     "RunTimeTicks": 4000
                 },
-                "PlayState": {"PositionTicks": 1000, "IsPaused": true}
+                "PlayState": {"PositionTicks": 1000, "IsPaused": true, "PlayMethod": "Transcode"}
             },
             {"UserName": "bob", "PlayState": {}},
             {
                 "UserName": "carol",
-                "NowPlayingItem": {"Name": "Heat", "RunTimeTicks": 0},
-                "PlayState": {"IsPaused": false}
+                "NowPlayingItem": {"Id": "m1", "Name": "Heat", "RunTimeTicks": 0},
+                "PlayState": {"IsPaused": false, "PlayMethod": "DirectPlay"}
+            },
+            {
+                "UserName": "dave",
+                "NowPlayingItem": {"Id": "t1", "Name": "Teardrop", "AlbumId": "a1"},
+                "PlayState": {"PlayMethod": "DirectStream"}
             }
         ]);
-        let reading = jellyfin(&counts, &sessions).unwrap();
+        let reading = jellyfin(&counts, &sessions, &json!({"Items": []}), IMAGES).unwrap();
         assert_eq!(
             vec![("Movies", "1"), ("Series", "2"), ("Episodes", "16,803")],
             figures(&reading)
@@ -468,16 +572,90 @@ mod tests {
         let expected = vec![
             Row {
                 title: "Severance S02E03 · Who Is Alive?".into(),
-                detail: "alice · paused".into(),
+                detail: "alice · transcode · paused".into(),
                 progress: Some(0.25),
+                image: Some(
+                    "https://jellyfin.example.org/Items/s1/Images/Primary?maxHeight=160".into(),
+                ),
             },
             Row {
                 title: "Heat".into(),
-                detail: "carol".into(),
+                detail: "carol · direct play".into(),
                 progress: None,
+                image: Some(
+                    "https://jellyfin.example.org/Items/m1/Images/Primary?maxHeight=160".into(),
+                ),
+            },
+            Row {
+                title: "Teardrop".into(),
+                detail: "dave · direct stream".into(),
+                progress: None,
+                image: Some(
+                    "https://jellyfin.example.org/Items/a1/Images/Primary?maxHeight=160".into(),
+                ),
             },
         ];
         assert_eq!(expected, reading.rows);
+    }
+
+    #[test]
+    fn jellyfin_shows_the_latest_additions_once_per_series() {
+        let latest = json!({"Items": [
+            {"Id": "e8", "Type": "Episode", "Name": "Episode 8", "SeriesName": "Sword", "SeriesId": "s1", "ParentIndexNumber": 2, "IndexNumber": 8},
+            {"Id": "m1", "Type": "Movie", "Name": "Heat", "ProductionYear": 1995},
+            {"Id": "e7", "Type": "Episode", "Name": "Episode 7", "SeriesName": "Sword", "SeriesId": "s1", "ParentIndexNumber": 2, "IndexNumber": 7},
+            {"Id": "m2", "Type": "Movie", "Name": "Arrival"}
+        ]});
+        let reading = jellyfin(
+            &json!({"MovieCount": 2, "SeriesCount": 1, "EpisodeCount": 2}),
+            &json!([]),
+            &latest,
+            IMAGES,
+        )
+        .unwrap();
+        let poster = |title: &str, detail: &str, id: &str| Poster {
+            title: title.into(),
+            detail: detail.into(),
+            image: format!("https://jellyfin.example.org/Items/{id}/Images/Primary?maxHeight=300"),
+        };
+        assert_eq!(
+            vec![
+                poster("Sword", "S02E08", "s1"),
+                poster("Heat", "1995", "m1"),
+                poster("Arrival", "Movie", "m2"),
+            ],
+            reading.posters
+        );
+    }
+
+    #[test]
+    fn the_music_bot_shows_its_track_with_the_album_cover() {
+        let status = json!({"state": "Playing", "track": "Massive Attack - Teardrop", "queue": 4, "shuffle": "On", "channel": "Lounge", "artwork": "a1"});
+        let reading = music_bot(&status, IMAGES).unwrap();
+        assert_eq!(
+            vec![
+                ("State", "Playing"),
+                ("Queue", "4"),
+                ("Shuffle", "On"),
+                ("Channel", "Lounge")
+            ],
+            figures(&reading)
+        );
+        let expected = vec![Row {
+            title: "Massive Attack - Teardrop".into(),
+            detail: "Playing in Lounge".into(),
+            progress: None,
+            image: Some(
+                "https://jellyfin.example.org/Items/a1/Images/Primary?maxHeight=160".into(),
+            ),
+        }];
+        assert_eq!(expected, reading.rows);
+        let idle = json!({"state": "Idle", "track": "Nothing", "queue": 0, "shuffle": "Off", "channel": "None", "artwork": null});
+        assert!(music_bot(&idle, IMAGES).unwrap().rows.is_empty());
+        let between = json!({"state": "Playing", "track": "Nothing", "queue": 0, "shuffle": "Off", "channel": "Lounge", "artwork": null});
+        assert!(music_bot(&between, IMAGES).unwrap().rows.is_empty());
+        let odd = json!({"state": "Paused", "track": "Air - La femme d'argent", "queue": 0, "shuffle": "Off", "channel": "Lounge", "artwork": "../x?y"});
+        assert_eq!(None, music_bot(&odd, IMAGES).unwrap().rows[0].image);
     }
 
     #[test]
@@ -783,7 +961,7 @@ mod tests {
     fn a_missing_field_is_an_error() {
         assert_eq!(
             Err("missing MovieCount".to_string()),
-            jellyfin(&json!({}), &json!([]))
+            jellyfin(&json!({}), &json!([]), &json!({"Items": []}), IMAGES)
         );
     }
 }
