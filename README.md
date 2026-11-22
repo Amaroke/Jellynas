@@ -1226,15 +1226,16 @@ any.
 
 [policy](#policy) puts these back every night:
 
-| Setting                | Value                                  |
-| ---------------------- | -------------------------------------- |
-| slskd                  | on, `http://gluetun:5030`, priority 10 |
-| yt-dlp                 | on, priority 1000                      |
-| Quality                | cutoff FLAC, automatic upgrades on     |
-| Permissions of Friends | add artist, add album, playlists       |
-| Following an artist    | new releases only                      |
-| Every playlist         | scrobble tracks, show availability     |
-| Imported playlist      | no auto-sync, keep removed tracks      |
+| Setting                | Value                                    |
+| ---------------------- | ---------------------------------------- |
+| slskd                  | on, `http://gluetun:5030`, priority 10   |
+| yt-dlp                 | on, priority 1000                        |
+| Quality                | cutoff FLAC, automatic upgrades on       |
+| Permissions of Friends | add artist, add album, playlists         |
+| Following an artist    | new releases only                        |
+| Every playlist         | scrobble tracks, show availability       |
+| Name of a playlist     | `<username> - <name>`, from its owner    |
+| Imported playlist      | no auto-sync, keep removed tracks        |
 
 The permissions of Friends are also the default ones, every delete stays off,
 and an admin keeps every right.
