@@ -40,8 +40,7 @@ services:
       dashboard.name: Aurral
       dashboard.section: Watch
       dashboard.description: Music discovery and playlists of the Friends
-      dashboard.monitor:
-        https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/health/live
+      dashboard.widget: aurral
       dashboard.icon: aurral.svg
       dashboard.href: https://aurral.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
       dashboard.switchable: "true"

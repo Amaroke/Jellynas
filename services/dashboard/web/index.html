@@ -193,8 +193,8 @@ const opened = new Set();
 const busy = new Set();
 const missing = new Set();
 const RAIL = [["jellyfin", "Jellyfin"], ["music-bot", "Music bot"], ["seerr", "Requests"], ["qbittorrent", "Downloads"]];
-const LINKED = new Set(["prowlarr", "radarr", "sonarr"]);
-const KINDS = [["indexer", "Indexers"], ["proxy", "Proxies"], ["client", "Download clients"]];
+const LINKED = new Set(["aurral", "prowlarr", "radarr", "sonarr"]);
+const KINDS = [["worker", "Worker"], ["indexer", "Indexers"], ["proxy", "Proxies"], ["client", "Download clients"]];
 const NATIVE = new Set(["quick-actions", "pull-requests", "farm"]);
 const ARTWORK = new Set(["jellyfin", "music-bot"]);
 
@@ -448,6 +448,7 @@ function says(link) {
     const today = until.toDateString() === new Date().toDateString();
     return `Failing until ${today ? "" : `${until.toLocaleDateString([], { weekday: "short" })} `}${clock(link.until)}`;
   }
+  if (link.kind === "worker" && link.state === "off") return "Paused";
   return { on: "On", off: "Off", paused: "Paused by ratio", unknown: "\u2014" }[link.state] || link.state;
 }
 
@@ -468,7 +469,7 @@ function connections(service) {
       return row;
     }));
   }
-  if (!links.length) node.append(element("span", { class: "caption" }, "No indexer nor download client read yet"));
+  if (!links.length) node.append(element("span", { class: "caption" }, "Nothing read yet"));
   return [node, ...health.map(item => element("p", { class: `said ${item.level === "error" ? "error" : ""}` }, item.message))];
 }
 

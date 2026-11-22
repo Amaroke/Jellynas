@@ -380,6 +380,27 @@ fn request(entry: &Value) -> Option<Row> {
     })
 }
 
+pub fn aurral(worker: &Value, active: &Value) -> Parsed {
+    let paused = worker["paused"].as_bool() == Some(true);
+    let downloading = items(field(active, "tracks")?)?.len() as u64;
+    let mut found = reading(vec![
+        (
+            "Downloads",
+            if paused { "Paused" } else { "On" }.to_string(),
+        ),
+        ("Downloading", count(downloading)),
+    ]);
+    found.links = vec![Link {
+        kind: "worker".into(),
+        id: 0,
+        name: "Downloads".into(),
+        hint: None,
+        state: if paused { "off" } else { "on" }.into(),
+        until: None,
+    }];
+    Ok(found)
+}
+
 pub fn seerr(requests: &Value, issues: &Value, pending: &Value) -> Parsed {
     let mut found = reading(vec![
         ("Pending", count(whole(requests, "pending")?)),
@@ -1847,6 +1868,30 @@ time=2026-11-22T03:30:05.000+01:00 level=ERROR msg="Fatal error running command:
             ("Result", "Running"),
             figures(&backup(cut, 1_795_314_600).unwrap())[2]
         );
+    }
+
+    #[test]
+    fn aurral_shows_whether_its_downloads_run_and_offers_to_switch_them() {
+        let active = json!({"albums": [], "artists": [], "tracks": [{"trackName": "Echo"}, {"trackName": "Girls"}]});
+        let found = aurral(&json!({"concurrency": 3, "paused": true}), &active).unwrap();
+        assert_eq!(
+            vec![("Downloads", "Paused"), ("Downloading", "2")],
+            figures(&found)
+        );
+        assert_eq!(
+            vec![("worker", "Downloads", "off", None)],
+            links(&found.links)
+        );
+        let found = aurral(&json!({"concurrency": 3}), &json!({"tracks": []})).unwrap();
+        assert_eq!(
+            vec![("Downloads", "On"), ("Downloading", "0")],
+            figures(&found)
+        );
+        assert_eq!(
+            vec![("worker", "Downloads", "on", None)],
+            links(&found.links)
+        );
+        assert!(aurral(&json!({}), &json!({})).is_err());
     }
 
     #[test]

@@ -2701,14 +2701,15 @@ restart and a power button, through its own socket proxy. A row with a list,
 such as the missing subtitles of Bazarr or the next days of Sonarr, unfolds. The
 rail on the right shows what plays on Jellyfin and its latest additions, the
 Requests waiting in Seerr with buttons to approve or decline them, the torrents
-of qBittorrent, each indexer, proxy and download client of Prowlarr, Radarr and
-Sonarr as on, off, failing or paused by ratio with their health warnings, and
-buttons to turn an indexer or a download client on or off and to retry a failing
-one, the pools and disks of TrueNAS and the space of the Media tree. The Quick
-actions, the Pull requests and the Farm follow the table. The Dashboard serves
-its own font, IBM Plex Sans, under the SIL Open Font License. It installs as a
-web app: the install button of the address bar in Chrome or Edge, "Add to Home
-screen" on Android, Share then "Add to Home Screen" on an iPhone.
+of qBittorrent, the downloads of Aurral with a switch to pause them, each
+indexer, proxy and download client of Prowlarr, Radarr and Sonarr as on, off,
+failing or paused by ratio with their health warnings, and buttons to turn an
+indexer or a download client on or off and to retry a failing one, the pools and
+disks of TrueNAS and the space of the Media tree. The Quick actions, the Pull
+requests and the Farm follow the table. The Dashboard serves its own font, IBM
+Plex Sans, under the SIL Open Font License. It installs as a web app: the
+install button of the address bar in Chrome or Edge, "Add to Home screen" on
+Android, Share then "Add to Home Screen" on an iPhone.
 
 Each row comes from the `dashboard.*` labels of its service in its
 `compose.yaml`, which hold no key. The Dashboard reads the keys from `.env` and
@@ -2735,6 +2736,7 @@ others, then restart doco-cd to apply `.env`:
 - Suwayomi, `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD`: set in
   [Suwayomi](#suwayomi)
 - Bazarr, `BAZARR_API_KEY`: Settings > General > Security, "API Key"
+- Aurral, `AURRAL_API_KEY`: already set for [policy](#policy)
 - Tdarr, `TDARR_API_KEY`: set in [Tdarr](#tdarr)
 - autobrr, `AUTOBRR_API_KEY`: Settings > API Keys, click "Add new", name it
   `Dashboard` and give it read access on Filters and Releases
