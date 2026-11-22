@@ -98,8 +98,12 @@ fn asset_kind(file: &str) -> Option<&'static str> {
     }
 }
 
-fn cache_of(kind: &str) -> Option<&'static str> {
-    matches!(kind, "font/woff2" | "image/png").then_some("public, max-age=2592000")
+fn cache_of(kind: &str) -> &'static str {
+    if matches!(kind, "font/woff2" | "image/png") {
+        "public, max-age=2592000"
+    } else {
+        "no-cache"
+    }
 }
 
 async fn asset(State(app): State<Arc<App>>, Path(file): Path<String>) -> Response {
@@ -107,14 +111,14 @@ async fn asset(State(app): State<Arc<App>>, Path(file): Path<String>) -> Respons
         return StatusCode::NOT_FOUND.into_response();
     };
     match fs::read(app.web.join(&file)) {
-        Ok(body) => match cache_of(kind) {
-            Some(cache) => (
-                [(header::CONTENT_TYPE, kind), (header::CACHE_CONTROL, cache)],
-                body,
-            )
-                .into_response(),
-            None => ([(header::CONTENT_TYPE, kind)], body).into_response(),
-        },
+        Ok(body) => (
+            [
+                (header::CONTENT_TYPE, kind),
+                (header::CACHE_CONTROL, cache_of(kind)),
+            ],
+            body,
+        )
+            .into_response(),
         Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
 }
@@ -285,11 +289,11 @@ mod tests {
 
     #[test]
     fn only_fonts_and_icons_are_cached_since_the_rest_changes_with_each_deploy() {
-        assert_eq!(Some("public, max-age=2592000"), cache_of("font/woff2"));
-        assert_eq!(Some("public, max-age=2592000"), cache_of("image/png"));
-        assert_eq!(None, cache_of("application/manifest+json"));
-        assert_eq!(None, cache_of("text/javascript"));
-        assert_eq!(None, cache_of("text/css"));
+        assert_eq!("public, max-age=2592000", cache_of("font/woff2"));
+        assert_eq!("public, max-age=2592000", cache_of("image/png"));
+        assert_eq!("no-cache", cache_of("application/manifest+json"));
+        assert_eq!("no-cache", cache_of("text/javascript"));
+        assert_eq!("no-cache", cache_of("text/css"));
     }
 
     #[test]
