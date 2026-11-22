@@ -28,6 +28,8 @@ CATEGORIES = {
     FARM: "/data/torrents/farm",
 }
 PUBLIC = "public"
+CROSS_SEED = "/data/torrents/cross-seed"
+ORIGINS = {"movies": "radarr", "shows": "sonarr", "books": "lazylibrarian", FARM: "ratio"}
 SEEDING = ("uploading", "stalledUP", "queuedUP", "forcedUP")
 SHARE_LIMITS = ("max_ratio_enabled", "max_seeding_time_enabled", "max_inactive_seeding_time_enabled")
 HISTORY_DAYS = 30
@@ -136,6 +138,12 @@ class QBittorrent:
 
     def remove_tags(self, hashes, tag):
         self.post("/api/v2/torrents/removeTags", {"hashes": "|".join(hashes), "tags": tag})
+
+    def tags(self):
+        return json.loads(self.send("/api/v2/torrents/tags"))
+
+    def delete_tags(self, names):
+        self.post("/api/v2/torrents/deleteTags", {"tags": ",".join(names)})
 
     def keep_in_place(self, hashes):
         self.post("/api/v2/torrents/setAutoManagement", {"hashes": "|".join(hashes), "enable": "false"})
@@ -808,25 +816,29 @@ def clean_public(qbt, settings, state, torrents):
             print(f"Removed {t['name']}, a Public torrent whose files {copy['name']} now seeds on C411")
 
 
-def tag(qbt, settings, state, torrents):
-    known = {*SOURCES, *RETIRED_SOURCES, PUBLIC}
+def origin_of(t):
+    if t["save_path"].rstrip("/").startswith(CROSS_SEED):
+        return "cross-seed"
+    return ORIGINS.get(t["category"])
+
+
+def tag(qbt, torrents):
+    origins = {"cross-seed", *ORIGINS.values()}
     wanted, stale = {}, {}
     for t in torrents.values():
-        if is_owned(t) and is_public(state, settings, t):
-            name = PUBLIC
-        elif is_c411(state, settings, t) and t["hash"] in state["sources"]:
-            name = state["sources"][t["hash"]]
-        else:
-            continue
-        tags = {x.strip() for x in t.get("tags", "").split(",")}
-        if name not in tags:
+        name = origin_of(t)
+        tags = {x.strip() for x in t.get("tags", "").split(",") if x.strip()}
+        if name and name not in tags:
             wanted.setdefault(name, []).append(t["hash"])
-        for old in tags & known - {name}:
+        for old in tags - {name}:
             stale.setdefault(old, []).append(t["hash"])
     for name, hashes in wanted.items():
         qbt.add_tags(hashes, name)
     for name, hashes in stale.items():
         qbt.remove_tags(hashes, name)
+    unused = [name for name in qbt.tags() if name not in origins]
+    if unused:
+        qbt.delete_tags(unused)
 
 
 def episode_of(title):
@@ -1224,7 +1236,7 @@ def run_once(qbt, prowlarr, c411, settings, controls, state, now, notify=tell_bo
         drop_twins(qbt, state, torrents)
     if switches["clean_public"]:
         clean_public(qbt, settings, state, torrents)
-    tag(qbt, settings, state, torrents)
+    tag(qbt, torrents)
     for step in (
         lambda: grab(qbt, prowlarr, c411, settings, switches, state, torrents, account, now),
         lambda: use_prowlarr(state, now, lambda: seed_twins(qbt, c411, settings, state, torrents, now)),

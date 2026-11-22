@@ -85,6 +85,8 @@ class FakeQBittorrent:
         self.pinned = []
         self.cats = {name: {} for name in ("movies", "shows", "music", "books", "farm")}
         self.names = {}
+        self.tag_names = []
+        self.dropped_tags = []
 
     def torrents(self):
         return [dict(t) for t in self.list]
@@ -131,6 +133,12 @@ class FakeQBittorrent:
         for t in self.list:
             if t["hash"] in hashes:
                 t["tags"] = ", ".join(x for x in (t["tags"], tag) if x)
+
+    def tags(self):
+        return list(self.tag_names)
+
+    def delete_tags(self, names):
+        self.dropped_tags += names
 
     def reset_share_limits(self, hashes):
         self.limited += hashes
@@ -655,18 +663,27 @@ class Tiers(unittest.TestCase):
 
 
 class Tags(unittest.TestCase):
-    def test_every_public_torrent_carries_the_public_tag(self):
+    def test_each_torrent_carries_one_tag_naming_where_it_comes_from(self):
         qbt = FakeQBittorrent([
-            torrent("public", category="movies", tracker=PUBLIC),
-            torrent("tagged", category="movies", tracker=PUBLIC, tags="public"),
+            torrent("movie", category="movies", tags="public, library"),
+            torrent("show", category="shows", tracker=PUBLIC),
+            torrent("book", category="books"),
+            torrent("grab", tags="free"),
+            torrent("twin", tracker=PUBLIC, seeding_days=1),
+            torrent("seed", save_path="/data/torrents/cross-seed/C411", tags="free"),
+            torrent("manual", category="", tags="mine"),
         ])
-        run(qbt)
-        self.assertEqual(qbt.tagged, [("public", "public")])
+        run(qbt, switches={"clean_public": False})
+        self.assertEqual(
+            {t["hash"]: t["tags"] for t in qbt.list},
+            {"movie": "radarr", "show": "sonarr", "book": "lazylibrarian", "grab": "ratio", "twin": "ratio", "seed": "cross-seed", "manual": ""},
+        )
 
-    def test_every_c411_torrent_carries_a_tag_of_its_source(self):
-        qbt = FakeQBittorrent([torrent("movie", category="movies", size_gb=200), torrent("free")])
-        run(qbt, state=empty_state(free={"free": NOW - 100}))
-        self.assertEqual(sorted(qbt.tagged), [("free", "free"), ("movie", "library")])
+    def test_every_tag_naming_no_origin_is_deleted(self):
+        qbt = FakeQBittorrent()
+        qbt.tag_names = ["cross-seed", "free", "quest", "radarr", "public"]
+        run(qbt)
+        self.assertEqual(sorted(qbt.dropped_tags), ["free", "public", "quest"])
 
     def test_a_c411_torrent_whose_tracker_is_down_is_not_public(self):
         qbt = FakeQBittorrent([torrent("c411", category="movies", tracker="", size_gb=200, seeding_days=20)])
@@ -817,7 +834,6 @@ class Sources(unittest.TestCase):
         transfers = {"kept": [GB, 0], "older": [GB, 0], "quest": [GB, 0]}
         state = run(qbt, state=empty_state(transfers=transfers, sources=sources))
         self.assertEqual(state["sources"], {"kept": "paid", "older": "paid", "quest": "paid"})
-        self.assertEqual([t["tags"] for t in qbt.list], ["paid", "paid", "paid"])
 
     def test_twin_freeleech_and_cross_seed_become_free(self):
         qbt = FakeQBittorrent([torrent("a", tags="twin"), torrent("b", tags="freeleech"), torrent("c", tags="cross-seed")])

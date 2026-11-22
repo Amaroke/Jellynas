@@ -2364,11 +2364,11 @@ the Dashboard, see [Farm board](#farm-board).
    nothing uses since Aurral downloads from Soulseek, and `farm` for the grabs
    of ratio and the cross-seeds. The Library stays in
    its categories. The "Adopt the Library" switch, off by default, moves a C411
-   torrent of the Library into the Farm 6 hours after it finished. ratio tags
-   every public torrent `public`, and every C411 torrent with its Source:
-   `paid`, `free` or `library`. The retired `quest`, `volume-hunt` and
-   `zen-hunt` tags become `paid`, and `twin`, `freeleech` and `cross-seed`
-   become `free`.
+   torrent of the Library into the Farm 6 hours after it finished. ratio gives
+   each torrent one tag naming where it comes from: `radarr`, `sonarr` or
+   `lazylibrarian` for their categories, `cross-seed` for a torrent under
+   `/data/torrents/cross-seed`, and `ratio` for the rest of the Farm. It removes
+   every other tag, and deletes it from qBittorrent.
 
 The Twins come from `RATIO_TWIN_INDEXER_IDS`, through Prowlarr. For each episode
 at most 24 hours old with at least one leecher, ratio searches its episode and
