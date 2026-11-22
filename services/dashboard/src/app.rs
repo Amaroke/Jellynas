@@ -6,7 +6,8 @@ use crate::stats::{self, History, Sample};
 use crate::widgets::{self, Board, Client, Panel};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
@@ -38,6 +39,33 @@ pub type Snapshot = Arc<Vec<Service>>;
 const POLL: Duration = Duration::from_secs(20);
 const POINTS: usize = 90;
 const MEDIA: &str = "/media";
+const ARCHIVES: &str = "/backup";
+
+fn archives(folder: &Path) -> Vec<widgets::parse::Archive> {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            name.starts_with("appdata-") && name.ends_with(".tar.gz")
+        })
+        .filter_map(|entry| {
+            let metadata = entry.metadata().ok()?;
+            let at = metadata
+                .modified()
+                .ok()?
+                .duration_since(UNIX_EPOCH)
+                .ok()?
+                .as_secs();
+            Some(widgets::parse::Archive {
+                at,
+                size: metadata.len(),
+            })
+        })
+        .collect()
+}
 const MEASURE: Duration = Duration::from_secs(1800);
 const POOL: Duration = Duration::from_secs(300);
 
@@ -110,7 +138,7 @@ impl App {
             }
             (Some(kind), _) if kind == "backup" => {
                 let logs = self.docker.logs(&service.id, 0, 200)?;
-                widgets::parse::backup(&logs, now())
+                widgets::parse::backup(&logs, &archives(Path::new(ARCHIVES)), now())
             }
             (Some(kind), _) => self.client.widget(kind),
             (None, Some(url)) => self.client.monitor(url),
