@@ -87,8 +87,13 @@ fn asset_kind(file: &str) -> Option<&'static str> {
     match extension {
         "js" => Some("text/javascript"),
         "css" => Some("text/css"),
+        "woff2" => Some("font/woff2"),
         _ => None,
     }
+}
+
+fn cache_of(kind: &str) -> Option<&'static str> {
+    (kind == "font/woff2").then_some("public, max-age=2592000")
 }
 
 async fn asset(State(app): State<Arc<App>>, Path(file): Path<String>) -> Response {
@@ -96,7 +101,14 @@ async fn asset(State(app): State<Arc<App>>, Path(file): Path<String>) -> Respons
         return StatusCode::NOT_FOUND.into_response();
     };
     match fs::read(app.web.join(&file)) {
-        Ok(body) => ([(header::CONTENT_TYPE, kind)], body).into_response(),
+        Ok(body) => match cache_of(kind) {
+            Some(cache) => (
+                [(header::CONTENT_TYPE, kind), (header::CACHE_CONTROL, cache)],
+                body,
+            )
+                .into_response(),
+            None => ([(header::CONTENT_TYPE, kind)], body).into_response(),
+        },
         Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
 }
@@ -226,9 +238,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_plain_scripts_and_styles_are_assets() {
+    fn only_fonts_are_cached_since_scripts_and_styles_change_with_each_deploy() {
+        assert_eq!(Some("public, max-age=2592000"), cache_of("font/woff2"));
+        assert_eq!(None, cache_of("text/javascript"));
+        assert_eq!(None, cache_of("text/css"));
+    }
+
+    #[test]
+    fn only_plain_scripts_styles_and_fonts_are_assets() {
         assert_eq!(Some("text/javascript"), asset_kind("sections.js"));
         assert_eq!(Some("text/css"), asset_kind("sections.css"));
+        assert_eq!(Some("font/woff2"), asset_kind("plex-sans-medium.woff2"));
         for file in [
             "index.html",
             "../state.js",
@@ -236,6 +256,7 @@ mod tests {
             "a/b.css",
             ".js",
             "theme.css.map",
+            "plex-sans.woff",
         ] {
             assert_eq!(None, asset_kind(file), "{file}");
         }

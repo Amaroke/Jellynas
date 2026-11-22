@@ -5,105 +5,137 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>Dashboard</title>
+<link rel="preload" href="/assets/plex-sans-regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.min.css">
 <link rel="stylesheet" href="/assets/sections.css">
 <style>
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 var(--font); }
-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; max-width: 1400px; margin: 0 auto; }
-header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--font); font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 24px 8px; max-width: 1680px; margin: 0 auto; }
+header h1 { font-size: 20px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 #live { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 #live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--unhealthy); }
 #live.on::before { background: var(--running); }
-main { padding: 0 16px 32px; max-width: 1400px; margin: 0 auto; display: grid; gap: 24px; }
-section h2 { margin: 0 0 10px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); display: flex; align-items: center; gap: 8px; }
-section h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; background: var(--accent); }
-.grid { display: grid; gap: 12px; grid-template-columns: 1fr; }
-@media (min-width: 700px) { .grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); } }
-.card { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); display: grid; gap: 10px; min-width: 0; align-content: start; }
-.card .head { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.card .description { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+main { padding: 0 24px 48px; max-width: 1680px; margin: 0 auto; display: grid; gap: 24px; }
+@media (max-width: 600px) { header { padding: 14px 16px 6px; } main { padding: 0 16px 32px; } }
+section h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+section h2::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--accent); }
+
+.alert { background: color-mix(in srgb, var(--unhealthy) 14%, var(--card)); border: 1px solid var(--unhealthy); border-radius: var(--radius); padding: 10px 14px; display: grid; gap: 4px; }
+.alert b { color: var(--unhealthy); }
+.alert ul { margin: 0; padding-left: 18px; }
+
+#status { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+#status .now { display: grid; align-content: center; padding-right: 8px; }
+#status .clock { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+#status .date { color: var(--muted); font-size: 12px; }
+#status .figure { background: var(--card); border: 1px solid var(--line); padding: 10px 12px; }
+#status .figure b { font-size: 18px; }
+#status .note { grid-column: 1 / -1; }
+
+.room { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 24px; align-items: start; }
+@media (max-width: 1100px) { .room { grid-template-columns: minmax(0, 1fr); } }
+
+.table { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.table h3 { position: sticky; top: 0; z-index: 1; margin: 0; padding: 10px 16px; font-size: 13px; font-weight: 600; background: var(--raised); border-top: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+.table .group:first-child h3 { border-top: none; border-radius: var(--radius) var(--radius) 0 0; }
+.table h3::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--accent); }
+.table h3 small { color: var(--muted); font-weight: 400; font-size: 12px; }
+.table h3 small.look { color: var(--unhealthy); }
+.service { border-top: 1px solid var(--line); }
+.service .line { display: grid; grid-template-columns: 8px 24px minmax(150px, 1.1fr) minmax(0, 2fr) 92px 92px 132px 92px; align-items: center; gap: 12px; padding: 8px 16px; font-size: 13px; }
+.service[data-state="running"] { --state: var(--running); }
+.service[data-state="stopped"] { --state: var(--stopped); }
+.service[data-state="unhealthy"] { --state: var(--unhealthy); }
+.service[data-state="restarting"] { --state: var(--restarting); }
+.service .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--state); }
+.service .icon, .service .letter { width: 24px; height: 24px; border-radius: 5px; }
+.service .letter { display: grid; place-items: center; background: var(--raised); color: var(--muted); font-size: 12px; font-weight: 600; }
+.service .who { display: grid; min-width: 0; }
+.service .who a, .service .who .name { color: inherit; text-decoration: none; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.service .who a:hover { text-decoration: underline; }
+.service .who small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.service .facts { display: flex; flex-wrap: wrap; gap: 2px 14px; color: var(--muted); min-width: 0; }
+.service .facts b { color: var(--text); font-weight: 600; margin-left: 4px; }
+.service .facts .stale { color: var(--restarting); }
+.service .facts .failed { color: var(--unhealthy); }
+.service .meter { display: grid; gap: 2px; font-size: 12px; color: var(--muted); min-width: 0; }
+.service .meter b { color: var(--text); font-weight: 500; }
+.service .meter svg { width: 100%; height: 18px; display: block; overflow: visible; }
+.service .up { font-size: 12px; color: var(--muted); display: grid; }
+.service .up b { color: var(--text); font-weight: 500; }
+.service .acts { display: flex; gap: 2px; justify-content: flex-end; }
+.service .error { grid-column: 3 / -1; color: var(--unhealthy); font-size: 12px; }
+.icon-button { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; font: inherit; font-size: 15px; line-height: 1; color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
+.icon-button:hover:not(:disabled) { color: var(--text); background: var(--raised); border-color: var(--line); }
+.icon-button:disabled { opacity: 0.35; cursor: default; }
+.icon-button.power.on { color: var(--running); }
+.icon-button.more { font-size: 18px; }
+.icon-button.more[aria-expanded="true"] { transform: rotate(180deg); }
+.service .more-area { padding: 2px 16px 14px 60px; display: grid; gap: 10px; }
+.service .more-area > .rows { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); column-gap: 24px; }
+@media (max-width: 900px) {
+  .service .line { grid-template-columns: 8px 24px minmax(0, 1fr) auto; }
+  .service .meter, .service .up { display: none; }
+  .service .facts { grid-column: 3 / -1; order: 1; }
+  .service .facts > span:not(.stale):not(.failed) { display: none; }
+  .service .facts:not(:has(.stale, .failed)) { display: none; }
+  .service .more-area { padding-left: 16px; }
+}
+
+.rail { display: grid; gap: 14px; position: sticky; top: 12px; }
+@media (max-width: 1100px) { .rail { position: static; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; } }
+.block { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 10px; min-width: 0; align-content: start; }
+.block h4 { margin: 0; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.block h4 a { color: inherit; text-decoration: none; }
+.block h4 a:hover { text-decoration: underline; }
+.block h4 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--state); }
+.block[data-state="running"] { --state: var(--running); }
+.block[data-state="stopped"] { --state: var(--stopped); }
+.block[data-state="unhealthy"] { --state: var(--unhealthy); }
+.block[data-state="restarting"] { --state: var(--restarting); }
+
 .figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 6px; }
-.figure { background: var(--bg); border-radius: 8px; padding: 6px 8px; min-width: 0; }
-.figure b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.figure span { display: block; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.figure { background: var(--raised); border-radius: 6px; padding: 7px 9px; min-width: 0; }
+.figure b { display: block; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.figure span { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rows { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.rows li { display: grid; gap: 2px; font-size: 12px; min-width: 0; }
+.rows li { display: grid; gap: 2px; font-size: 13px; min-width: 0; }
 .rows .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rows .detail { color: var(--muted); }
+.rows .detail { color: var(--muted); font-size: 12px; }
 .rows meter { width: 100%; height: 4px; appearance: none; border: none; border-radius: 2px; background: var(--line); }
 .rows meter::-webkit-meter-bar { height: 4px; border: none; border-radius: 2px; background: var(--line); }
-.rows meter::-webkit-meter-optimum-value { border-radius: 2px; background: var(--accent); }
-.rows meter::-moz-meter-bar { border-radius: 2px; background: var(--accent); }
-.rows li.art { grid-template-columns: 36px minmax(0, 1fr); column-gap: 8px; }
-.rows li.art img, .rows li.art .cover { grid-row: span 3; width: 36px; height: 54px; object-fit: cover; border-radius: 4px; background: var(--bg); }
+.rows meter::-webkit-meter-optimum-value { border-radius: 2px; background: var(--accent, var(--focus)); }
+.rows meter::-moz-meter-bar { border-radius: 2px; background: var(--accent, var(--focus)); }
+.rows li.art { grid-template-columns: 36px minmax(0, 1fr); column-gap: 10px; }
+.rows li.art img, .rows li.art .cover { grid-row: span 3; width: 36px; height: 54px; object-fit: cover; border-radius: 4px; background: var(--raised); }
 .rows li.art meter { grid-column: 2; }
 .rows meter.blank { visibility: hidden; }
 .rows li.idle .title, .rows li.idle .cover { color: var(--muted); }
 .rows li.idle .cover { display: grid; place-items: center; font-size: 16px; }
 .posters { display: grid; grid-auto-flow: column; grid-auto-columns: 72px; gap: 8px; overflow-x: auto; margin: 0; padding: 0 0 4px; list-style: none; }
-.posters li { display: grid; gap: 2px; font-size: 11px; min-width: 0; }
-.posters img { width: 72px; height: 108px; object-fit: cover; border-radius: 6px; background: var(--bg); }
+.posters li { display: grid; gap: 2px; font-size: 12px; min-width: 0; }
+.posters img, .posters .cover { width: 72px; height: 108px; object-fit: cover; border-radius: 6px; background: var(--raised); }
 .posters .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .posters .detail { color: var(--muted); }
-.posters .cover { width: 72px; height: 108px; border-radius: 6px; background: var(--bg); }
 .posters .idle .title { color: var(--muted); }
-.shelf { display: grid; gap: 4px; min-width: 0; }
-.space { display: grid; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; }
-.space .caption { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.space .rows { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); column-gap: 16px; }
-.shelf .caption { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.shelf { display: grid; gap: 6px; min-width: 0; }
+.caption { font-size: 12px; font-weight: 500; color: var(--muted); }
+.space .rows { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); column-gap: 16px; }
 .note { font-size: 12px; color: var(--restarting); }
 .note.failed { color: var(--unhealthy); }
-.alert { background: color-mix(in srgb, var(--unhealthy) 14%, var(--card)); border: 1px solid var(--unhealthy); border-radius: var(--radius); padding: 10px 14px; display: grid; gap: 4px; }
-.alert b { color: var(--unhealthy); }
-.alert ul { margin: 0; padding-left: 18px; }
-.usage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.spark { display: grid; gap: 2px; font-size: 11px; color: var(--muted); min-width: 0; }
-.spark b { color: var(--text); font-weight: 600; }
-.uptime { display: flex; gap: 12px; font-size: 11px; color: var(--muted); }
-.uptime b { color: var(--text); font-weight: 600; }
 .answer { display: flex; gap: 6px; grid-column: 2; margin-top: 2px; }
-.answer button { font: inherit; font-size: 11px; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; }
-.answer button.approve { border-color: var(--running); color: var(--running); }
+.answer button { font: inherit; font-size: 12px; color: var(--text); background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 2px 9px; cursor: pointer; }
+.answer button.approve { border-color: color-mix(in srgb, var(--running) 60%, var(--line)); color: var(--running); }
 .answer button:disabled { opacity: 0.5; cursor: default; }
-.answer .failed { color: var(--unhealthy); font-size: 11px; }
-.spark svg, .throughput svg { width: 100%; height: 28px; display: block; overflow: visible; }
-.spark polyline, .throughput polyline { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
-.throughput { display: grid; gap: 4px; font-size: 11px; color: var(--muted); }
-.throughput svg { height: 70px; border-bottom: 1px solid var(--line); }
+.answer .failed { color: var(--unhealthy); font-size: 12px; }
+.throughput { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.throughput svg { width: 100%; height: 70px; display: block; overflow: visible; border-bottom: 1px solid var(--line); }
 .throughput .keys { display: flex; flex-wrap: wrap; gap: 2px 12px; white-space: nowrap; }
 .throughput .keys span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; background: currentColor; }
-#status { display: grid; gap: 12px; }
-#status .clock { font-size: 22px; font-weight: 600; }
-#status .date { color: var(--muted); }
-#status .figures { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
-#status .figure { background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 10px 12px; }
-#status .figure b { font-size: 18px; }
-.card .link { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; flex: 1; min-width: 0; }
-.card a.link:hover .name { text-decoration: underline; }
-.card .link img, .card .letter { width: 32px; height: 32px; flex: none; border-radius: 8px; }
-.card .letter { display: grid; place-items: center; background: var(--accent); color: var(--card); font-weight: 700; }
-.card .text { display: grid; min-width: 0; }
-.card .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card .state { font-size: 12px; color: var(--state); display: flex; align-items: center; gap: 6px; }
-.card .state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--state); }
-.card[data-state="running"] { --state: var(--running); }
-.card[data-state="stopped"] { --state: var(--stopped); }
-.card[data-state="unhealthy"] { --state: var(--unhealthy); }
-.card[data-state="restarting"] { --state: var(--restarting); }
-.card .error { color: var(--unhealthy); font-size: 12px; }
-.controls { display: flex; align-items: center; gap: 8px; flex: none; }
-.controls button { font: inherit; font-size: 12px; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
-.controls button:disabled { opacity: 0.4; cursor: default; }
-.switch { position: relative; width: 40px; height: 24px; flex: none; }
-.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
-.switch span { position: absolute; inset: 0; border-radius: 12px; background: var(--line); transition: background 0.15s; pointer-events: none; }
-.switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--card); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); transition: transform 0.15s; }
-.switch input:checked + span { background: var(--running); }
-.switch input:checked + span::after { transform: translateX(16px); }
-.switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+svg polyline { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 </style>
 </head>
 <body>
@@ -121,6 +153,13 @@ section h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; 
 const sections = JSON.parse(document.getElementById("sections").textContent);
 const main = document.querySelector("main");
 const errors = new Map();
+const answers = new Map();
+const opened = new Set();
+const busy = new Set();
+const missing = new Set();
+const RAIL = [["jellyfin", "Jellyfin"], ["music-bot", "Music bot"], ["seerr", "Requests"], ["qbittorrent", "Downloads"]];
+const NATIVE = new Set(["quick-actions", "pull-requests", "farm"]);
+const ARTWORK = new Set(["jellyfin", "music-bot"]);
 
 function element(tag, attributes = {}, ...children) {
   const node = document.createElement(tag);
@@ -131,6 +170,8 @@ function element(tag, attributes = {}, ...children) {
 
 async function control(service, action) {
   errors.delete(service.service);
+  busy.add(service.service);
+  refresh();
   const response = await fetch(`/services/${encodeURIComponent(service.service)}/${action}`, {
     method: "POST",
     headers: { "X-Dashboard": "1" },
@@ -138,10 +179,9 @@ async function control(service, action) {
   if (!response || !response.ok) {
     errors.set(service.service, `Cannot ${action === "restart" ? "restart" : `turn ${action}`} ${service.name}`);
   }
+  busy.delete(service.service);
   render(current);
 }
-
-const answers = new Map();
 
 async function answer(id, action) {
   answers.set(id, "pending");
@@ -154,22 +194,14 @@ async function answer(id, action) {
 
 function buttons(id) {
   const state = answers.get(id);
-  const approve = element("button", { type: "button", class: "approve" }, "Approve");
-  const decline = element("button", { type: "button" }, "Decline");
+  const approve = element("button", { type: "button", class: "approve", "data-focus": `${id} approve` }, "Approve");
+  const decline = element("button", { type: "button", "data-focus": `${id} decline` }, "Decline");
   approve.disabled = decline.disabled = state === "pending";
   approve.addEventListener("click", () => answer(id, "approve"));
   decline.addEventListener("click", () => answer(id, "decline"));
   const node = element("div", { class: "answer" }, approve, decline);
   if (state && state !== "pending") node.append(element("span", { class: "failed" }, state));
   return node;
-}
-
-function uptime(name) {
-  const found = (board.uptime || {})[name] || {};
-  const shown = value => value === null || value === undefined ? "—" : `${value.toFixed(2)}%`;
-  return element("div", { class: "uptime" },
-    element("span", {}, "Uptime 24h ", element("b", {}, shown(found.day))),
-    element("span", {}, "7d ", element("b", {}, shown(found.week))));
 }
 
 function clock(seconds) {
@@ -186,11 +218,11 @@ function bytes(value) {
   return `${value.toFixed(unit ? 1 : 0)} ${units[unit]}`;
 }
 
-function line(points, top, color) {
+function line(points, top, stroke) {
   const shape = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
   const step = points.length > 1 ? 100 / (points.length - 1) : 0;
   shape.setAttribute("points", points.map((value, index) => `${(index * step).toFixed(2)},${(100 - 95 * value / top).toFixed(2)}`).join(" "));
-  shape.style.stroke = color;
+  shape.style.stroke = stroke;
   return shape;
 }
 
@@ -200,30 +232,25 @@ function plot(series) {
   svg.setAttribute("preserveAspectRatio", "none");
   svg.setAttribute("aria-hidden", "true");
   const top = Math.max(1, ...series.flatMap(([points]) => points));
-  for (const [points, color] of series) if (points.length) svg.append(line(points, top, color));
+  for (const [points, stroke] of series) if (points.length) svg.append(line(points, top, stroke));
   if (!svg.childElementCount) svg.append(line([0, 0], 1, "var(--line)"));
   return svg;
 }
 
-function usage(name, kind) {
-  const series = (board.history || {})[name] || {};
-  const nodes = [];
-  if (kind === "qbittorrent" || series.download || series.upload) {
-    const down = series.download || [];
-    const up = series.upload || [];
-    nodes.push(element("div", { class: "throughput" },
-      element("div", { class: "keys" },
-        element("span", { style: "color: var(--downloads)" }, `Down ${bytes(down.at(-1) || 0)}/s`),
-        element("span", { style: "color: var(--watch)" }, `Up ${bytes(up.at(-1) || 0)}/s`),
-        element("span", {}, `peak ${bytes(Math.max(0, ...down, ...up))}/s`)),
-      plot([[down, "var(--downloads)"], [up, "var(--watch)"]])));
-  }
-  const cpu = series.cpu || [];
-  const memory = series.memory || [];
-  nodes.push(element("div", { class: "usage" },
-    element("div", { class: "spark" }, element("span", {}, "CPU ", element("b", {}, cpu.length ? `${cpu.at(-1).toFixed(1)}%` : "—")), plot([[cpu, "var(--accent)"]])),
-    element("div", { class: "spark" }, element("span", {}, "RAM ", element("b", {}, memory.length ? bytes(memory.at(-1)) : "—")), plot([[memory, "var(--accent)"]]))));
-  return nodes;
+function history(name) {
+  return (board.history || {})[name] || {};
+}
+
+function throughput(name) {
+  const series = history(name);
+  const down = series.download || [];
+  const up = series.upload || [];
+  return element("div", { class: "throughput" },
+    element("div", { class: "keys" },
+      element("span", { style: "color: var(--downloads)" }, `Down ${bytes(down.at(-1) || 0)}/s`),
+      element("span", { style: "color: var(--watch)" }, `Up ${bytes(up.at(-1) || 0)}/s`),
+      element("span", {}, `peak ${bytes(Math.max(0, ...down, ...up))}/s`)),
+    plot([[down, "var(--downloads)"], [up, "var(--watch)"]]));
 }
 
 function alerts(services) {
@@ -234,22 +261,28 @@ function alerts(services) {
     element("ul", {}, ...troubled.map(service => element("li", {}, `${service.name} is ${service.state}`))))];
 }
 
-const ARTWORK = new Set(["jellyfin", "music-bot"]);
-
 function picture(src) {
   const image = element("img", { src, alt: "", loading: "lazy", referrerpolicy: "no-referrer" });
   image.addEventListener("error", () => { image.style.visibility = "hidden"; });
   return image;
 }
 
-function panel(found, kind) {
+function figures(reading) {
+  return element("div", { class: "figures" }, ...reading.figures.map(figure =>
+    element("div", { class: "figure" }, element("b", {}, figure.value), element("span", {}, figure.label))));
+}
+
+function trouble(found) {
+  if (!found || !found.error) return [];
+  return [found.reading && found.updated
+    ? element("span", { class: "note" }, `Stale since ${clock(found.updated)}: ${found.error}`)
+    : element("span", { class: "note failed" }, `No data: ${found.error}`)];
+}
+
+function details(found, kind) {
   if (!found) return [];
   const nodes = [];
   const reading = found.reading;
-  if (reading && reading.figures.length) {
-    nodes.push(element("div", { class: "figures" }, ...reading.figures.map(figure =>
-      element("div", { class: "figure" }, element("b", {}, figure.value), element("span", {}, figure.label)))));
-  }
   if (reading && reading.rows.length) {
     nodes.push(element("ul", { class: "rows" }, ...reading.rows.map(row => {
       const item = element("li", {}, element("span", { class: "title" }, row.title), element("span", { class: "detail" }, row.detail));
@@ -283,38 +316,180 @@ function panel(found, kind) {
     const cover = () => element("span", { class: "cover", "aria-hidden": "true" });
     const tiles = reading.posters.length
       ? reading.posters.map(poster =>
-        element("li", { title: `${poster.title} · ${poster.detail}` }, poster.image ? picture(poster.image) : cover(),
+        element("li", { title: `${poster.title}, ${poster.detail}` }, poster.image ? picture(poster.image) : cover(),
           element("span", { class: "title" }, poster.title), element("span", { class: "detail" }, poster.detail)))
       : [1, 2, 3].map(() => element("li", { class: "idle" }, cover(),
         element("span", { class: "title" }, found.updated ? "Nothing yet" : "—"), element("span", { class: "detail" }, "—")));
     nodes.push(element("div", { class: "shelf" }, element("span", { class: "caption" }, reading.shelf),
       element("ul", { class: "posters", "aria-label": reading.shelf }, ...tiles)));
   }
-  if (found.error) {
-    nodes.push(reading && found.updated
-      ? element("span", { class: "note" }, `Stale since ${clock(found.updated)}: ${found.error}`)
-      : element("span", { class: "note failed" }, `No data: ${found.error}`));
-  }
   return nodes;
 }
 
+function panel(found, kind) {
+  if (!found) return [];
+  const reading = found.reading;
+  return [...(reading && reading.figures.length ? [figures(reading)] : []), ...details(found, kind), ...trouble(found)];
+}
+
+function icon(service) {
+  const letter = () => element("span", { class: "letter", "aria-hidden": "true" }, service.name.charAt(0).toUpperCase());
+  if (!service.icon || missing.has(service.icon)) return letter();
+  const image = element("img", { class: "icon", src: `/icons/${service.icon}`, alt: "", loading: "lazy" });
+  image.onerror = () => {
+    missing.add(service.icon);
+    image.replaceWith(letter());
+  };
+  return image;
+}
+
+function stateOf(service) {
+  return service.shutdown ? "stopped" : service.state;
+}
+
+function looks(service) {
+  const found = board.widgets[service.service];
+  const broken = found && found.error ? 1 : 0;
+  return broken + (service.shutdown || service.state === "running" ? 0 : 1) + (errors.has(service.service) ? 1 : 0);
+}
+
+function facts(service) {
+  const found = board.widgets[service.service];
+  const node = element("span", { class: "facts" });
+  const reading = found && found.reading;
+  if (reading) for (const figure of reading.figures) node.append(element("span", {}, figure.label, element("b", {}, figure.value)));
+  if (found && found.error) {
+    node.append(reading && found.updated
+      ? element("span", { class: "stale" }, `Stale since ${clock(found.updated)}`)
+      : element("span", { class: "failed" }, `No data: ${found.error}`));
+  }
+  return node;
+}
+
+function meter(label, points, shown) {
+  return element("span", { class: "meter" }, element("span", {}, `${label} `, element("b", {}, points.length ? shown(points.at(-1)) : "—")), plot([[points, "var(--accent)"]]));
+}
+
+function uptime(name) {
+  const found = (board.uptime || {})[name] || {};
+  const shown = value => value === null || value === undefined ? "—" : `${value.toFixed(2)}%`;
+  return element("span", { class: "up" },
+    element("span", {}, "24h ", element("b", {}, shown(found.day))),
+    element("span", {}, "7d ", element("b", {}, shown(found.week))));
+}
+
+function expandable(service) {
+  if (RAIL.some(([name]) => name === service.service)) return false;
+  const found = board.widgets[service.service];
+  const reading = found && found.reading;
+  return Boolean(reading && (reading.rows.length || reading.shelf));
+}
+
+function actions(service) {
+  const node = element("span", { class: "acts" });
+  if (expandable(service)) {
+    const more = element("button", { type: "button", class: "icon-button more", "data-focus": `${service.service} more`, "aria-expanded": String(opened.has(service.service)), "aria-label": `Details of ${service.name}`, title: "Details" }, "▾");
+    more.onclick = () => {
+      if (opened.has(service.service)) opened.delete(service.service);
+      else opened.add(service.service);
+      refresh();
+    };
+    node.append(more);
+  }
+  if (!service.switchable) return node;
+  const restart = element("button", { type: "button", class: "icon-button", "data-focus": `${service.service} restart`, "aria-label": `Restart ${service.name}`, title: `Restart ${service.name}` }, "↻");
+  restart.disabled = service.shutdown || busy.has(service.service);
+  restart.onclick = () => {
+    if (!confirm(`Restart ${service.name}?`)) return;
+    restart.disabled = true;
+    control(service, "restart");
+  };
+  const power = element("button", { type: "button", class: `icon-button power ${service.shutdown ? "" : "on"}`, "data-focus": `${service.service} power`, role: "switch", "aria-checked": String(!service.shutdown), "aria-label": `${service.name} on`, title: service.shutdown ? `Turn on ${service.name}` : `Shut down ${service.name}` }, "⏻");
+  power.disabled = busy.has(service.service);
+  power.onclick = () => {
+    if (!service.shutdown && !confirm(`Shut down ${service.name}? It stays off through deploys and reboots.`)) return;
+    power.disabled = true;
+    control(service, service.shutdown ? "on" : "off");
+  };
+  node.append(restart, power);
+  return node;
+}
+
+function row(service) {
+  const series = history(service.service);
+  const name = service.href
+    ? element("a", { href: service.href, "data-focus": `${service.service} link` }, service.name)
+    : element("span", { class: "name" }, service.name);
+  const state = stateOf(service);
+  const said = service.shutdown ? "shut down" : state === "running" ? service.description || state : service.description ? `${state}, ${service.description}` : state;
+  const who = element("span", { class: "who" }, name, element("small", {}, said));
+  const line = element("div", { class: "line" },
+    element("span", { class: "dot", title: stateOf(service) }), icon(service), who, facts(service),
+    meter("CPU", series.cpu || [], value => `${value.toFixed(1)}%`),
+    meter("RAM", series.memory || [], bytes),
+    uptime(service.name),
+    actions(service));
+  if (errors.has(service.service)) line.append(element("span", { class: "error" }, errors.get(service.service)));
+  const node = element("div", { class: "service", "data-state": stateOf(service), "data-service": service.service }, line);
+  if (opened.has(service.service) && expandable(service)) {
+    node.append(element("div", { class: "more-area" }, ...details(board.widgets[service.service], service.widget)));
+  }
+  return node;
+}
+
+function table(services) {
+  const node = element("div", { class: "table" });
+  for (const section of sections) {
+    const own = services.filter(service => service.section === section.slug);
+    if (!own.length) continue;
+    const count = own.reduce((sum, service) => sum + looks(service), 0);
+    const summary = element("small", { class: count ? "look" : "" }, count ? `${own.length}, ${count} to look at` : String(own.length));
+    node.append(element("div", { class: "group", style: `--accent: var(--${section.slug})` },
+      element("h3", {}, section.title, summary), ...own.map(row)));
+  }
+  return node;
+}
+
+function health(found) {
+  if (!found || !found.error) return "running";
+  return found.reading && found.updated ? "restarting" : "unhealthy";
+}
+
+function block(title, service, nodes, found) {
+  const heading = service && service.href ? element("a", { href: service.href, "data-focus": `${service.service} rail` }, title) : element("span", {}, title);
+  return element("article", { class: "block", "data-state": service ? stateOf(service) : health(found), style: `--accent: var(--${service ? service.section : "status"})` },
+    element("h4", {}, element("span", { class: "dot" }), heading), ...nodes);
+}
+
+function rail(services) {
+  const node = element("aside", { class: "rail" });
+  for (const [name, title] of RAIL) {
+    const service = services.find(item => item.service === name);
+    if (!service) continue;
+    const nodes = panel(board.widgets[name], service.widget);
+    if (name === "qbittorrent") nodes.push(throughput(name));
+    node.append(block(title, service, nodes));
+  }
+  if (board.truenas) node.append(block("TrueNAS", null, panel(board.truenas), board.truenas));
+  node.append(element("article", { class: "block space", style: "--accent: var(--status)" }, element("h4", {}, "Media tree"),
+    ...(board.media ? panel(board.media) : [element("span", { class: "note" }, "Measuring the Media tree")])));
+  return node;
+}
+
 function status() {
-  return element("section", { id: "status", style: "--accent: var(--status)" },
-    element("h2", {}, "Status"),
-    element("div", {}, element("div", { class: "clock" }), element("div", { class: "date" })),
-    ...panel(board.host),
-    ...pool(),
-    space());
+  const host = board.host || {};
+  return element("section", { id: "status", "aria-label": "Status" },
+    element("div", { class: "now" }, element("span", { class: "clock" }), element("span", { class: "date" })),
+    ...(host.reading ? host.reading.figures.map(figure => element("div", { class: "figure" }, element("b", {}, figure.value), element("span", {}, figure.label))) : []),
+    ...trouble(host));
 }
 
-function pool() {
-  if (!board.truenas) return [];
-  return [element("div", { class: "space" }, element("span", { class: "caption" }, "TrueNAS"), ...panel(board.truenas))];
-}
-
-function space() {
-  return element("div", { class: "space" }, element("span", { class: "caption" }, "Media tree"),
-    ...(board.media ? panel(board.media) : [element("span", { class: "note" }, "Measuring the Media tree")]));
+function natives() {
+  return sections.filter(section => NATIVE.has(section.slug)).flatMap(section => {
+    const extra = native(section.slug);
+    if (!extra) return [];
+    return [element("section", { style: `--accent: var(--${section.slug})`, "data-slug": section.slug }, element("h2", {}, section.title), extra)];
+  });
 }
 
 function tick() {
@@ -328,11 +503,15 @@ function tick() {
 }
 
 function refresh() {
-  for (const node of main.querySelectorAll("article.card")) {
-    node.replaceChildren(node.querySelector(".head"), ...panel(board.widgets[node.dataset.service], node.dataset.widget), ...usage(node.dataset.service, node.dataset.widget), uptime(node.dataset.name));
+  const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.focus : null;
+  document.getElementById("status")?.replaceWith(status());
+  main.querySelector(".table")?.replaceWith(table(current));
+  main.querySelector(".rail")?.replaceWith(rail(current));
+  if (focused) {
+    const again = [...main.querySelectorAll("[data-focus]")].find(node => node.dataset.focus === focused);
+    if (again) again.focus();
   }
-  const host = document.getElementById("status");
-  if (host) host.replaceChildren(...[...host.children].slice(0, 2), ...panel(board.host), ...pool(), space());
+  tick();
   for (const block of main.querySelectorAll(".native")) {
     const typing = document.activeElement && document.activeElement.tagName === "INPUT" && block.contains(document.activeElement);
     if (typing) continue;
@@ -344,64 +523,13 @@ function refresh() {
   }
 }
 
-function letter(service) {
-  return element("span", { class: "letter" }, service.name.charAt(0).toUpperCase());
-}
-
-function card(service) {
-  let icon = letter(service);
-  if (service.icon) {
-    icon = element("img", { src: `/icons/${service.icon}`, alt: "", loading: "lazy" });
-    icon.onerror = () => icon.replaceWith(letter(service));
-  }
-  const text = element("span", { class: "text" }, element("span", { class: "name" }, service.name));
-  if (service.description) text.append(element("span", { class: "description" }, service.description));
-  text.append(element("span", { class: "state" }, service.shutdown ? "shut down" : service.state));
-  if (errors.has(service.service)) text.append(element("span", { class: "error" }, errors.get(service.service)));
-  const link = service.href
-    ? element("a", { class: "link", href: service.href }, icon, text)
-    : element("span", { class: "link" }, icon, text);
-  const head = element("div", { class: "head" }, link);
-  const node = element("article", { class: "card", "data-state": service.state, "data-service": service.service, "data-widget": service.widget || "", "data-name": service.name }, head, ...panel(board.widgets[service.service], service.widget), ...usage(service.service, service.widget), uptime(service.name));
-  if (service.switchable) {
-    const toggle = element("input", { type: "checkbox", role: "switch", "aria-label": `${service.name} on` });
-    toggle.checked = !service.shutdown;
-    toggle.onchange = () => {
-      if (!toggle.checked && !confirm(`Shut down ${service.name}? It stays off through deploys and reboots.`)) {
-        toggle.checked = true;
-        return;
-      }
-      toggle.disabled = true;
-      control(service, toggle.checked ? "on" : "off");
-    };
-    const restart = element("button", { type: "button" }, "Restart");
-    restart.disabled = service.shutdown;
-    restart.onclick = () => {
-      if (!confirm(`Restart ${service.name}?`)) return;
-      restart.disabled = true;
-      control(service, "restart");
-    };
-    head.append(element("span", { class: "controls" }, restart, element("label", { class: "switch" }, toggle, element("span"))));
-  }
-  return node;
-}
-
 let current = JSON.parse(document.getElementById("services").textContent);
 let board = JSON.parse(document.getElementById("board").textContent);
 
 function render(services) {
   current = services;
   for (const block of main.querySelectorAll(".native")) unmount(block);
-  main.replaceChildren(...alerts(services), ...sections.flatMap(section => {
-    if (section.slug === "status") return [status()];
-    const cards = services.filter(service => service.section === section.slug).map(card);
-    const extra = native(section.slug);
-    if (!cards.length && !extra) return [];
-    const node = element("section", { style: `--accent: var(--${section.slug})`, "data-slug": section.slug }, element("h2", {}, section.title));
-    if (extra) node.append(extra);
-    if (cards.length) node.append(element("div", { class: "grid" }, ...cards));
-    return [node];
-  }));
+  main.replaceChildren(...alerts(services), status(), element("div", { class: "room" }, table(services), rail(services)), ...natives());
   tick();
   for (const block of main.querySelectorAll(".native")) mount(block);
 }

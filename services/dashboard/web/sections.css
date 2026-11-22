@@ -1,7 +1,7 @@
 .native { display: grid; gap: 12px; margin-bottom: 12px; min-width: 0; }
 .native .empty { margin: 0; color: var(--muted); }
 .panel { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; display: grid; gap: 8px; min-width: 0; align-content: start; }
-.panel figcaption, .kpi .label { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.panel figcaption, .kpi .label { color: var(--muted); font-size: 12px; font-weight: 500; }
 .kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 @media (min-width: 700px) { .kpis { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); } }
 .kpi { position: relative; display: grid; gap: 2px; background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--tone); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px 12px; min-width: 0; }
@@ -77,7 +77,7 @@ form.number .save, .action, .pull nav a { font: inherit; font-size: 12px; color:
 .earned tfoot td { font-weight: 600; }
 .actions { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .action { display: grid; gap: 2px; text-align: left; background: var(--card); border-left: 3px solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px 12px; }
-.action .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.action .label { color: var(--muted); font-size: 12px; }
 .action .value { font-size: 18px; font-weight: 700; }
 .action .sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .action:disabled { opacity: 0.6; cursor: default; }
