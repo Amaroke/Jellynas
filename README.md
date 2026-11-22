@@ -2358,7 +2358,10 @@ the Dashboard, see [Farm board](#farm-board).
    up to the grab size, 1 GB by default: freeleech before paid, then the rarest
    for the class, then the smallest. A page that holds nothing new sends the
    next hunt to the next page. Every paid grab shares the paid download of the
-   last 24 hours, 5 GB by default, and never spends past the floor.
+   last 24 hours, 5 GB by default, and never spends past the floor. Every grab
+   switch starts off, so a new NAS grabs nothing for the Farm until the Admin
+   turns one on in the Dashboard. cross-seed still adds the C411 copy of what
+   qBittorrent already holds, without downloading it.
 6. **Never removes a torrent of the Farm.** Once the Farm holds its budget,
    ratio grabs nothing more.
 7. **Drops Twins.** While its switch is on, once cross-seed seeds the C411 copy

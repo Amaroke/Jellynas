@@ -95,15 +95,15 @@ DONE_AT_START = (42, 43, 48, 67, 68, 69, 70, 71, 72)
 CHALLENGES = ("quantity_seed", "category_volume_seed", "category_diversity_seed", "vtr_min", "duration_seed")
 VOIES = ("seed", "specialization")
 SWITCHES = {
-    "free": True,
-    "twins": True,
+    "free": False,
+    "twins": False,
     "paid": False,
-    "quantity_seed": True,
+    "quantity_seed": False,
     "clean_public": True,
     "drop_twins": True,
     "hold": True,
     "adopt": False,
-    **{f"volume:{slug}": slug in ("ebook", "audio", "jeux-video", "imprimante-3d") for slug in C411_CATEGORIES},
+    **{f"volume:{slug}": False for slug in C411_CATEGORIES},
 }
 NUMBERS = {
     "farm_size_gb": ("farm_size", GB, 1, 100000),
