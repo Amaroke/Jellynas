@@ -1108,6 +1108,9 @@ pub fn host(systems: &Value, name: &str) -> Parsed {
     if let Ok(temperature) = number(info, "dt") {
         figures.push(("Temperature".into(), format!("{temperature:.0} °C")));
     }
+    if let Ok(network) = number(info, "bb") {
+        figures.push(("Network".into(), rate(network)));
+    }
     figures.push(("Uptime".into(), duration(whole(info, "u")?)));
     for (disk, used) in info["efs"].as_object().into_iter().flatten() {
         if let Some(used) = used.as_f64() {
@@ -1773,6 +1776,7 @@ mod tests {
             vec![
                 ("CPU", "6.4%"),
                 ("RAM", "76.6%"),
+                ("Network", "41.1 KiB/s"),
                 ("Uptime", "14h 43m"),
                 ("Data disk", "71.2%")
             ],
