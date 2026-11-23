@@ -110,6 +110,9 @@ fn run_once(
     farm::prepare(qbt, &settings)?;
     c411.allow(C411_CALLS);
     let account = ledger::read_account(c411, state, now);
+    if let Some(read) = &account {
+        state.shown_account = Some(read.clone());
+    }
     farm::weigh_floor(state, account.as_ref(), &settings);
     let mut torrents = listed(qbt)?;
     ledger::record(qbt, state, &torrents, &settings, now);
@@ -146,7 +149,7 @@ fn run_once(
         controls,
         &torrents,
         seeds,
-        account.as_ref(),
+        state.shown_account.as_ref(),
         now,
     ))
 }
@@ -330,5 +333,38 @@ mod tests {
         assert!(state.transfers.contains_key("a"));
         assert_eq!(1, state.daily.len());
         assert_eq!(0, board["seeds"]);
+    }
+
+    #[test]
+    fn a_failed_profile_read_keeps_the_last_account_on_the_board() {
+        let qbt = FakeQbt::default();
+        let read = FakeC411 {
+            account: Some(clients::Account {
+                uploaded: 300,
+                downloaded: 100,
+                allowed: true,
+                ..Default::default()
+            }),
+            ..FakeC411::default()
+        };
+        let mut state = State::default();
+        let controls =
+            Controls::load(Path::new("/nonexistent/controls.json")).snapshot(&settings());
+        let run = |c411: &FakeC411, state: &mut State, now: f64| {
+            run_once(
+                &qbt,
+                &FakeProwlarr::default(),
+                c411,
+                &settings(),
+                &controls,
+                state,
+                now,
+            )
+            .unwrap()
+        };
+        run(&read, &mut state, 1_800_000_000.0);
+        let board = run(&FakeC411::default(), &mut state, 1_800_000_060.0);
+        assert_eq!(3.0, board["account"]["ratio"]);
+        assert!(state.paused);
     }
 }

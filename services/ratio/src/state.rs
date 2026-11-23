@@ -54,6 +54,7 @@ pub struct State {
     pub given_up: BTreeMap<String, f64>,
     pub restore: BTreeMap<String, i64>,
     pub daily: Vec<Day>,
+    pub shown_account: Option<crate::clients::Account>,
 }
 
 pub fn load_state(path: &Path) -> Result<State, String> {

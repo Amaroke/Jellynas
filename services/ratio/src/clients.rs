@@ -73,7 +73,8 @@ pub struct Release {
     pub free: bool,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, serde::Serialize)]
+#[serde(default)]
 pub struct Account {
     pub uploaded: i64,
     pub downloaded: i64,

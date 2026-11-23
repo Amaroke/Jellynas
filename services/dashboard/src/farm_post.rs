@@ -123,6 +123,7 @@ pub fn until_next_hour(now: &ZonedDateTime) -> std::time::Duration {
 
 pub fn ready(board: &Value) -> bool {
     !board["updated_at"].is_null()
+        && !board["account"]["ratio"].is_null()
         && board["history"]
             .as_array()
             .is_some_and(|days| !days.is_empty())
@@ -820,6 +821,9 @@ mod tests {
         let mut empty = board();
         empty["history"] = json!([]);
         assert!(!ready(&empty));
+        let mut unread = board();
+        unread["account"]["ratio"] = Value::Null;
+        assert!(!ready(&unread));
     }
 
     #[test]
