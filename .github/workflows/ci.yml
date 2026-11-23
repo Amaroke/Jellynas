@@ -139,7 +139,7 @@ jobs:
         with:
           persist-credentials: false
       - run: >-
-          npx --yes --package renovate@44.257.9 --
+          npx --yes --package renovate@44.258.1 --
           renovate-config-validator --strict renovate.json
 
   markdown:
