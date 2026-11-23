@@ -139,7 +139,7 @@ jobs:
         with:
           persist-credentials: false
       - run: >-
-          npx --yes --package renovate@44.257.9 --
+          npx --yes --package renovate@44.258.1 --
           renovate-config-validator --strict renovate.json
 
   markdown:
@@ -164,5 +164,5 @@ jobs:
           docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12
           -color
       - run: >-
-          pipx run zizmor==1.33.0 --persona=pedantic --min-severity=low
+          pipx run zizmor==1.33.1 --persona=pedantic --min-severity=low
           .github/workflows
