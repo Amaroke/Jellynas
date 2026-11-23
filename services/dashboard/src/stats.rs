@@ -8,6 +8,36 @@ pub struct Sample {
     pub system: u64,
     pub cpus: u64,
     pub memory: u64,
+    pub network: Option<Traffic>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Traffic {
+    pub at: i64,
+    pub received: u64,
+    pub sent: u64,
+}
+
+fn traffic(stats: &Value) -> Option<Traffic> {
+    let at = stats["read"]
+        .as_str()?
+        .parse::<jiff::Timestamp>()
+        .ok()?
+        .as_millisecond();
+    let networks = stats["networks"]
+        .as_object()
+        .filter(|found| !found.is_empty())?;
+    let sum = |key: &str| {
+        networks
+            .values()
+            .map(|network| network[key].as_u64())
+            .sum::<Option<u64>>()
+    };
+    Some(Traffic {
+        at,
+        received: sum("rx_bytes")?,
+        sent: sum("tx_bytes")?,
+    })
 }
 
 pub fn sample(stats: &Value) -> Option<Sample> {
@@ -27,7 +57,15 @@ pub fn sample(stats: &Value) -> Option<Sample> {
         system: cpu["system_cpu_usage"].as_u64()?,
         cpus: cpu["online_cpus"].as_u64().or(cores).unwrap_or(1),
         memory: usage.saturating_sub(inactive),
+        network: traffic(stats),
     })
+}
+
+pub fn rates(before: &Traffic, after: &Traffic) -> Option<(f64, f64)> {
+    let elapsed = after.at.checked_sub(before.at).filter(|ms| *ms > 0)? as f64 / 1000.0;
+    let received = after.received.checked_sub(before.received)?;
+    let sent = after.sent.checked_sub(before.sent)?;
+    Some((received as f64 / elapsed, sent as f64 / elapsed))
 }
 
 pub fn cpu(before: &Sample, after: &Sample) -> Option<f64> {
@@ -85,6 +123,7 @@ mod tests {
             system: 1000,
             cpus: 4,
             memory: 7_000_000,
+            network: None,
         };
         assert_eq!(
             Some(expected),
@@ -100,6 +139,7 @@ mod tests {
             system: 9,
             cpus: 2,
             memory: 600,
+            network: None,
         };
         assert_eq!(Some(expected), sample(&legacy));
     }
@@ -111,6 +151,42 @@ mod tests {
         assert_eq!(Some(8.0), cpu(&before, &after));
         assert_eq!(None, cpu(&after, &after));
         assert_eq!(None, cpu(&after, &before));
+    }
+
+    fn traffic_at(read: &str, received: u64, sent: u64) -> Option<Traffic> {
+        let mut found = stats(0, 0, 0, 0);
+        found["read"] = json!(read);
+        found["networks"] = json!({
+            "eth0": {"rx_bytes": received, "tx_bytes": sent},
+            "eth1": {"rx_bytes": 1_000, "tx_bytes": 0}
+        });
+        sample(&found)?.network
+    }
+
+    #[test]
+    fn a_sample_adds_up_the_traffic_of_every_network() {
+        assert_eq!(
+            Some(Traffic {
+                at: 1_795_384_545_000,
+                received: 5_000,
+                sent: 2_000
+            }),
+            traffic_at("2026-11-22T21:55:45.000000000Z", 4_000, 2_000)
+        );
+        let mut alone = stats(0, 0, 0, 0);
+        alone["read"] = json!("2026-11-22T21:55:45Z");
+        assert_eq!(None, sample(&alone).unwrap().network);
+        alone["networks"] = json!({});
+        assert_eq!(None, sample(&alone).unwrap().network);
+    }
+
+    #[test]
+    fn the_rates_divide_the_traffic_by_the_seconds_between_samples() {
+        let before = traffic_at("2026-11-22T21:55:45Z", 0, 0).unwrap();
+        let after = traffic_at("2026-11-22T21:55:49Z", 8_000, 2_000).unwrap();
+        assert_eq!(Some((2_000.0, 500.0)), rates(&before, &after));
+        assert_eq!(None, rates(&after, &after));
+        assert_eq!(None, rates(&after, &before));
     }
 
     #[test]

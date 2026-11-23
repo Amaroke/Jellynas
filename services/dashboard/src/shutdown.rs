@@ -173,6 +173,7 @@ mod tests {
             id: format!("id-{name}"),
             state,
             shutdown,
+            borrowed_network: false,
         }
     }
 

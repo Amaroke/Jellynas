@@ -180,10 +180,18 @@ impl App {
                 .map(|service| {
                     let name = service.card.service.clone();
                     let id = service.id.clone();
+                    let borrowed = service.borrowed_network;
                     (
                         name,
                         id,
-                        scope.spawn(move || self.docker.stats(&service.id)),
+                        scope.spawn(move || {
+                            self.docker.stats(&service.id).map(|mut stats| {
+                                if borrowed {
+                                    stats["networks"] = Value::Null;
+                                }
+                                stats
+                            })
+                        }),
                     )
                 })
                 .collect();
@@ -303,6 +311,15 @@ impl App {
                 .and_then(|(_, before)| stats::cpu(before, &sample))
             {
                 metrics.push(("cpu", share));
+            }
+            if let Some((received, sent)) = samples
+                .get(name)
+                .filter(|(before, _)| before == id)
+                .and_then(|(_, before)| Some((before.network?, sample.network?)))
+                .and_then(|(before, after)| stats::rates(&before, &after))
+            {
+                metrics.push(("received", received));
+                metrics.push(("sent", sent));
             }
             history.record(name, &metrics, POINTS);
             samples.insert(name.clone(), (id.clone(), sample));

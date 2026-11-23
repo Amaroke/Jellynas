@@ -110,6 +110,8 @@ pub struct Service {
     pub id: String,
     pub state: State,
     pub shutdown: bool,
+    #[serde(skip)]
+    pub borrowed_network: bool,
 }
 
 fn state(container: &Value) -> State {
@@ -135,6 +137,9 @@ pub fn services(containers: &Value, shutdown: &BTreeSet<String>) -> Vec<Service>
                 id: container["Id"].as_str()?.to_string(),
                 state: state(container),
                 shutdown: card.switchable && shutdown.contains(&card.service),
+                borrowed_network: container["HostConfig"]["NetworkMode"]
+                    .as_str()
+                    .is_some_and(|mode| mode.starts_with("container:")),
                 card,
             })
         })
@@ -277,5 +282,19 @@ mod tests {
         let shutdown = BTreeSet::from(["tdarr".to_string()]);
         let listed = services(&json!([fixed]), &shutdown);
         assert!(!listed[0].shutdown);
+    }
+
+    #[test]
+    fn a_service_on_the_network_of_another_container_borrows_it() {
+        let mut behind = container("qbittorrent", "Downloads", "running", "Up 1 hour");
+        behind["HostConfig"] = json!({"NetworkMode": "container:id-gluetun"});
+        let mut own = container("gluetun", "Downloads", "running", "Up 1 hour");
+        own["HostConfig"] = json!({"NetworkMode": "jellynas_default"});
+        let listed = services(&json!([behind, own]), &BTreeSet::new());
+        let found: Vec<(&str, bool)> = listed
+            .iter()
+            .map(|service| (service.card.service.as_str(), service.borrowed_network))
+            .collect();
+        assert_eq!(vec![("gluetun", false), ("qbittorrent", true)], found);
     }
 }
