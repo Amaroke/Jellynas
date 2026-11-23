@@ -164,6 +164,7 @@ mod tests {
                 name: name.into(),
                 section: Section::Automation,
                 icon: None,
+                icon_dark: None,
                 href: None,
                 switchable: true,
                 description: None,

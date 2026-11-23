@@ -42,6 +42,7 @@ section.folded > .native { display: none; }
 #status .date { color: var(--muted); font-size: 12px; }
 #status .figure { background: var(--card); border: 1px solid var(--line); padding: 10px 12px; }
 #status .figure b { font-size: 18px; }
+#status .figure em { font-style: normal; color: var(--level); }
 #status .note { grid-column: 1 / -1; }
 
 .room { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 24px; align-items: start; }
@@ -88,6 +89,7 @@ section.folded > .native { display: none; }
 .icon-button:hover:not(:disabled) { color: var(--text); background: var(--raised); border-color: var(--line); }
 .icon-button:disabled { opacity: 0.35; cursor: default; }
 .icon-button.power.on { color: var(--running); }
+.icon-button .glyph { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
 .icon-button.more { font-size: 18px; }
 .icon-button.more[aria-expanded="true"] { transform: rotate(180deg); }
 .service .more-area { padding: 2px 16px 14px 60px; display: grid; gap: 10px; }
@@ -199,6 +201,17 @@ const LINKED = new Set(["aurral", "prowlarr", "radarr", "sonarr"]);
 const KINDS = [["worker", "Worker"], ["indexer", "Indexers"], ["proxy", "Proxies"], ["client", "Download clients"]];
 const NATIVE = new Set(["pull-requests", "farm"]);
 const ARTWORK = new Set(["jellyfin", "music-bot"]);
+
+function powerGlyph() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("class", "glyph");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", "M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0");
+  svg.append(path);
+  return svg;
+}
 
 function element(tag, attributes = {}, ...children) {
   const node = document.createElement(tag);
@@ -371,12 +384,16 @@ function panel(found, kind) {
   return [...(reading && reading.figures.length ? [figures(reading)] : []), ...details(found, kind), ...trouble(found)];
 }
 
+const dark = matchMedia("(prefers-color-scheme: dark)");
+dark.addEventListener("change", () => refresh());
+
 function icon(service) {
   const letter = () => element("span", { class: "letter", "aria-hidden": "true" }, service.name.charAt(0).toUpperCase());
-  if (!service.icon || missing.has(service.icon)) return letter();
-  const image = element("img", { class: "icon", src: `/icons/${service.icon}`, alt: "", loading: "lazy" });
+  const file = dark.matches && service.icon_dark && !missing.has(service.icon_dark) ? service.icon_dark : service.icon;
+  if (!file || missing.has(file)) return letter();
+  const image = element("img", { class: "icon", src: `/icons/${file}`, alt: "", loading: "lazy" });
   image.onerror = () => {
-    missing.add(service.icon);
+    missing.add(file);
     image.replaceWith(letter());
   };
   return image;
@@ -431,7 +448,7 @@ function switches(service, link) {
   }
   if (link.kind !== "proxy" && link.hint !== "from Prowlarr" && ["on", "off", "failing"].includes(link.state)) {
     const on = link.state !== "off";
-    const power = element("button", { type: "button", class: `icon-button power ${on ? "on" : ""}`, "data-focus": `${key} power`, role: "switch", "aria-checked": String(on), "aria-label": `${link.name} on`, title: on ? `Turn off ${link.name}` : `Turn on ${link.name}` }, "⏻");
+    const power = element("button", { type: "button", class: `icon-button power ${on ? "on" : ""}`, "data-focus": `${key} power`, role: "switch", "aria-checked": String(on), "aria-label": `${link.name} on`, title: on ? `Turn off ${link.name}` : `Turn on ${link.name}` }, powerGlyph());
     power.disabled = pending;
     power.onclick = () => {
       if (on && !confirm(`Turn off ${link.name} in ${service.name}?`)) return;
@@ -557,7 +574,7 @@ function actions(service) {
     restart.disabled = true;
     control(service, "restart");
   };
-  const power = element("button", { type: "button", class: `icon-button power ${service.shutdown ? "" : "on"}`, "data-focus": `${service.service} power`, role: "switch", "aria-checked": String(!service.shutdown), "aria-label": `${service.name} on`, title: service.shutdown ? `Turn on ${service.name}` : `Shut down ${service.name}` }, "⏻");
+  const power = element("button", { type: "button", class: `icon-button power ${service.shutdown ? "" : "on"}`, "data-focus": `${service.service} power`, role: "switch", "aria-checked": String(!service.shutdown), "aria-label": `${service.name} on`, title: service.shutdown ? `Turn on ${service.name}` : `Shut down ${service.name}` }, powerGlyph());
   power.disabled = busy.has(service.service);
   power.onclick = () => {
     if (!service.shutdown && !confirm(`Shut down ${service.name}? It stays off through deploys and reboots.`)) return;
@@ -625,11 +642,18 @@ function rail(services) {
   return node;
 }
 
+function overall(label) {
+  const days = Object.values(board.uptime || {}).map(found => found.day).filter(Number.isFinite);
+  if (!days.length) return [label];
+  const average = days.reduce((sum, day) => sum + day, 0) / days.length;
+  return [`${label} · `, element("em", { "data-level": level(average, UPTIME_STEPS, true) }, `${average.toFixed(2)}%`)];
+}
+
 function status() {
   const host = board.host || {};
   return element("section", { id: "status", "aria-label": "Status" },
     element("div", { class: "now" }, element("span", { class: "clock" }), element("span", { class: "date" })),
-    ...(host.reading ? host.reading.figures.map(figure => element("div", { class: "figure" }, element("b", {}, figure.value), element("span", {}, figure.label))) : []),
+    ...(host.reading ? host.reading.figures.map(figure => element("div", { class: "figure" }, element("b", {}, figure.value), element("span", {}, ...(figure.label === "Uptime" ? overall(figure.label) : [figure.label])))) : []),
     ...trouble(host));
 }
 
