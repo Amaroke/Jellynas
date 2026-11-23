@@ -30,6 +30,8 @@ services:
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: Ratio
       dashboard.section: Farm
+      dashboard.icon: speedtest-tracker.svg
+      dashboard.icon-dark: speedtest-tracker-light.svg
       dashboard.switchable: "true"
       cd.doco.deployment.autostart: "false"
     volumes:

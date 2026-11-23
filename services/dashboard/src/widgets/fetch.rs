@@ -631,11 +631,18 @@ impl Client {
             .as_str()
             .ok_or("Beszel gave no token")?
             .to_string();
-        self.fetch(
+        let headers = vec![("Authorization", format!("Bearer {token}"))];
+        let systems = self.fetch(
             "BESZEL",
             "/api/collections/systems/records?page=1&perPage=500",
-            &vec![("Authorization", format!("Bearer {token}"))],
-        )
+            &headers,
+        )?;
+        let stats = self.fetch(
+            "BESZEL",
+            "/api/collections/system_stats/records?page=1&perPage=50&sort=-created&filter=type%3D%271m%27",
+            &headers,
+        )?;
+        Ok(parse::with_stats(systems, &stats))
     }
 
     pub fn host(&self) -> parse::Parsed {

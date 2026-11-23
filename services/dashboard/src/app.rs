@@ -574,11 +574,10 @@ impl App {
     }
 
     pub fn icon(&self, file: &str) -> Option<(&'static str, Vec<u8>)> {
-        let named = self
-            .snapshot
-            .borrow()
-            .iter()
-            .any(|service| service.card.icon.as_deref() == Some(file));
+        let named = self.snapshot.borrow().iter().any(|service| {
+            service.card.icon.as_deref() == Some(file)
+                || service.card.icon_dark.as_deref() == Some(file)
+        });
         if !named {
             return None;
         }

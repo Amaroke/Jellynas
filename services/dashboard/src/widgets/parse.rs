@@ -1099,14 +1099,40 @@ pub fn beszel(systems: &Value, name: &str) -> Parsed {
     ]))
 }
 
+pub fn with_stats(mut systems: Value, stats: &Value) -> Value {
+    let latest = stats["items"].as_array().cloned().unwrap_or_default();
+    if let Some(found) = systems["items"].as_array_mut() {
+        for system in found {
+            if let Some(record) = latest
+                .iter()
+                .find(|record| record["system"] == system["id"])
+            {
+                system["stats"] = record["stats"].clone();
+            }
+        }
+    }
+    systems
+}
+
+fn network(system: &Value) -> Option<String> {
+    let bandwidth = system["stats"]["b"].as_array()?;
+    let up = bandwidth.first()?.as_f64()?;
+    let down = bandwidth.get(1)?.as_f64()?;
+    Some(format!("{} / {}", rate(down), rate(up)))
+}
+
 pub fn host(systems: &Value, name: &str) -> Parsed {
-    let info = field(system(systems, name)?, "info")?;
+    let system = system(systems, name)?;
+    let info = field(system, "info")?;
     let mut figures = vec![
         ("CPU".to_string(), percent(number(info, "cpu")?)),
         ("RAM".to_string(), percent(number(info, "mp")?)),
     ];
     if let Ok(temperature) = number(info, "dt") {
         figures.push(("Temperature".into(), format!("{temperature:.0} °C")));
+    }
+    if let Some(network) = network(system) {
+        figures.push(("Network D/U".into(), network));
     }
     figures.push(("Uptime".into(), duration(whole(info, "u")?)));
     for (disk, used) in info["efs"].as_object().into_iter().flatten() {
@@ -1768,11 +1794,16 @@ mod tests {
 
     #[test]
     fn the_host_shows_its_resources_and_disks() {
-        let reading = host(&systems(), "NAS").unwrap();
+        let stats = json!({"items": [
+            {"system": "6oy4", "stats": {"b": [938_761, 83_557]}},
+            {"system": "6oy4", "stats": {"b": [1, 1]}}
+        ]});
+        let reading = host(&with_stats(systems(), &stats), "NAS").unwrap();
         assert_eq!(
             vec![
                 ("CPU", "6.4%"),
                 ("RAM", "76.6%"),
+                ("Network D/U", "81.6 KiB/s / 916.8 KiB/s"),
                 ("Uptime", "14h 43m"),
                 ("Data disk", "71.2%")
             ],

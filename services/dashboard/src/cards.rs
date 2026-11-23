@@ -21,6 +21,7 @@ pub struct Card {
     pub name: String,
     pub section: Section,
     pub icon: Option<String>,
+    pub icon_dark: Option<String>,
     pub href: Option<String>,
     pub switchable: bool,
     pub description: Option<String>,
@@ -85,6 +86,7 @@ pub fn card(labels: &HashMap<String, String>) -> Option<Card> {
         name: label("dashboard.name").unwrap_or_else(|| service.clone()),
         section,
         icon: label("dashboard.icon").filter(|icon| icon_file(icon)),
+        icon_dark: label("dashboard.icon-dark").filter(|icon| icon_file(icon)),
         href: label("dashboard.href"),
         switchable: label("dashboard.switchable").as_deref() == Some("true"),
         description: label("dashboard.description"),
@@ -172,6 +174,7 @@ mod tests {
             ("dashboard.name", "Jellyfin"),
             ("dashboard.section", "Watch"),
             ("dashboard.icon", "jellyfin.svg"),
+            ("dashboard.icon-dark", "jellyfin-light.svg"),
             ("dashboard.href", "https://jellyfin.lan.example.org:443"),
             ("dashboard.switchable", "true"),
             ("dashboard.description", "Streams the Library"),
@@ -183,6 +186,7 @@ mod tests {
             name: "Jellyfin".into(),
             section: Section::Watch,
             icon: Some("jellyfin.svg".into()),
+            icon_dark: Some("jellyfin-light.svg".into()),
             href: Some("https://jellyfin.lan.example.org:443".into()),
             switchable: true,
             description: Some("Streams the Library".into()),
@@ -205,8 +209,11 @@ mod tests {
                 ("com.docker.compose.service", "jellyfin"),
                 ("dashboard.section", "Watch"),
                 ("dashboard.icon", icon),
+                ("dashboard.icon-dark", icon),
             ]));
-            assert_eq!(None, found.unwrap().icon, "{icon}");
+            let found = found.unwrap();
+            assert_eq!(None, found.icon, "{icon}");
+            assert_eq!(None, found.icon_dark, "{icon}");
         }
     }
 
