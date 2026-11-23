@@ -1,5 +1,8 @@
 use crate::api::{Api, report, rules, settle};
+use jiff::{SignedDuration, Timestamp};
 use serde_json::{Map, Value, json};
+
+const IDLE: SignedDuration = SignedDuration::from_hours(30 * 24);
 
 pub fn server() -> Vec<(&'static str, &'static str, Map<String, Value>)> {
     vec![
@@ -61,15 +64,29 @@ pub fn configuration() -> Map<String, Value> {
     }))
 }
 
-pub fn wanted_policy(current: &Value) -> Map<String, Value> {
+pub fn idle(user: &Value, now: Timestamp) -> bool {
+    user["LastActivityDate"]
+        .as_str()
+        .and_then(|date| date.parse::<Timestamp>().ok())
+        .is_some_and(|last| now.duration_since(last) >= IDLE)
+}
+
+pub fn wanted_policy(user: &Value, now: Timestamp) -> Map<String, Value> {
     let mut wanted = policy();
-    if current["IsAdministrator"] != json!(true) {
+    if user["Policy"]["IsAdministrator"] != json!(true) {
         wanted.insert("EnableContentDeletion".into(), json!(false));
+        if idle(user, now) {
+            wanted.insert("IsDisabled".into(), json!(true));
+        }
     }
     wanted
 }
 
 pub fn enforce(api: &impl Api) -> Result<usize, String> {
+    pass(api, Timestamp::now())
+}
+
+fn pass(api: &impl Api, now: Timestamp) -> Result<usize, String> {
     let mut changed = 0;
     for (page, path, wanted) in server() {
         let changes = settle(api, "POST", path, &api.get(path)?, &wanted)?;
@@ -83,7 +100,7 @@ pub fn enforce(api: &impl Api) -> Result<usize, String> {
             "POST",
             &format!("/Users/{id}/Policy"),
             &user["Policy"],
-            &wanted_policy(&user["Policy"]),
+            &wanted_policy(user, now),
         )?;
         let configuration = settle(
             api,
@@ -112,7 +129,15 @@ mod tests {
         policy.extend(rules(overrides));
         let mut configuration = configuration();
         configuration.insert("SubtitleMode".into(), json!("Smart"));
-        json!({"Id": format!("id-{name}"), "Name": name, "Policy": policy, "Configuration": configuration})
+        json!({"Id": format!("id-{name}"), "Name": name, "LastActivityDate": "2026-11-20T21:14:03.1234567Z", "Policy": policy, "Configuration": configuration})
+    }
+
+    fn now() -> Timestamp {
+        "2026-11-23T03:30:00Z".parse().unwrap()
+    }
+
+    fn seen(admin: bool, date: &str) -> Value {
+        json!({"LastActivityDate": date, "Policy": {"IsAdministrator": admin}})
     }
 
     fn in_line() -> BTreeMap<String, Value> {
@@ -136,29 +161,66 @@ mod tests {
 
     #[test]
     fn a_friend_may_not_delete_content() {
-        let wanted = wanted_policy(&json!({"IsAdministrator": false}));
+        let wanted = wanted_policy(&json!({"Policy": {"IsAdministrator": false}}), now());
         assert_eq!(Some(&json!(false)), wanted.get("EnableContentDeletion"));
     }
 
     #[test]
     fn the_admin_keeps_the_right_to_delete() {
-        let wanted = wanted_policy(&json!({"IsAdministrator": true}));
+        let wanted = wanted_policy(&json!({"Policy": {"IsAdministrator": true}}), now());
         assert!(!wanted.contains_key("EnableContentDeletion"));
     }
 
     #[test]
     fn every_account_gets_one_session_and_three_attempts() {
         for admin in [true, false] {
-            let wanted = wanted_policy(&json!({"IsAdministrator": admin}));
+            let wanted = wanted_policy(&json!({"Policy": {"IsAdministrator": admin}}), now());
             assert_eq!(Some(&json!(1)), wanted.get("MaxActiveSessions"));
             assert_eq!(Some(&json!(3)), wanted.get("LoginAttemptsBeforeLockout"));
         }
     }
 
     #[test]
+    fn a_friend_idle_for_thirty_days_is_disabled() {
+        let wanted = wanted_policy(&seen(false, "2026-10-24T03:30:00Z"), now());
+        assert_eq!(Some(&json!(true)), wanted.get("IsDisabled"));
+    }
+
+    #[test]
+    fn a_friend_seen_within_thirty_days_is_left_alone() {
+        let wanted = wanted_policy(&seen(false, "2026-10-24T03:30:01Z"), now());
+        assert!(!wanted.contains_key("IsDisabled"));
+    }
+
+    #[test]
+    fn the_admin_is_never_disabled() {
+        let wanted = wanted_policy(&seen(true, "2020-01-01T00:00:00Z"), now());
+        assert!(!wanted.contains_key("IsDisabled"));
+    }
+
+    #[test]
+    fn an_account_without_activity_is_left_alone() {
+        let wanted = wanted_policy(&json!({"Policy": {"IsAdministrator": false}}), now());
+        assert!(!wanted.contains_key("IsDisabled"));
+    }
+
+    #[test]
+    fn an_idle_friend_is_disabled_at_the_pass() {
+        let mut pages = in_line();
+        let mut gone = user("theo", false, json!({}));
+        gone["LastActivityDate"] = json!("2026-09-01T18:00:00.0000000Z");
+        pages.insert("/Users".into(), json!([gone]));
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), pass(&fake, now()));
+        assert_eq!(vec!["POST /Users/id-theo/Policy"], fake.paths());
+        assert_eq!(json!(true), fake.body(0)["IsDisabled"]);
+        assert_eq!(json!(true), fake.body(0)["EnableAllFolders"]);
+    }
+
+    #[test]
     fn a_server_in_line_needs_nothing() {
         let fake = Fake::new(in_line());
-        assert_eq!(Ok(0), enforce(&fake));
+        assert_eq!(Ok(0), pass(&fake, now()));
         assert!(fake.paths().is_empty());
     }
 
@@ -173,7 +235,7 @@ mod tests {
         fresh["Configuration"]["EnableNextEpisodeAutoPlay"] = json!(false);
         pages.insert("/Users".into(), json!([fresh]));
         let fake = Fake::new(pages);
-        assert_eq!(Ok(1), enforce(&fake));
+        assert_eq!(Ok(1), pass(&fake, now()));
         assert_eq!(
             vec![
                 "POST /Users/id-nima/Policy",
@@ -192,7 +254,7 @@ mod tests {
         let mut pages = in_line();
         pages.get_mut("/System/Configuration/encoding").unwrap()["EnableThrottling"] = json!(false);
         let fake = Fake::new(pages);
-        assert_eq!(Ok(1), enforce(&fake));
+        assert_eq!(Ok(1), pass(&fake, now()));
         assert_eq!(vec!["POST /System/Configuration/encoding"], fake.paths());
         assert_eq!(json!(true), fake.body(0)["EnableThrottling"]);
         assert_eq!(json!("kept"), fake.body(0)["Untouched"]);
