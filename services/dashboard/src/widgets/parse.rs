@@ -504,9 +504,6 @@ pub fn ups(status: &Value) -> Parsed {
         ("Power", power.to_string()),
         ("Battery", format!("{}%", whole(status, "charge")?)),
     ];
-    if let Ok(load) = whole(status, "load") {
-        figures.push(("Load", format!("{load}%")));
-    }
     if let Ok(runtime) = whole(status, "runtime") {
         figures.push(("Runtime", duration(runtime)));
     }
@@ -1440,22 +1437,17 @@ mod tests {
 
     #[test]
     fn ups_shows_the_power_and_the_battery() {
-        let mains = json!({"state": "on mains", "charge": 100, "load": 1, "runtime": null, "threshold": 20, "stopping": false});
+        let mains = json!({"state": "on mains", "charge": 100, "runtime": null, "threshold": 20, "stopping": false});
         let reading = ups(&mains).unwrap();
         assert_eq!(
-            vec![("Power", "Mains"), ("Battery", "100%"), ("Load", "1%")],
+            vec![("Power", "Mains"), ("Battery", "100%")],
             figures(&reading)
         );
         assert!(reading.rows.is_empty());
-        let battery = json!({"state": "on battery", "charge": 64, "load": 5, "runtime": 1800, "threshold": 20, "stopping": false});
+        let battery = json!({"state": "on battery", "charge": 64, "runtime": 1800, "threshold": 20, "stopping": false});
         let reading = ups(&battery).unwrap();
         assert_eq!(
-            vec![
-                ("Power", "Battery"),
-                ("Battery", "64%"),
-                ("Load", "5%"),
-                ("Runtime", "30m")
-            ],
+            vec![("Power", "Battery"), ("Battery", "64%"), ("Runtime", "30m")],
             figures(&reading)
         );
         assert_eq!("TrueNAS shuts down at 20%", reading.rows[0].detail);
