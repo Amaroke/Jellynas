@@ -22,7 +22,7 @@ services:
       kuma.music-bot.http.name: Music bot
       kuma.music-bot.http.url: http://music-bot:8000/health
       dashboard.name: Music bot
-      dashboard.section: Watch
+      dashboard.section: Discord
       dashboard.icon: discord.svg
       dashboard.widget: music-bot
       dashboard.switchable: "true"

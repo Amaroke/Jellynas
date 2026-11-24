@@ -16,7 +16,7 @@ services:
       kuma.flaresolverr.http.name: FlareSolverr
       kuma.flaresolverr.http.url: http://flaresolverr:8191/health
       dashboard.name: FlareSolverr
-      dashboard.section: Automation
+      dashboard.section: Downloads
       dashboard.description: Cloudflare for Prowlarr
       dashboard.monitor: http://flaresolverr:8191/health
       dashboard.icon: flaresolverr.svg
