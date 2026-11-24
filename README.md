@@ -2294,7 +2294,8 @@ service a deploy creates without starting. A row with a list, such as the
 next days of Sonarr, unfolds. The rail on the
 right shows what plays on Jellyfin and its latest additions, the Requests
 waiting in Seerr with buttons to approve or decline them, the torrents of
-qBittorrent, the downloads of Aurral with a switch to pause them, each indexer,
+qBittorrent, the artists, albums and tracks in the Library of Aurral and its
+downloads with a switch to pause them, each indexer,
 proxy and download client of Prowlarr, Radarr and Sonarr as on, off, failing or
 paused by ratio with their health warnings, and buttons to turn an indexer or a
 download client on or off and to retry a failing one. A warning that only says

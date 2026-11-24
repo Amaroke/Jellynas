@@ -225,7 +225,15 @@ impl Client {
             ),
             "aurral" => {
                 let auth = self.key("AURRAL", "X-Api-Key")?;
+                let total = |kind: &str| {
+                    self.fetch(
+                        "AURRAL",
+                        &format!("/api/library?kind={kind}&pageSize=1&compact=true"),
+                        &auth,
+                    )
+                };
                 parse::aurral(
+                    [&total("artists")?, &total("albums")?, &total("tracks")?],
                     &self.fetch("AURRAL", "/api/playlists/worker/settings", &auth)?,
                     &self.fetch("AURRAL", "/api/library/downloads/active", &auth)?,
                 )
