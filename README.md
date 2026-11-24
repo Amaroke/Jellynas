@@ -561,7 +561,7 @@ restart it as in [Jellyfin behind Caddy](#jellyfin-behind-caddy). The Accounts:
 | Media conversion                         | Off, it transcodes on the CPU |
 | Media downloading                        | On, for videos, books, manga  |
 | Remote control of other users            | Off                           |
-| Active sessions                          | 1 at a time                   |
+| Active sessions                          | 3 at a time                   |
 | Failed sign-ins before lockout           | 3                             |
 | SyncPlay                                 | Create and join groups        |
 | Libraries                                | Public and their Private one  |
