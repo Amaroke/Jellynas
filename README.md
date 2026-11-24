@@ -2415,7 +2415,7 @@ that service off.
 
 The `ups` service, `services/ups`, written in Rust, reads the UPS itself every
 5 seconds, through the HID feature reports of its USB device: mains present, the
-low battery flag, the charge, the runtime and the load. It needs no driver and
+low battery flag, the charge and the runtime. It needs no driver and
 no privilege, only the USB device nodes, opened through `device_cgroup_rules`.
 It then:
 

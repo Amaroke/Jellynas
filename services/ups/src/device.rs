@@ -29,7 +29,6 @@ pub struct Reading {
     pub imminent: bool,
     pub charge: u8,
     pub runtime: Option<u32>,
-    pub load: Option<u8>,
 }
 
 impl Reading {
@@ -43,7 +42,6 @@ impl Reading {
             "imminent": self.imminent,
             "charge": self.charge,
             "runtime": self.runtime,
-            "load": self.load,
         })
     }
 }
@@ -91,7 +89,7 @@ fn feature(file: &File, report: u8) -> Result<Vec<u8>, String> {
     Ok(buffer[..got as usize].to_vec())
 }
 
-pub fn parse(status: &[u8], capacity: &[u8], load: &[u8]) -> Result<Reading, String> {
+pub fn parse(status: &[u8], capacity: &[u8]) -> Result<Reading, String> {
     if status.len() < 4 || status[0] != 0x01 || capacity.len() < 6 || capacity[0] != 0x06 {
         return Err("unexpected reports from the UPS".to_string());
     }
@@ -106,7 +104,6 @@ pub fn parse(status: &[u8], capacity: &[u8], load: &[u8]) -> Result<Reading, Str
         imminent: status[3] != 0,
         charge: capacity[1],
         runtime: (runtime < UNKNOWN_RUNTIME).then_some(runtime),
-        load: (load.len() > 6 && load[0] == 0x07).then(|| load[6]),
     })
 }
 
@@ -118,11 +115,7 @@ pub fn read(vendor: &str) -> Result<Reading, String> {
         .write(true)
         .open(&path)
         .map_err(|error| format!("cannot open {path}: {error}"))?;
-    parse(
-        &feature(&file, 0x01)?,
-        &feature(&file, 0x06)?,
-        &feature(&file, 0x07)?,
-    )
+    parse(&feature(&file, 0x01)?, &feature(&file, 0x06)?)
 }
 
 #[cfg(test)]
@@ -132,7 +125,6 @@ pub mod tests {
     pub const MAINS: [u8; 4] = [0x01, 0x31, 0x00, 0x00];
     pub const BATTERY: [u8; 4] = [0x01, 0x30, 0x00, 0x00];
     pub const LOW: [u8; 4] = [0x01, 0x32, 0x00, 0x00];
-    pub const LOAD: [u8; 8] = [0x07, 0x02, 0x02, 0x01, 0x00, 0x03, 0x01, 0x02];
 
     pub fn capacity(charge: u8, runtime: u32) -> Vec<u8> {
         let mut found = vec![0x06, charge];
@@ -146,36 +138,34 @@ pub mod tests {
     }
 
     #[test]
-    fn the_reports_give_the_power_the_charge_and_the_load() {
-        let found = parse(&MAINS, &capacity(100, 0xFFFF), &LOAD).unwrap();
+    fn the_reports_give_the_power_and_the_charge() {
+        let found = parse(&MAINS, &capacity(100, 0xFFFF)).unwrap();
         assert!(found.mains);
         assert!(!found.low);
         assert_eq!(100, found.charge);
         assert_eq!(None, found.runtime);
-        assert_eq!(Some(1), found.load);
     }
 
     #[test]
     fn the_discharging_bit_alone_does_not_mean_on_battery() {
-        assert!(parse(&MAINS, &capacity(100, 0xFFFF), &LOAD).unwrap().mains);
-        let battery = parse(&BATTERY, &capacity(90, 1800), &LOAD).unwrap();
+        assert!(parse(&MAINS, &capacity(100, 0xFFFF)).unwrap().mains);
+        let battery = parse(&BATTERY, &capacity(90, 1800)).unwrap();
         assert!(!battery.mains);
         assert_eq!(Some(1800), battery.runtime);
     }
 
     #[test]
     fn the_flags_of_trouble_are_read() {
-        let low = parse(&LOW, &capacity(30, 600), &[]).unwrap();
+        let low = parse(&LOW, &capacity(30, 600)).unwrap();
         assert!(low.low);
-        assert_eq!(None, low.load);
-        let imminent = parse(&[0x01, 0x30, 0x01, 0x01], &capacity(30, 600), &LOAD).unwrap();
+        let imminent = parse(&[0x01, 0x30, 0x01, 0x01], &capacity(30, 600)).unwrap();
         assert!(imminent.overload && imminent.imminent);
     }
 
     #[test]
     fn reports_of_another_device_are_refused() {
-        assert!(parse(&[0x02, 0x31], &capacity(100, 0), &LOAD).is_err());
-        assert!(parse(&MAINS, &[0x06, 100], &LOAD).is_err());
+        assert!(parse(&[0x02, 0x31], &capacity(100, 0)).is_err());
+        assert!(parse(&MAINS, &[0x06, 100]).is_err());
     }
 
     #[test]

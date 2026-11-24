@@ -99,7 +99,7 @@ impl Watch {
 mod tests {
     use super::*;
     use crate::device::parse;
-    use crate::device::tests::{BATTERY, LOAD, MAINS, capacity};
+    use crate::device::tests::{BATTERY, MAINS, capacity};
 
     struct Run {
         watch: Watch,
@@ -116,7 +116,7 @@ mod tests {
 
         fn tick(&mut self, status: &[u8], charge: u8) -> Vec<&'static str> {
             self.now += 5;
-            let reading = parse(status, &capacity(charge, 0xFFFF), &LOAD).unwrap();
+            let reading = parse(status, &capacity(charge, 0xFFFF)).unwrap();
             self.watch.update(reading, self.now)
         }
     }
