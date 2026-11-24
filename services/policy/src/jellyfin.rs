@@ -5,6 +5,7 @@ use serde_json::{Map, Value, json};
 
 const IDLE: SignedDuration = SignedDuration::from_hours(30 * 24);
 const LDAP_PLUGIN: &str = "/Plugins/958aad6637844d2ab89aa7b6fab6e25c/Configuration";
+const THEME: &str = "@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/ElegantFin-theme-v26.09.05.css\");\n@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/assets/add-ons/media-bar-plugin-support-v26.09.05.css\");\n";
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Shelves {
@@ -172,6 +173,13 @@ pub fn server() -> Vec<(&'static str, &'static str, Map<String, Value>)> {
                 "KnownProxies": ["caddy"],
                 "EnableRemoteAccess": true,
                 "EnableUPnP": false,
+            })),
+        ),
+        (
+            "branding",
+            "/System/Configuration/branding",
+            rules(json!({
+                "CustomCss": THEME,
             })),
         ),
     ]
@@ -527,5 +535,15 @@ mod tests {
         assert_eq!(vec!["POST /System/Configuration/encoding"], fake.paths());
         assert_eq!(json!(true), fake.body(0)["EnableThrottling"]);
         assert_eq!(json!("kept"), fake.body(0)["Untouched"]);
+    }
+
+    #[test]
+    fn a_theme_removed_by_hand_comes_back() {
+        let mut pages = in_line();
+        pages.get_mut("/System/Configuration/branding").unwrap()["CustomCss"] = json!("");
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), pass(&fake, now(), &[]));
+        assert_eq!(vec!["POST /System/Configuration/branding"], fake.paths());
+        assert_eq!(json!(THEME), fake.body(0)["CustomCss"]);
     }
 }
