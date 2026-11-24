@@ -8,7 +8,7 @@ PUBLIC_ALIASES = {"jellyfin.${DOMAIN}", "seerr.${DOMAIN}", "auth.${DOMAIN}", "au
 ZONE_MEMBERS = {
     "jellyfin-zone": {"caddy", "jellyfin", "lldap"},
     "seerr-zone": {"caddy", "seerr", "radarr", "sonarr"},
-    "identity-zone": {"caddy", "authelia", "lldap"},
+    "identity-zone": {"caddy", "authelia", "lldap", "policy"},
     "aurral-zone": {"caddy", "aurral", "gluetun"},
     "dashboard-docker-zone": {"dashboard", "dashboard-socket-proxy"},
 }

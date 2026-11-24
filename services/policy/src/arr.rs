@@ -100,7 +100,7 @@ fn client_changes(client: &Value, wanted: &Map<String, Value>) -> (Map<String, V
     (changes, whole)
 }
 
-pub fn enforce(arr: &Arr, api: &impl Api) -> Result<usize, String> {
+pub fn enforce(arr: &Arr, api: &impl Api, private: &[String]) -> Result<usize, String> {
     let mut changed = 0;
     for (page, path, wanted) in arr.pages() {
         let current = api.get(path)?;
@@ -117,7 +117,12 @@ pub fn enforce(arr: &Arr, api: &impl Api) -> Result<usize, String> {
                 .collect()
         })
         .unwrap_or_default();
-    for root in arr.roots.iter().filter(|root| !known.contains(root)) {
+    let wanted = arr
+        .roots
+        .iter()
+        .copied()
+        .chain(private.iter().map(String::as_str));
+    for root in wanted.filter(|root| !known.contains(root)) {
         api.send("POST", "/rootfolder", &json!({"path": root}))?;
         println!("{} root folders: added {root}", arr.name);
         changed += 1;
@@ -182,7 +187,7 @@ mod tests {
     #[test]
     fn a_radarr_in_line_needs_nothing() {
         let fake = Fake::new(in_line(&radarr()));
-        assert_eq!(Ok(0), enforce(&radarr(), &fake));
+        assert_eq!(Ok(0), enforce(&radarr(), &fake, &[]));
         assert!(fake.paths().is_empty());
     }
 
@@ -191,7 +196,7 @@ mod tests {
         let mut pages = in_line(&radarr());
         pages.get_mut("/config/host").unwrap()["analyticsEnabled"] = json!(true);
         let fake = Fake::new(pages);
-        assert_eq!(Ok(1), enforce(&radarr(), &fake));
+        assert_eq!(Ok(1), enforce(&radarr(), &fake, &[]));
         assert_eq!(vec!["PUT /config/host/1"], fake.paths());
         assert_eq!(json!(false), fake.body(0)["analyticsEnabled"]);
         assert_eq!(json!("kept"), fake.body(0)["untouched"]);
@@ -203,7 +208,7 @@ mod tests {
             let mut pages = in_line(&arr);
             pages.get_mut("/config/mediamanagement").unwrap()["copyUsingHardlinks"] = json!(false);
             let fake = Fake::new(pages);
-            assert_eq!(Ok(1), enforce(&arr, &fake));
+            assert_eq!(Ok(1), enforce(&arr, &fake, &[]));
             assert_eq!(vec!["PUT /config/mediamanagement/1"], fake.paths());
             assert_eq!(json!(true), fake.body(0)["copyUsingHardlinks"]);
         }
@@ -217,9 +222,31 @@ mod tests {
         tv["fields"][3] = json!({"name": "tvCategory", "value": "shows"});
         pages.insert("/downloadclient".into(), json!([tv]));
         let fake = Fake::new(pages);
-        assert_eq!(Ok(1), enforce(&sonarr(), &fake));
+        assert_eq!(Ok(1), enforce(&sonarr(), &fake, &[]));
         assert_eq!(vec!["POST /rootfolder"], fake.paths());
         assert_eq!(json!({"path": "/data/media/anime"}), fake.body(0));
+    }
+
+    #[test]
+    fn each_private_folder_becomes_a_root_folder() {
+        for arr in [radarr(), sonarr()] {
+            let mut pages = in_line(&arr);
+            let mut roots: Vec<Value> =
+                arr.roots.iter().map(|path| json!({"path": path})).collect();
+            roots.push(json!({"path": "/data/media/private/elea_t"}));
+            pages.insert("/rootfolder".into(), json!(roots));
+            let private = [
+                "/data/media/private/elea_t".to_string(),
+                "/data/media/private/moutondu".to_string(),
+            ];
+            let fake = Fake::new(pages);
+            enforce(&arr, &fake, &private).unwrap();
+            assert_eq!(vec!["POST /rootfolder"], fake.paths()[..1].to_vec());
+            assert_eq!(
+                json!({"path": "/data/media/private/moutondu"}),
+                fake.body(0)
+            );
+        }
     }
 
     #[test]
@@ -229,7 +256,7 @@ mod tests {
         let mut pages = in_line(&radarr());
         pages.insert("/downloadclient".into(), json!([paused]));
         let fake = Fake::new(pages);
-        assert_eq!(Ok(1), enforce(&radarr(), &fake));
+        assert_eq!(Ok(1), enforce(&radarr(), &fake, &[]));
         assert_eq!(vec!["PUT /downloadclient/1?forceSave=true"], fake.paths());
         let saved = fake.body(0);
         assert_eq!(json!(false), saved["enable"]);
@@ -246,6 +273,6 @@ mod tests {
             json!([{"id": 2, "implementation": "Transmission", "removeCompletedDownloads": false, "fields": []}]),
         );
         let fake = Fake::new(pages);
-        assert_eq!(Ok(0), enforce(&radarr(), &fake));
+        assert_eq!(Ok(0), enforce(&radarr(), &fake, &[]));
     }
 }
