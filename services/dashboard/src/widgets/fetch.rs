@@ -218,6 +218,7 @@ impl Client {
                     &self.url("JELLYFIN", "")?,
                 )
             }
+            "ups" => parse::ups(&self.fetch("UPS", "/status", &vec![])?),
             "music-bot" => parse::music_bot(
                 &self.fetch("MUSIC_BOT", "/status", &vec![])?,
                 &self.url("JELLYFIN", "")?,

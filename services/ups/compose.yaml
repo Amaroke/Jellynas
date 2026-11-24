@@ -1,0 +1,42 @@
+---
+services:
+  ups:
+    build: .
+    container_name: ups
+    restart: unless-stopped
+    networks:
+      - internal-zone
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    read_only: true
+    mem_limit: 32m
+    device_cgroup_rules:
+      - "c 189:* rw"
+    environment:
+      TZ: ${TZ}
+      UPS_VENDOR_ID: ${UPS_VENDOR_ID:-}
+      UPS_SHUTDOWN_CHARGE: ${UPS_SHUTDOWN_CHARGE:-}
+      TRUENAS_API_KEY: ${TRUENAS_API_KEY}
+      DISCORD_ALERTS_WEBHOOK_ID: ${DISCORD_ALERTS_WEBHOOK_ID:-}
+      DISCORD_ALERTS_WEBHOOK_TOKEN: ${DISCORD_ALERTS_WEBHOOK_TOKEN:-}
+    labels:
+      kuma.ups.http.name: UPS
+      kuma.ups.http.url: http://ups:8000/health
+      dashboard.name: UPS
+      dashboard.section: Hosting
+      dashboard.description: Battery of the UPS, shuts TrueNAS down when low
+      dashboard.icon: network-ups-tools.svg
+      dashboard.widget: ups
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb:ro
+    healthcheck:
+      test:
+        - "CMD"
+        - "/ups"
+        - "health"
+      timeout: 10s
+      start_period: 30s
