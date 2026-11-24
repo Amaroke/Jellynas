@@ -6,7 +6,6 @@ use std::collections::BTreeMap;
 pub struct Sample {
     pub total: u64,
     pub system: u64,
-    pub cpus: u64,
     pub memory: u64,
     pub network: Option<Traffic>,
 }
@@ -48,14 +47,9 @@ pub fn sample(stats: &Value) -> Option<Sample> {
         .as_u64()
         .or_else(|| memory["stats"]["inactive_file"].as_u64())
         .unwrap_or(0);
-    let cores = cpu["cpu_usage"]["percpu_usage"]
-        .as_array()
-        .map(|cores| cores.len() as u64)
-        .filter(|cores| *cores > 0);
     Some(Sample {
         total: cpu["cpu_usage"]["total_usage"].as_u64()?,
         system: cpu["system_cpu_usage"].as_u64()?,
-        cpus: cpu["online_cpus"].as_u64().or(cores).unwrap_or(1),
         memory: usage.saturating_sub(inactive),
         network: traffic(stats),
     })
@@ -74,7 +68,7 @@ pub fn cpu(before: &Sample, after: &Sample) -> Option<f64> {
         .checked_sub(before.system)
         .filter(|delta| *delta > 0)?;
     let total = after.total.checked_sub(before.total)?;
-    Some(total as f64 / system as f64 * after.cpus as f64 * 100.0)
+    Some(total as f64 / system as f64 * 100.0)
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -121,7 +115,6 @@ mod tests {
         let expected = Sample {
             total: 100,
             system: 1000,
-            cpus: 4,
             memory: 7_000_000,
             network: None,
         };
@@ -137,7 +130,6 @@ mod tests {
         let expected = Sample {
             total: 5,
             system: 9,
-            cpus: 2,
             memory: 600,
             network: None,
         };
@@ -145,10 +137,10 @@ mod tests {
     }
 
     #[test]
-    fn the_cpu_share_compares_two_samples_like_docker_stats() {
+    fn the_cpu_share_is_a_part_of_the_whole_machine() {
         let before = sample(&stats(1_000, 100_000, 0, 0)).unwrap();
         let after = sample(&stats(3_000, 200_000, 0, 0)).unwrap();
-        assert_eq!(Some(8.0), cpu(&before, &after));
+        assert_eq!(Some(2.0), cpu(&before, &after));
         assert_eq!(None, cpu(&after, &after));
         assert_eq!(None, cpu(&after, &before));
     }
