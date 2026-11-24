@@ -496,7 +496,7 @@ function facts(service) {
   const found = board.widgets[service.service];
   const node = element("span", { class: "facts" });
   const reading = found && found.reading;
-  if (reading) for (const figure of reading.figures) node.append(element("span", {}, figure.label, element("b", {}, figure.value)));
+  if (reading && !LINKED.has(service.widget)) for (const figure of reading.figures) node.append(element("span", {}, figure.label, element("b", {}, figure.value)));
   for (const link of linksOf(service).links) {
     if (link.state === "off" || link.state === "failing") node.append(element("span", { class: link.state === "failing" ? "failed" : "off" }, `${link.name} ${says(link).toLowerCase()}`));
   }
@@ -637,7 +637,9 @@ function rail(services) {
     node.append(block(title, service, nodes));
   }
   for (const service of services.filter(item => LINKED.has(item.widget))) {
-    node.append(block(service.name, service, [...connections(service), ...trouble(board.widgets[service.service])]));
+    const reading = board.widgets[service.service] && board.widgets[service.service].reading;
+    const shown = reading && reading.figures.length ? [figures(reading)] : [];
+    node.append(block(service.name, service, [...shown, ...connections(service), ...trouble(board.widgets[service.service])]));
   }
   return node;
 }
