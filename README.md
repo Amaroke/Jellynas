@@ -579,25 +579,22 @@ subtitles, stay theirs to set.
 ### Theme
 
 The web client wears [ElegantFin](https://github.com/lscambo13/ElegantFin), a
-sober dark theme, with its add-on for the Media Bar. [policy](#policy) keeps
-its Custom CSS, pinned to a release in `THEME` of
-`services/policy/src/jellyfin.rs`. The Media Bar plugin turns the top of the
-home page into a slideshow of backdrops, logos and overviews.
+sober dark theme. [policy](#policy) keeps its Custom CSS, pinned to a release in
+`THEME` of `services/policy/src/jellyfin.rs`, and shows again the buttons the
+theme hides on each card, such as the one that marks an item as played.
+
+A "Faire une requête" button in the header opens Seerr. [policy](#policy)
+keeps its script, `REQUEST_BUTTON`, in the JavaScript Injector plugin, which is
+installed once by hand:
 
 1. In Dashboard > Plugins > Repositories, add
-   `https://www.iamparadox.dev/jellyfin/plugins/manifest.json`.
-2. In Dashboard > Plugins > Catalog, install "Media Bar". It pulls "File
-   Transformation" along.
+   `https://raw.githubusercontent.com/n00bcodr/jellyfin-plugins/main/manifest.json`.
+2. In Dashboard > Plugins > Catalog, install "JavaScript Injector".
 3. Restart Jellyfin:
 
 ```sh
 docker restart jellyfin
 ```
-
-Each library takes several backdrops and a logo per item, under Manage
-library > Image fetchers, so the slideshow has something to rotate. Each
-Account turns on "Backdrops" in Settings > Display to see them behind each
-page.
 
 ### Jellyfin behind Caddy
 
