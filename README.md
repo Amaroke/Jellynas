@@ -157,7 +157,8 @@ cross-seed hardlinks its matches into `cross-seed`, and slskd downloads into
     ├── music
     ├── aurral
     ├── books
-    └── manga
+    ├── manga
+    └── private
 ```
 
 Create both roots, the folder of the archives, the recycle bins of Radarr and
@@ -169,7 +170,7 @@ first start:
 mkdir -p "$BACKUP_ROOT" \
   "$DATA_ROOT"/torrents/{farm,cross-seed} \
   "$DATA_ROOT"/torrents/soulseek/{downloads,incomplete} \
-  "$DATA_ROOT"/media/{movies,shows,anime,music,aurral,books,manga} \
+  "$DATA_ROOT"/media/{movies,shows,anime,music,aurral,books,manga,private} \
   "$DATA_ROOT"/media/{movies,shows}/.recycle \
   "$APPDATA_ROOT"/{seerr,lldap,authelia,aurral,recyclarr,autobrr,cross-seed} \
   "$APPDATA_ROOT"/{ratio,discord-posts,pr-radar,slskd,suwayomi} \
@@ -209,7 +210,7 @@ networks:
 | `jellyfin-zone` | Caddy, Jellyfin, lldap                                     |
 | `seerr-zone`    | Caddy, Seerr, Radarr, Sonarr                               |
 | `aurral-zone`   | Caddy, Aurral, Gluetun                                     |
-| `identity-zone` | Caddy, Authelia, lldap                                     |
+| `identity-zone` | Caddy, Authelia, lldap, policy                             |
 | `internal-zone` | every other service, plus Caddy, Radarr, Sonarr, Gluetun   |
 
 qBittorrent and slskd share the network of Gluetun, in the internal zone, as
@@ -219,9 +220,10 @@ from another zone, such as the Dashboard, Uptime Kuma, the Music bot, or Aurral
 signing in with Authelia, reaches it through Caddy at its public name, so the
 zones only open towards the public services, never from them. lldap speaks LDAP,
 which Caddy cannot carry, so it sits in the zones of Jellyfin and of Authelia,
-the only two services that read the Accounts, and has no public name. The zones
-hand out IPv6 addresses too, and Jellyfin tries them first, so lldap listens on
-`::`. `python3 -m unittest` checks the members of each zone.
+the only two services that read the Accounts over LDAP, and has no public name.
+policy reads the Accounts through the API of lldap, from the zone of Authelia.
+The zones hand out IPv6 addresses too, and Jellyfin tries them first, so lldap
+listens on `::`. `python3 -m unittest` checks the members of each zone.
 
 Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS
 provider, swap the `caddy-dns/ovh` module in `services/caddy/Dockerfile` for its
@@ -481,13 +483,34 @@ instead.
 Jellyfin adds a Collections library of its own once a movie belongs to a
 collection. Leave it as it is.
 
+### Private libraries
+
+Each Account of the group `jellynas_users` in lldap gets a Private library,
+which only that Account sees, the Admin included. policy prepares it at each
+pass, before the first sign-in of the Account:
+
+- the folder `/data/media/private/<username>`, readable by the apps only,
+- a Jellyfin library of the content type "Mixed" on that folder, named after
+  the display name of the Account in lldap, so movies and shows sit together
+  in one library,
+- a root folder on that folder in Radarr and in Sonarr, which Seerr offers
+  when the Admin approves a Request, as [Requests](#requests) sets out.
+
+The owner of a Private library is the last folder of its path, so a library
+added by hand on `/data/media/private/<username>` belongs to that Account too.
+policy grants every Account the public libraries and its own Private library,
+and takes away any other Private library. Renaming a Private library in the
+Dashboard is fine, policy only looks at its folder. It never deletes a folder,
+a library or a root folder, even when the Account leaves lldap.
+
 ### Friend Accounts
 
 Each Friend gets their own Account, so their watch history and progress are
 theirs. The Accounts live in lldap, as [Accounts](#accounts) sets out, and
-Jellyfin creates its user at the first sign-in of a Friend, with access to all
-libraries and without the right to manage the server. At the next pass of
-policy, at 4:30 in the morning, it gets the rules below.
+Jellyfin creates its user at the first sign-in of a Friend, with access to the
+public libraries only and without the right to manage the server. At the next
+pass of policy, at 4:30 in the morning, it gets the rules below and its
+[Private library](#private-libraries). Restart policy to give them at once.
 
 Quick Connect stays on: a Friend signs in on a TV by typing the code it shows
 into Jellyfin on their phone, without typing their password on the TV.
@@ -541,6 +564,7 @@ restart it as in [Jellyfin behind Caddy](#jellyfin-behind-caddy). The Accounts:
 | Active sessions                          | 1 at a time                   |
 | Failed sign-ins before lockout           | 3                             |
 | SyncPlay                                 | Create and join groups        |
+| Libraries                                | Public and their Private one  |
 | Deletion of media                        | Off, except for the Admin     |
 | Disabled after 30 days without activity  | On, except for the Admin      |
 | Next episode plays by itself             | On                            |
@@ -618,19 +642,22 @@ and `LLDAP_ADMIN_PASSWORD`. Then:
 1. In Groups, create `jellynas_users` and `jellynas_admins`.
 2. In Users, create `authelia` with `LLDAP_AUTHELIA_PASSWORD`, and add it to
    `lldap_strict_readonly`.
-3. Create `jellyfin` with a long random password, and add it to
+3. Create `policy` with `LLDAP_POLICY_PASSWORD`, and add it to
+   `lldap_strict_readonly`, so that policy reads the Accounts to prepare their
+   [Private libraries](#private-libraries).
+4. Create `jellyfin` with a long random password, and add it to
    `lldap_password_manager`, so that Jellyfin can write the new password of a
    Friend. That group changes the password of any Account outside
    `lldap_admin`, the Admin included, so a flaw in Jellyfin could too. Keep the
    password for the next step, nothing else uses it.
-4. Create one user per Friend and one for the Admin, with the same username as
+5. Create one user per Friend and one for the Admin, with the same username as
    their Jellyfin user if they already have one, and add each to
    `jellynas_users`, without which Jellyfin refuses the Account. Add the Admin
    to `jellynas_admins` too. lldap keeps the username in lowercase and the
    display name as typed. It asks for an email: nothing sends mail, so a
    placeholder such as `<username>@jellynas.invalid` works for a Friend who
    gives none. `.invalid` is a reserved domain that never receives mail.
-5. Give each Friend a long random password, and send it to them over a private
+6. Give each Friend a long random password, and send it to them over a private
    channel. They change it in Jellyfin at their first sign-in.
 
 ### Jellyfin with lldap
@@ -654,7 +681,7 @@ and `LLDAP_ADMIN_PASSWORD`. Then:
    | LDAP Admin Base DN | `ou=people,dc=jellynas` |
    | LDAP Admin Filter | `(memberof=cn=jellynas_admins,ou=groups,dc=jellynas)` |
    | Enable User Creation | checked |
-   | Enable access to all libraries | checked |
+   | Enable access to all libraries | unchecked, policy keeps the list |
    | Allow Password Change | checked |
    | LDAP Password Attribute | `userPassword` |
 
@@ -1426,6 +1453,13 @@ An approved Request is then searched by Radarr or Sonarr, downloaded by
 qBittorrent into the torrents tree, and copied into the movies, shows or anime
 folder, where Jellyfin picks it up. New episodes of a monitored show follow on
 their own.
+
+A Request goes to the movies, shows or anime folder by default. To send it to
+the [Private library](#private-libraries) of an Account instead, open it in
+Seerr, click "Edit Request", pick `/data/media/private/<username>` as the root
+folder, and approve it. Radarr and Sonarr then file it there, and only that
+Account sees it in Jellyfin. Keep every "Auto-Approve" permission off in Seerr,
+or a Request skips this choice and lands in the public library.
 
 === TO BE REWORKED: everything below ===
 

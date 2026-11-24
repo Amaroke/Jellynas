@@ -1,3 +1,4 @@
+mod accounts;
 mod api;
 mod arr;
 mod aurral;
@@ -5,9 +6,11 @@ mod jellyfin;
 mod lazylibrarian;
 mod suwayomi;
 
+use accounts::{Account, Directory, PRIVATE_ROOT};
 use api::{Http, basic};
 use jiff::ZonedDateTime;
 use jiff::civil::{Time, time};
+use std::path::Path;
 use std::time::{Duration, SystemTime};
 use std::{env, fs, process, thread};
 
@@ -35,10 +38,13 @@ impl App {
         }
     }
 
-    fn enforce(&self) -> Result<usize, String> {
+    fn enforce(&self, accounts: &[Account]) -> Result<usize, String> {
         match self {
-            App::Jellyfin(api) => jellyfin::enforce(api),
-            App::Arr(arr, api) => arr::enforce(arr, api),
+            App::Jellyfin(api) => jellyfin::enforce(api, accounts),
+            App::Arr(arr, api) => {
+                let private: Vec<String> = accounts.iter().map(Account::folder).collect();
+                arr::enforce(arr, api, &private)
+            }
             App::Aurral(api) => aurral::enforce(api),
             App::LazyLibrarian(api) => lazylibrarian::enforce(api),
             App::Suwayomi(api) => suwayomi::enforce(api),
@@ -94,6 +100,22 @@ fn apps(vars: impl Fn(&str) -> Option<String>) -> Vec<App> {
     apps
 }
 
+fn directory(vars: impl Fn(&str) -> Option<String>) -> Option<Directory> {
+    vars("LLDAP_POLICY_PASSWORD")
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(|password| Directory {
+            base: "http://lldap:17170".into(),
+            password,
+        })
+}
+
+fn private_accounts(directory: &Directory) -> Result<Vec<Account>, String> {
+    let accounts = directory.accounts()?;
+    accounts::shelve(Path::new(PRIVATE_ROOT), &accounts)?;
+    Ok(accounts)
+}
+
 fn healthy(last_pass: Option<SystemTime>, now: SystemTime) -> bool {
     last_pass
         .and_then(|time| now.duration_since(time).ok())
@@ -135,12 +157,21 @@ fn main() {
         eprintln!("No app to keep: set the API key of an app, or the login of Suwayomi, in .env");
         process::exit(1);
     }
+    let directory = directory(|name| env::var(name).ok());
     let names: Vec<&str> = apps.iter().map(App::name).collect();
     println!("Keeping the settings of {}", names.join(", "));
     loop {
         let mut failed = false;
+        let accounts = match &directory {
+            Some(directory) => private_accounts(directory).unwrap_or_else(|error| {
+                eprintln!("Cannot prepare the private libraries: {error}");
+                failed = true;
+                vec![]
+            }),
+            None => vec![],
+        };
         for app in &apps {
-            if let Err(error) = app.enforce() {
+            if let Err(error) = app.enforce(&accounts) {
                 eprintln!("Cannot keep the settings of {}: {error}", app.name());
                 failed = true;
             }
@@ -245,6 +276,14 @@ mod tests {
             panic!("Jellyfin is kept")
         };
         assert_eq!("https://jellyfin.example.org:443", api.base);
+    }
+
+    #[test]
+    fn the_private_libraries_need_the_password_of_policy_in_lldap() {
+        assert!(directory(vars(&[("LLDAP_POLICY_PASSWORD", " ")])).is_none());
+        let found = directory(vars(&[("LLDAP_POLICY_PASSWORD", "p")])).unwrap();
+        assert_eq!("http://lldap:17170", found.base);
+        assert_eq!("p", found.password);
     }
 
     #[test]

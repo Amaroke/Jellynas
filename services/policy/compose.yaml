@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     networks:
       - internal-zone
+      - identity-zone
     security_opt:
       - no-new-privileges
     cap_drop:
@@ -26,6 +27,9 @@ services:
       LAZYLIBRARIAN_API_KEY: ${LAZYLIBRARIAN_API_KEY:-}
       SUWAYOMI_USERNAME: ${SUWAYOMI_USERNAME:-}
       SUWAYOMI_PASSWORD: ${SUWAYOMI_PASSWORD:-}
+      LLDAP_POLICY_PASSWORD: ${LLDAP_POLICY_PASSWORD:-}
+    volumes:
+      - ${DATA_ROOT}/media/private:/data/media/private
     labels:
       kuma.policy.docker.name: Policy
       dashboard.name: Policy

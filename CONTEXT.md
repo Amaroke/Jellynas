@@ -32,6 +32,11 @@ _Avoid_: demand, ticket
 The movies, shows, anime, music, books and manga served by Jellyfin.
 _Avoid_: media collection, catalog
 
+**Private library**:
+The part of the Library that only one Account sees, in its own folder of the
+Media tree, where the Admin can send a Request instead of the shared Library.
+_Avoid_: personal library, prive
+
 **Media tree**:
 The folders of the data root that hold the Library.
 _Avoid_: media folder, library folder

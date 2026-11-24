@@ -1,8 +1,141 @@
+use crate::accounts::{Account, PRIVATE_ROOT};
 use crate::api::{Api, report, rules, settle};
 use jiff::{SignedDuration, Timestamp};
 use serde_json::{Map, Value, json};
 
 const IDLE: SignedDuration = SignedDuration::from_hours(30 * 24);
+const LDAP_PLUGIN: &str = "/Plugins/958aad6637844d2ab89aa7b6fab6e25c/Configuration";
+
+#[derive(Debug, Default, PartialEq)]
+pub struct Shelves {
+    pub public: Vec<String>,
+    pub private: Vec<(String, String)>,
+}
+
+impl Shelves {
+    pub fn read(folders: &Value) -> Self {
+        let mut shelves = Shelves::default();
+        for folder in folders.as_array().into_iter().flatten() {
+            let Some(id) = folder["ItemId"].as_str() else {
+                continue;
+            };
+            let locations: Vec<&str> = folder["Locations"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            if !locations.iter().any(|path| path.starts_with(PRIVATE_ROOT)) {
+                shelves.public.push(id.to_string());
+                continue;
+            }
+            for owner in locations.iter().filter_map(|path| owner(path)) {
+                shelves.private.push((owner.to_string(), id.to_string()));
+            }
+        }
+        shelves.public.sort_unstable();
+        shelves
+    }
+
+    pub fn of(&self, user: &str) -> Vec<String> {
+        let user = user.to_lowercase();
+        let mut ids: Vec<String> = self.public.clone();
+        ids.extend(
+            self.private
+                .iter()
+                .filter(|(owner, _)| *owner == user)
+                .map(|(_, id)| id.clone()),
+        );
+        ids.sort_unstable();
+        ids.dedup();
+        ids
+    }
+}
+
+fn owner(path: &str) -> Option<&str> {
+    path.strip_prefix(PRIVATE_ROOT)?
+        .strip_prefix('/')
+        .map(|rest| rest.trim_end_matches('/'))
+        .filter(|rest| !rest.is_empty() && !rest.contains('/'))
+}
+
+fn kept_order(current: &Value, wanted: &[String]) -> Value {
+    let mut have: Vec<&str> = current
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    have.sort_unstable();
+    if have == wanted {
+        current.clone()
+    } else {
+        json!(wanted)
+    }
+}
+
+fn access(current: &Value, wanted: &[String]) -> Map<String, Value> {
+    rules(json!({
+        "EnableAllFolders": false,
+        "EnabledFolders": kept_order(&current["EnabledFolders"], wanted),
+    }))
+}
+
+fn encode(text: &str) -> String {
+    text.bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                char::from(byte).to_string()
+            }
+            _ => format!("%{byte:02X}"),
+        })
+        .collect()
+}
+
+fn library_name(account: &Account, folders: &Value) -> String {
+    let taken = folders
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|folder| folder["Name"].as_str() == Some(account.name.as_str()));
+    if taken {
+        format!("{} ({})", account.name, account.id)
+    } else {
+        account.name.clone()
+    }
+}
+
+fn shelve(api: &impl Api, accounts: &[Account]) -> Result<usize, String> {
+    let folders = api.get("/Library/VirtualFolders")?;
+    let shelves = Shelves::read(&folders);
+    let mut created = 0;
+    for account in accounts {
+        if shelves
+            .private
+            .iter()
+            .any(|(owner, _)| *owner == account.id)
+        {
+            continue;
+        }
+        let name = library_name(account, &folders);
+        let options = json!({"LibraryOptions": {
+            "PathInfos": [{"Path": account.folder()}],
+            "PreferredMetadataLanguage": "fr",
+            "MetadataCountryCode": "FR",
+        }});
+        api.send(
+            "POST",
+            &format!(
+                "/Library/VirtualFolders?name={}&collectionType=mixed&refreshLibrary=true",
+                encode(&name)
+            ),
+            &options,
+        )?;
+        println!("Jellyfin libraries: added {name} for {}", account.id);
+        created += 1;
+    }
+    Ok(created)
+}
 
 pub fn server() -> Vec<(&'static str, &'static str, Map<String, Value>)> {
     vec![
@@ -71,8 +204,10 @@ pub fn idle(user: &Value, now: Timestamp) -> bool {
         .is_some_and(|last| now.duration_since(last) >= IDLE)
 }
 
-pub fn wanted_policy(user: &Value, now: Timestamp) -> Map<String, Value> {
+pub fn wanted_policy(user: &Value, now: Timestamp, shelves: &Shelves) -> Map<String, Value> {
     let mut wanted = policy();
+    let name = user["Name"].as_str().unwrap_or_default();
+    wanted.extend(access(&user["Policy"], &shelves.of(name)));
     if user["Policy"]["IsAdministrator"] != json!(true) {
         wanted.insert("EnableContentDeletion".into(), json!(false));
         if idle(user, now) {
@@ -82,16 +217,27 @@ pub fn wanted_policy(user: &Value, now: Timestamp) -> Map<String, Value> {
     wanted
 }
 
-pub fn enforce(api: &impl Api) -> Result<usize, String> {
-    pass(api, Timestamp::now())
+pub fn enforce(api: &impl Api, accounts: &[Account]) -> Result<usize, String> {
+    pass(api, Timestamp::now(), accounts)
 }
 
-fn pass(api: &impl Api, now: Timestamp) -> Result<usize, String> {
+fn pass(api: &impl Api, now: Timestamp, accounts: &[Account]) -> Result<usize, String> {
     let mut changed = 0;
     for (page, path, wanted) in server() {
         let changes = settle(api, "POST", path, &api.get(path)?, &wanted)?;
         changed += report("Jellyfin", page, &[&changes]);
     }
+    changed += shelve(api, accounts)?;
+    let shelves = Shelves::read(&api.get("/Library/VirtualFolders")?);
+    let plugin = api.get(LDAP_PLUGIN)?;
+    let defaults = settle(
+        api,
+        "POST",
+        LDAP_PLUGIN,
+        &plugin,
+        &access(&plugin, &shelves.public),
+    )?;
+    changed += report("Jellyfin", "new Accounts", &[&defaults]);
     let users = api.get("/Users")?;
     for user in users.as_array().ok_or("Jellyfin sent no list of users")? {
         let id = user["Id"].as_str().ok_or("a user of Jellyfin has no Id")?;
@@ -100,7 +246,7 @@ fn pass(api: &impl Api, now: Timestamp) -> Result<usize, String> {
             "POST",
             &format!("/Users/{id}/Policy"),
             &user["Policy"],
-            &wanted_policy(user, now),
+            &wanted_policy(user, now, &shelves),
         )?;
         let configuration = settle(
             api,
@@ -121,15 +267,38 @@ mod tests {
     use crate::api::fake::Fake;
     use std::collections::BTreeMap;
 
+    const MOVIES: &str = "aa";
+    const ELEA: &str = "ee";
+    const VINCENT: &str = "vv";
+
+    fn library(id: &str, name: &str, path: &str) -> Value {
+        json!({"ItemId": id, "Name": name, "Locations": [path]})
+    }
+
+    fn libraries() -> Value {
+        json!([
+            library(MOVIES, "Films", "/data/media/movies"),
+            library(ELEA, "Eléa", "/data/media/private/elea_t"),
+            library(VINCENT, "Vincent", "/data/media/private/moutondu/"),
+        ])
+    }
+
     fn user(name: &str, admin: bool, overrides: Value) -> Value {
         let mut policy = policy();
         policy.insert("IsAdministrator".into(), json!(admin));
         policy.insert("EnableContentDeletion".into(), json!(admin));
-        policy.insert("EnableAllFolders".into(), json!(true));
+        policy.extend(access(&json!({}), &Shelves::read(&libraries()).of(name)));
         policy.extend(rules(overrides));
         let mut configuration = configuration();
         configuration.insert("SubtitleMode".into(), json!("Smart"));
         json!({"Id": format!("id-{name}"), "Name": name, "LastActivityDate": "2026-11-20T21:14:03.1234567Z", "Policy": policy, "Configuration": configuration})
+    }
+
+    fn account(id: &str, name: &str) -> Account {
+        Account {
+            id: id.into(),
+            name: name.into(),
+        }
     }
 
     fn now() -> Timestamp {
@@ -138,6 +307,10 @@ mod tests {
 
     fn seen(admin: bool, date: &str) -> Value {
         json!({"LastActivityDate": date, "Policy": {"IsAdministrator": admin}})
+    }
+
+    fn friend() -> Value {
+        json!({"Policy": {"IsAdministrator": false}})
     }
 
     fn in_line() -> BTreeMap<String, Value> {
@@ -149,10 +322,16 @@ mod tests {
                 (path.to_string(), Value::Object(page))
             })
             .collect();
+        pages.insert("/Library/VirtualFolders".into(), libraries());
+        pages.insert(
+            LDAP_PLUGIN.into(),
+            json!({"EnableAllFolders": false, "EnabledFolders": [MOVIES], "LdapServer": "lldap"}),
+        );
         pages.insert(
             "/Users".into(),
             json!([
                 user("theo", false, json!({})),
+                user("elea_t", false, json!({})),
                 user("amaroke", true, json!({}))
             ]),
         );
@@ -161,20 +340,22 @@ mod tests {
 
     #[test]
     fn a_friend_may_not_delete_content() {
-        let wanted = wanted_policy(&json!({"Policy": {"IsAdministrator": false}}), now());
+        let wanted = wanted_policy(&friend(), now(), &Shelves::default());
         assert_eq!(Some(&json!(false)), wanted.get("EnableContentDeletion"));
     }
 
     #[test]
     fn the_admin_keeps_the_right_to_delete() {
-        let wanted = wanted_policy(&json!({"Policy": {"IsAdministrator": true}}), now());
+        let admin = json!({"Policy": {"IsAdministrator": true}});
+        let wanted = wanted_policy(&admin, now(), &Shelves::default());
         assert!(!wanted.contains_key("EnableContentDeletion"));
     }
 
     #[test]
     fn every_account_gets_one_session_and_three_attempts() {
         for admin in [true, false] {
-            let wanted = wanted_policy(&json!({"Policy": {"IsAdministrator": admin}}), now());
+            let user = json!({"Policy": {"IsAdministrator": admin}});
+            let wanted = wanted_policy(&user, now(), &Shelves::default());
             assert_eq!(Some(&json!(1)), wanted.get("MaxActiveSessions"));
             assert_eq!(Some(&json!(3)), wanted.get("LoginAttemptsBeforeLockout"));
         }
@@ -182,26 +363,114 @@ mod tests {
 
     #[test]
     fn a_friend_idle_for_thirty_days_is_disabled() {
-        let wanted = wanted_policy(&seen(false, "2026-10-24T03:30:00Z"), now());
+        let user = seen(false, "2026-10-24T03:30:00Z");
+        let wanted = wanted_policy(&user, now(), &Shelves::default());
         assert_eq!(Some(&json!(true)), wanted.get("IsDisabled"));
     }
 
     #[test]
     fn a_friend_seen_within_thirty_days_is_left_alone() {
-        let wanted = wanted_policy(&seen(false, "2026-10-24T03:30:01Z"), now());
+        let user = seen(false, "2026-10-24T03:30:01Z");
+        let wanted = wanted_policy(&user, now(), &Shelves::default());
         assert!(!wanted.contains_key("IsDisabled"));
     }
 
     #[test]
     fn the_admin_is_never_disabled() {
-        let wanted = wanted_policy(&seen(true, "2020-01-01T00:00:00Z"), now());
+        let user = seen(true, "2020-01-01T00:00:00Z");
+        let wanted = wanted_policy(&user, now(), &Shelves::default());
         assert!(!wanted.contains_key("IsDisabled"));
     }
 
     #[test]
     fn an_account_without_activity_is_left_alone() {
-        let wanted = wanted_policy(&json!({"Policy": {"IsAdministrator": false}}), now());
+        let wanted = wanted_policy(&friend(), now(), &Shelves::default());
         assert!(!wanted.contains_key("IsDisabled"));
+    }
+
+    #[test]
+    fn a_private_library_belongs_to_the_account_named_by_its_folder() {
+        let shelves = Shelves::read(&libraries());
+        assert_eq!(vec![MOVIES.to_string()], shelves.public);
+        assert_eq!(vec![MOVIES, ELEA], shelves.of("elea_t"));
+        assert_eq!(vec![MOVIES, VINCENT], shelves.of("Moutondu"));
+        assert_eq!(vec![MOVIES], shelves.of("theo"));
+    }
+
+    #[test]
+    fn a_library_at_the_private_root_itself_belongs_to_nobody() {
+        let shelves = Shelves::read(&json!([library("zz", "All", "/data/media/private")]));
+        assert!(shelves.public.is_empty());
+        assert!(shelves.private.is_empty());
+    }
+
+    #[test]
+    fn the_admin_sees_only_their_own_private_library_too() {
+        let mut pages = in_line();
+        let mut admin = user("amaroke", true, json!({}));
+        admin["Policy"]["EnableAllFolders"] = json!(true);
+        pages.insert("/Users".into(), json!([admin]));
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), pass(&fake, now(), &[]));
+        assert_eq!(json!(false), fake.body(0)["EnableAllFolders"]);
+        assert_eq!(json!([MOVIES]), fake.body(0)["EnabledFolders"]);
+    }
+
+    #[test]
+    fn a_friend_granted_another_private_library_loses_it() {
+        let mut pages = in_line();
+        let theo = user("theo", false, json!({"EnabledFolders": [MOVIES, ELEA]}));
+        pages.insert("/Users".into(), json!([theo]));
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), pass(&fake, now(), &[]));
+        assert_eq!(json!([MOVIES]), fake.body(0)["EnabledFolders"]);
+    }
+
+    #[test]
+    fn the_order_of_the_libraries_of_an_account_is_kept() {
+        let mut pages = in_line();
+        let elea = user("elea_t", false, json!({"EnabledFolders": [ELEA, MOVIES]}));
+        pages.insert("/Users".into(), json!([elea]));
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(0), pass(&fake, now(), &[]));
+    }
+
+    #[test]
+    fn a_new_account_gets_the_public_libraries_only() {
+        let mut pages = in_line();
+        pages.insert(
+            LDAP_PLUGIN.into(),
+            json!({"EnableAllFolders": true, "EnabledFolders": [ELEA], "LdapServer": "lldap"}),
+        );
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), pass(&fake, now(), &[]));
+        assert_eq!(vec![format!("POST {LDAP_PLUGIN}")], fake.paths());
+        assert_eq!(
+            json!({"EnableAllFolders": false, "EnabledFolders": [MOVIES], "LdapServer": "lldap"}),
+            fake.body(0)
+        );
+    }
+
+    #[test]
+    fn an_account_without_a_private_library_gets_one() {
+        let accounts = [
+            account("elea_t", "Eléa"),
+            account("theo", "Théo B"),
+            account("niixe", "Films"),
+        ];
+        let fake = Fake::new(in_line());
+        assert_eq!(Ok(2), pass(&fake, now(), &accounts));
+        assert_eq!(
+            vec![
+                "POST /Library/VirtualFolders?name=Th%C3%A9o%20B&collectionType=mixed&refreshLibrary=true",
+                "POST /Library/VirtualFolders?name=Films%20%28niixe%29&collectionType=mixed&refreshLibrary=true",
+            ],
+            fake.paths()
+        );
+        assert_eq!(
+            json!("/data/media/private/theo"),
+            fake.body(0)["LibraryOptions"]["PathInfos"][0]["Path"]
+        );
     }
 
     #[test]
@@ -211,16 +480,16 @@ mod tests {
         gone["LastActivityDate"] = json!("2026-09-01T18:00:00.0000000Z");
         pages.insert("/Users".into(), json!([gone]));
         let fake = Fake::new(pages);
-        assert_eq!(Ok(1), pass(&fake, now()));
+        assert_eq!(Ok(1), pass(&fake, now(), &[]));
         assert_eq!(vec!["POST /Users/id-theo/Policy"], fake.paths());
         assert_eq!(json!(true), fake.body(0)["IsDisabled"]);
-        assert_eq!(json!(true), fake.body(0)["EnableAllFolders"]);
+        assert_eq!(json!(false), fake.body(0)["EnableAllFolders"]);
     }
 
     #[test]
     fn a_server_in_line_needs_nothing() {
         let fake = Fake::new(in_line());
-        assert_eq!(Ok(0), pass(&fake, now()));
+        assert_eq!(Ok(0), pass(&fake, now(), &[account("elea_t", "Eléa")]));
         assert!(fake.paths().is_empty());
     }
 
@@ -230,12 +499,12 @@ mod tests {
         let mut fresh = user(
             "nima",
             false,
-            json!({"EnableLiveTvAccess": true, "MaxActiveSessions": 0, "LoginAttemptsBeforeLockout": -1, "EnableContentDeletion": true}),
+            json!({"EnableLiveTvAccess": true, "MaxActiveSessions": 0, "LoginAttemptsBeforeLockout": -1, "EnableContentDeletion": true, "EnableAllFolders": true}),
         );
         fresh["Configuration"]["EnableNextEpisodeAutoPlay"] = json!(false);
         pages.insert("/Users".into(), json!([fresh]));
         let fake = Fake::new(pages);
-        assert_eq!(Ok(1), pass(&fake, now()));
+        assert_eq!(Ok(1), pass(&fake, now(), &[]));
         assert_eq!(
             vec![
                 "POST /Users/id-nima/Policy",
@@ -246,7 +515,7 @@ mod tests {
         let saved = fake.body(0);
         assert_eq!(json!(1), saved["MaxActiveSessions"]);
         assert_eq!(json!(false), saved["EnableContentDeletion"]);
-        assert_eq!(json!(true), saved["EnableAllFolders"]);
+        assert_eq!(json!(false), saved["EnableAllFolders"]);
     }
 
     #[test]
@@ -254,7 +523,7 @@ mod tests {
         let mut pages = in_line();
         pages.get_mut("/System/Configuration/encoding").unwrap()["EnableThrottling"] = json!(false);
         let fake = Fake::new(pages);
-        assert_eq!(Ok(1), pass(&fake, now()));
+        assert_eq!(Ok(1), pass(&fake, now(), &[]));
         assert_eq!(vec!["POST /System/Configuration/encoding"], fake.paths());
         assert_eq!(json!(true), fake.body(0)["EnableThrottling"]);
         assert_eq!(json!("kept"), fake.body(0)["Untouched"]);
