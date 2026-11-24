@@ -193,7 +193,7 @@ pub fn policy() -> Map<String, Value> {
         "EnableMediaConversion": false,
         "EnableContentDownloading": true,
         "EnableRemoteControlOfOtherUsers": false,
-        "MaxActiveSessions": 1,
+        "MaxActiveSessions": 3,
         "LoginAttemptsBeforeLockout": 3,
         "SyncPlayAccess": "CreateAndJoinGroups",
     }))
@@ -360,11 +360,11 @@ mod tests {
     }
 
     #[test]
-    fn every_account_gets_one_session_and_three_attempts() {
+    fn every_account_gets_three_sessions_and_three_attempts() {
         for admin in [true, false] {
             let user = json!({"Policy": {"IsAdministrator": admin}});
             let wanted = wanted_policy(&user, now(), &Shelves::default());
-            assert_eq!(Some(&json!(1)), wanted.get("MaxActiveSessions"));
+            assert_eq!(Some(&json!(3)), wanted.get("MaxActiveSessions"));
             assert_eq!(Some(&json!(3)), wanted.get("LoginAttemptsBeforeLockout"));
         }
     }
@@ -521,7 +521,7 @@ mod tests {
             fake.paths()
         );
         let saved = fake.body(0);
-        assert_eq!(json!(1), saved["MaxActiveSessions"]);
+        assert_eq!(json!(3), saved["MaxActiveSessions"]);
         assert_eq!(json!(false), saved["EnableContentDeletion"]);
         assert_eq!(json!(false), saved["EnableAllFolders"]);
     }
