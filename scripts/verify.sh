@@ -567,6 +567,7 @@ check_no_media_tree cross-seed
 check_no_media_mount ratio
 check_no_media_mount discord-posts
 check_no_media_mount pr-radar
+check_no_media_mount ups
 check_no_media_mount beszel
 check_no_media_tree beszel-agent
 check_no_torrents_mount beszel-agent

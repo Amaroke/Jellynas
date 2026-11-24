@@ -28,6 +28,7 @@ include:
   - services/discord-posts/compose.yaml
   - services/pr-radar/compose.yaml
   - services/beszel/compose.yaml
+  - services/ups/compose.yaml
   - services/uptime-kuma/compose.yaml
   - services/dozzle/compose.yaml
   - services/socket-proxy/compose.yaml

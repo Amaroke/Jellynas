@@ -57,6 +57,7 @@ services:
       DISCORD_FARM_WEBHOOK_ID: ${DISCORD_FARM_WEBHOOK_ID:-}
       DISCORD_FARM_WEBHOOK_TOKEN: ${DISCORD_FARM_WEBHOOK_TOKEN:-}
       PR_RADAR_URL: http://pr-radar:8000
+      UPS_URL: http://ups:8000
     labels:
       kuma.dashboard.docker.name: Dashboard
       dashboard.name: Dashboard

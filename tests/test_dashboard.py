@@ -20,6 +20,7 @@ ESSENTIAL = {
     "dashboard-socket-proxy",
     "doco-cd",
     "gluetun",
+    "ups",
     "uptime-kuma",
     "dashboard",
     "backup",
@@ -43,6 +44,7 @@ WIDGETS = {
     "tdarr",
     "beszel",
     "uptime-kuma",
+    "ups",
 }
 DOCKER_WIDGETS = {"doco-cd", "backup"}
 SECTIONS = {"Status", "Pull requests", "Watch", "Downloads", "Farm", "Automation", "Observation", "Hosting"}

@@ -490,6 +490,39 @@ pub fn gluetun(ip: &Value) -> Parsed {
     ]))
 }
 
+pub fn ups(status: &Value) -> Parsed {
+    let state = text(status, "state")?;
+    if state == "unreachable" {
+        return Err("the UPS cannot be read".to_string());
+    }
+    let power = match state.as_str() {
+        "on mains" => "Mains",
+        "low battery" => "Low battery",
+        _ => "Battery",
+    };
+    let mut figures = vec![
+        ("Power", power.to_string()),
+        ("Battery", format!("{}%", whole(status, "charge")?)),
+    ];
+    if let Ok(load) = whole(status, "load") {
+        figures.push(("Load", format!("{load}%")));
+    }
+    if let Ok(runtime) = whole(status, "runtime") {
+        figures.push(("Runtime", duration(runtime)));
+    }
+    let mut found = reading(figures);
+    if state != "on mains" {
+        let threshold = whole(status, "threshold")?;
+        let detail = if status["stopping"].as_bool() == Some(true) {
+            "TrueNAS is shutting down".to_string()
+        } else {
+            format!("TrueNAS shuts down at {threshold}%")
+        };
+        found.rows.push(failure("On battery", &detail));
+    }
+    Ok(found)
+}
+
 fn missing(entry: &Value) -> String {
     let names: Vec<&str> = entry["missing_subtitles"]
         .as_array()
@@ -1403,6 +1436,36 @@ mod tests {
             ],
             figures(&reading)
         );
+    }
+
+    #[test]
+    fn ups_shows_the_power_and_the_battery() {
+        let mains = json!({"state": "on mains", "charge": 100, "load": 1, "runtime": null, "threshold": 20, "stopping": false});
+        let reading = ups(&mains).unwrap();
+        assert_eq!(
+            vec![("Power", "Mains"), ("Battery", "100%"), ("Load", "1%")],
+            figures(&reading)
+        );
+        assert!(reading.rows.is_empty());
+        let battery = json!({"state": "on battery", "charge": 64, "load": 5, "runtime": 1800, "threshold": 20, "stopping": false});
+        let reading = ups(&battery).unwrap();
+        assert_eq!(
+            vec![
+                ("Power", "Battery"),
+                ("Battery", "64%"),
+                ("Load", "5%"),
+                ("Runtime", "30m")
+            ],
+            figures(&reading)
+        );
+        assert_eq!("TrueNAS shuts down at 20%", reading.rows[0].detail);
+        let stopping =
+            json!({"state": "low battery", "charge": 18, "threshold": 20, "stopping": true});
+        assert_eq!(
+            "TrueNAS is shutting down",
+            ups(&stopping).unwrap().rows[0].detail
+        );
+        assert!(ups(&json!({"state": "unreachable", "threshold": 20})).is_err());
     }
 
     #[test]

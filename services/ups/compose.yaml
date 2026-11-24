@@ -1,0 +1,47 @@
+---
+services:
+  ups:
+    image: python:3.15.2-slim-trixie
+    container_name: ups
+    restart: unless-stopped
+    command: ["python", "-u", "/app/ups.py"]
+    networks:
+      - internal-zone
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    read_only: true
+    mem_limit: 64m
+    device_cgroup_rules:
+      - "c 189:* rw"
+    environment:
+      TZ: ${TZ}
+      UPS_VENDOR_ID: ${UPS_VENDOR_ID:-2b89}
+      UPS_SHUTDOWN_CHARGE: ${UPS_SHUTDOWN_CHARGE:-20}
+      TRUENAS_API_KEY: ${TRUENAS_API_KEY}
+      DISCORD_ALERTS_WEBHOOK_ID: ${DISCORD_ALERTS_WEBHOOK_ID:-}
+      DISCORD_ALERTS_WEBHOOK_TOKEN: ${DISCORD_ALERTS_WEBHOOK_TOKEN:-}
+    labels:
+      kuma.ups.http.name: UPS
+      kuma.ups.http.url: http://ups:8000/health
+      dashboard.name: UPS
+      dashboard.section: Hosting
+      dashboard.description: Battery of the UPS, shuts TrueNAS down before it runs out
+      dashboard.icon: network-ups-tools.svg
+      dashboard.widget: ups
+    volumes:
+      - ./ups.py:/app/ups.py:ro
+      - /dev/bus/usb:/dev/bus/usb:ro
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)
+      timeout: 10s
+      start_period: 30s

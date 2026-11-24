@@ -41,9 +41,10 @@ guide is written so that an AI agent can follow it as well as a person.
 23. [Dozzle](#dozzle)
 24. [Dashboard](#dashboard)
 25. [Backup](#backup)
-26. [Verify the NAS](#verify-the-nas)
-27. [On hold](#on-hold)
-28. [Contributing](#contributing)
+26. [UPS](#ups)
+27. [Verify the NAS](#verify-the-nas)
+28. [On hold](#on-hold)
+29. [Contributing](#contributing)
 
 ## Prerequisites
 
@@ -2402,6 +2403,41 @@ docker compose start radarr
 
 Once the service works again, delete `radarr.old`. Restore the services that
 talk to each other, such as Radarr and Prowlarr, from the same archive.
+
+## UPS
+
+Requires [Discord alerts](#discord-alerts) and [Dashboard](#dashboard).
+
+The Host runs on a UGREEN US3000 plugged in over USB. The NUT of TrueNAS does
+not know it: its generic driver reads the UPS as on battery while on mains, and
+the UPS service of TrueNAS would then shut the Host down within a minute. Leave
+that service off.
+
+The `ups` service, `services/ups/ups.py`, reads the UPS itself every 5 seconds,
+through the HID feature reports of its USB device: mains present, the low
+battery flag, the charge, the runtime and the load. It needs no driver and no
+privilege, only the USB device nodes, read through
+`device_cgroup_rules`. It then:
+
+- posts to the [Discord alerts](#discord-alerts) channel when the mains goes
+  away, comes back, or the battery runs low,
+- on battery, once the charge reaches `UPS_SHUTDOWN_CHARGE`, 20 % by default,
+  or the UPS raises its low battery flag, signs in to the API of TrueNAS with
+  `TRUENAS_API_KEY` and shuts the Host down cleanly,
+- serves `http://ups:8000/status` as JSON, which the UPS row of the Dashboard
+  shows, and `/health`, which Uptime Kuma watches and which fails once the UPS
+  has not been read for 30 seconds.
+
+1. In TrueNAS, top right user menu > My API Keys, add a key named
+   `ups-shutdown` and set it as `TRUENAS_API_KEY` in `.env`.
+2. If the UPS is another model, set `UPS_VENDOR_ID` to its vendor ID, as
+   `lsusb` shows it on the Host. The reports read are those of the HID Power
+   Device class, which most USB UPS share.
+3. Restart doco-cd to apply `.env`, then check the UPS row of the Dashboard:
+   Power reads Mains and Battery the charge.
+4. Unplug the UPS from the wall for a minute: the Discord alerts channel gets
+   the outage, the row reads Battery, and both come back when it is plugged in
+   again.
 
 ## Verify the NAS
 
