@@ -8,7 +8,8 @@ log:
   level: info
 
 totp:
-  disable: true
+  disable: false
+  issuer: Jellynas
 
 webauthn:
   disable: true
@@ -27,6 +28,9 @@ authentication_backend:
 access_control:
   default_policy: one_factor
   rules:
+    - domain: '*.{{ env "DOMAIN" }}'
+      subject: 'group:jellynas_admins'
+      policy: two_factor
     - domain: '*.{{ env "DOMAIN" }}'
       policy: one_factor
 
@@ -63,12 +67,18 @@ identity_providers:
           - name
           - email
           - groups
+    authorization_policies:
+      admin_two_factor:
+        default_policy: one_factor
+        rules:
+          - policy: two_factor
+            subject: 'group:jellynas_admins'
     clients:
       - client_id: aurral
         client_name: Aurral
         client_secret: '{{ secret "/var/lib/authelia/aurral.digest" }}'
         public: false
-        authorization_policy: one_factor
+        authorization_policy: admin_two_factor
         consent_mode: implicit
         claims_policy: id_token_claims
         redirect_uris:
