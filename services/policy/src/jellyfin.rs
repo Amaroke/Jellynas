@@ -5,7 +5,9 @@ use serde_json::{Map, Value, json};
 
 const IDLE: SignedDuration = SignedDuration::from_hours(30 * 24);
 const LDAP_PLUGIN: &str = "/Plugins/958aad6637844d2ab89aa7b6fab6e25c/Configuration";
-const THEME: &str = "@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/ElegantFin-theme-v26.09.05.css\");\n";
+const INJECTOR_PLUGIN: &str = "/Plugins/f5a34f7b2e8a4e6aa7223a216a81b374/Configuration";
+const REQUEST_BUTTON: &str = r#"(function(){function add(){var right=document.querySelector('.headerRight');if(!right||right.querySelector('.headerRequestButton'))return;var link=document.createElement('a');link.className='headerButton headerButtonRight paper-icon-button-light headerRequestButton';link.href='https://'+location.host.replace(/^jellyfin\./,'seerr.');link.target='_blank';link.rel='noopener';link.title='Faire une requête';link.innerHTML='<span class="material-icons add" aria-hidden="true"></span>';right.prepend(link);}new MutationObserver(add).observe(document.body,{childList:true,subtree:true});add();})();"#;
+const THEME: &str = "@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/ElegantFin-theme-v26.09.05.css\");\n:root { --extraCardButtonsVisibility: block; }\n";
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Shelves {
@@ -180,6 +182,20 @@ pub fn server() -> Vec<(&'static str, &'static str, Map<String, Value>)> {
             "/System/Configuration/branding",
             rules(json!({
                 "CustomCss": THEME,
+            })),
+        ),
+        (
+            "scripts",
+            INJECTOR_PLUGIN,
+            rules(json!({
+                "CustomJavaScripts": [{
+                    "Name": "Request button",
+                    "Script": REQUEST_BUTTON,
+                    "Src": "",
+                    "Module": false,
+                    "Enabled": true,
+                    "RequiresAuthentication": true,
+                }],
             })),
         ),
     ]
@@ -545,5 +561,18 @@ mod tests {
         assert_eq!(Ok(1), pass(&fake, now(), &[]));
         assert_eq!(vec!["POST /System/Configuration/branding"], fake.paths());
         assert_eq!(json!(THEME), fake.body(0)["CustomCss"]);
+    }
+
+    #[test]
+    fn a_request_button_removed_by_hand_comes_back() {
+        let mut pages = in_line();
+        pages.get_mut(INJECTOR_PLUGIN).unwrap()["CustomJavaScripts"] = json!([]);
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), pass(&fake, now(), &[]));
+        assert_eq!(vec![format!("POST {INJECTOR_PLUGIN}")], fake.paths());
+        assert_eq!(
+            json!(REQUEST_BUTTON),
+            fake.body(0)["CustomJavaScripts"][0]["Script"]
+        );
     }
 }

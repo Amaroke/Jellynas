@@ -580,7 +580,21 @@ subtitles, stay theirs to set.
 
 The web client wears [ElegantFin](https://github.com/lscambo13/ElegantFin), a
 sober dark theme. [policy](#policy) keeps its Custom CSS, pinned to a release in
-`THEME` of `services/policy/src/jellyfin.rs`.
+`THEME` of `services/policy/src/jellyfin.rs`, and shows again the buttons the
+theme hides on each card, such as the one that marks an item as played.
+
+A "Faire une requête" button in the header opens Seerr. [policy](#policy)
+keeps its script, `REQUEST_BUTTON`, in the JavaScript Injector plugin, which is
+installed once by hand:
+
+1. In Dashboard > Plugins > Repositories, add
+   `https://raw.githubusercontent.com/n00bcodr/jellyfin-plugins/main/manifest.json`.
+2. In Dashboard > Plugins > Catalog, install "JavaScript Injector".
+3. Restart Jellyfin:
+
+```sh
+docker restart jellyfin
+```
 
 ### Jellyfin behind Caddy
 
