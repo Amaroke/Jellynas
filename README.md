@@ -2413,17 +2413,17 @@ not know it: its generic driver reads the UPS as on battery while on mains, and
 the UPS service of TrueNAS would then shut the Host down within a minute. Leave
 that service off.
 
-The `ups` service, `services/ups/ups.py`, reads the UPS itself every 5 seconds,
-through the HID feature reports of its USB device: mains present, the low
-battery flag, the charge, the runtime and the load. It needs no driver and no
-privilege, only the USB device nodes, read through
-`device_cgroup_rules`. It then:
+The `ups` service, `services/ups`, written in Rust, reads the UPS itself every
+5 seconds, through the HID feature reports of its USB device: mains present, the
+low battery flag, the charge, the runtime and the load. It needs no driver and
+no privilege, only the USB device nodes, opened through `device_cgroup_rules`.
+It then:
 
 - posts to the [Discord alerts](#discord-alerts) channel when the mains goes
   away, comes back, or the battery runs low,
-- on battery, once the charge reaches `UPS_SHUTDOWN_CHARGE`, 20 % by default,
-  or the UPS raises its low battery flag, signs in to the API of TrueNAS with
-  `TRUENAS_API_KEY` and shuts the Host down cleanly,
+- on battery, once the charge reaches `UPS_SHUTDOWN_CHARGE`, 50 % by default,
+  or the UPS raises its low battery flag, signs in to the JSON-RPC API of
+  TrueNAS with `TRUENAS_API_KEY` and shuts the Host down cleanly,
 - serves `http://ups:8000/status` as JSON, which the UPS row of the Dashboard
   shows, and `/health`, which Uptime Kuma watches and which fails once the UPS
   has not been read for 30 seconds.
