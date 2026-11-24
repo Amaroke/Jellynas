@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BACKUP = ROOT / "services" / "backup" / "compose.yaml"
 STOP_LABEL = "docker-volume-backup.stop-during-backup"
-KEEP_RUNNING = {"backup", "caddy", "gluetun", "recyclarr", "dozzle", "autokuma", "dashboard"}
+KEEP_RUNNING = {"backup", "caddy", "gluetun", "recyclarr", "dozzle", "autokuma", "dashboard", "covers"}
 
 
 def included_compose_files():

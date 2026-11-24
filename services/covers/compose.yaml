@@ -1,0 +1,35 @@
+---
+services:
+  covers:
+    build: .
+    container_name: covers
+    restart: unless-stopped
+    networks:
+      - internal-zone
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    user: ${PUID}:${PGID}
+    read_only: true
+    mem_limit: 256m
+    environment:
+      TZ: ${TZ}
+      JELLYFIN_URL: https://jellyfin.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}
+    labels:
+      kuma.covers.docker.name: Covers
+      dashboard.name: Covers
+      dashboard.section: Watch
+      dashboard.description: Animates the covers of the libraries
+      dashboard.icon: jellyfin.svg
+    volumes:
+      - ${APPDATA_ROOT}/covers:/covers
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import os; os.stat('/covers/covers.css')"
+      timeout: 10s
+      start_period: 30m

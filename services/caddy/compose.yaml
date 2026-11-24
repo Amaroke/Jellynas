@@ -51,6 +51,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ${APPDATA_ROOT}/caddy/data:/data
       - ${APPDATA_ROOT}/caddy/config:/config
+      - ${APPDATA_ROOT}/covers:/srv/covers:ro
     ports:
       - 0.0.0.0:${CADDY_HTTPS_PORT:-443}:${CADDY_HTTPS_PORT:-443}
     healthcheck:

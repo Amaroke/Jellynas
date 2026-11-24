@@ -3,6 +3,7 @@ name: jellynas
 
 include:
   - services/jellyfin/compose.yaml
+  - services/covers/compose.yaml
   - services/policy/compose.yaml
   - services/seerr/compose.yaml
   - services/lldap/compose.yaml

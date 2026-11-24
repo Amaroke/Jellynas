@@ -15,7 +15,7 @@ services:
       BACKUP_PRUNING_PREFIX: appdata-
       BACKUP_RETENTION_DAYS: "30"
       BACKUP_EXCLUDE_REGEXP:
-        ^/backup/appdata/(jellyfin/cache|jellyfin/data/metadata|jellyfin/data/transcodes|tdarr/cache|tdarr/logs)/
+        ^/backup/appdata/(covers|jellyfin/cache|jellyfin/data/metadata|jellyfin/data/transcodes|tdarr/cache|tdarr/logs)/
       NOTIFICATION_URLS:
         discord://${DISCORD_ALERTS_WEBHOOK_TOKEN}@${DISCORD_ALERTS_WEBHOOK_ID}
       NOTIFICATION_LEVEL: error

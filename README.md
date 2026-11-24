@@ -173,7 +173,7 @@ mkdir -p "$BACKUP_ROOT" \
   "$DATA_ROOT"/media/{movies,shows}/.recycle \
   "$APPDATA_ROOT"/{seerr,lldap,authelia,aurral,recyclarr,autobrr,cross-seed} \
   "$APPDATA_ROOT"/{ratio,discord-posts,pr-radar,slskd,suwayomi} \
-  "$APPDATA_ROOT"/dashboard
+  "$APPDATA_ROOT"/{dashboard,covers}
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
 
@@ -598,6 +598,18 @@ Each library takes several backdrops and a logo per item, under Manage
 library > Image fetchers, so the slideshow has something to rotate. Each
 Account turns on "Backdrops" in Settings > Display to see them behind each
 page.
+
+### Library covers
+
+The `covers` service turns the card of each library on the home page into a
+carousel of its posters. Once a day, `services/covers/covers.py` picks 8 posters
+at random in each library, renders them as an animated WebP in
+`${APPDATA_ROOT}/covers`, and writes `covers.css`, which points each card at its
+WebP. Caddy serves that folder at `/covers/` on the names of Jellyfin, and the
+Custom CSS that [policy](#policy) keeps imports `/covers/covers.css`. A library
+with fewer than 3 posters keeps its own image. Jellyfin turns any uploaded image
+into a still, which is why the WebPs live outside it. The clients built on the
+web client show the animation, the native TV clients keep the still image.
 
 ### Jellyfin behind Caddy
 
