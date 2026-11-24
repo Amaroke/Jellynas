@@ -47,7 +47,7 @@ WIDGETS = {
     "ups",
 }
 DOCKER_WIDGETS = {"doco-cd", "backup"}
-SECTIONS = {"Status", "Pull requests", "Watch", "Downloads", "Farm", "Automation", "Observation", "Hosting"}
+SECTIONS = {"Status", "Pull requests", "Watch", "Downloads", "Automation", "Farm", "Discord", "Observation", "Hosting"}
 
 
 def services():
