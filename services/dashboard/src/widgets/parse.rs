@@ -408,10 +408,14 @@ fn request(entry: &Value) -> Option<Row> {
     })
 }
 
-pub fn aurral(worker: &Value, active: &Value) -> Parsed {
+pub fn aurral(library: [&Value; 3], worker: &Value, active: &Value) -> Parsed {
+    let [artists, albums, tracks] = library;
     let paused = worker["paused"].as_bool() == Some(true);
     let downloading = items(field(active, "tracks")?)?.len() as u64;
     let mut found = reading(vec![
+        ("Artists", count(whole(artists, "total")?)),
+        ("Albums", count(whole(albums, "total")?)),
+        ("Tracks", count(whole(tracks, "total")?)),
         (
             "Downloads",
             if paused { "Paused" } else { "On" }.to_string(),
@@ -2047,26 +2051,50 @@ time=2026-11-22T03:30:05.000+01:00 level=ERROR msg="Fatal error running command:
 
     #[test]
     fn aurral_shows_whether_its_downloads_run_and_offers_to_switch_them() {
+        let artists = json!({"kind": "artists", "total": 1575});
+        let albums = json!({"kind": "albums", "total": 2448});
+        let tracks = json!({"kind": "tracks", "total": 3213});
+        let library = [&artists, &albums, &tracks];
         let active = json!({"albums": [], "artists": [], "tracks": [{"trackName": "Echo"}, {"trackName": "Girls"}]});
-        let found = aurral(&json!({"concurrency": 3, "paused": true}), &active).unwrap();
+        let found = aurral(library, &json!({"concurrency": 3, "paused": true}), &active).unwrap();
         assert_eq!(
-            vec![("Downloads", "Paused"), ("Downloading", "2")],
+            vec![
+                ("Artists", "1,575"),
+                ("Albums", "2,448"),
+                ("Tracks", "3,213"),
+                ("Downloads", "Paused"),
+                ("Downloading", "2")
+            ],
             figures(&found)
         );
         assert_eq!(
             vec![("worker", "Downloads", "off", None)],
             links(&found.links)
         );
-        let found = aurral(&json!({"concurrency": 3}), &json!({"tracks": []})).unwrap();
+        let found = aurral(library, &json!({"concurrency": 3}), &json!({"tracks": []})).unwrap();
         assert_eq!(
-            vec![("Downloads", "On"), ("Downloading", "0")],
+            vec![
+                ("Artists", "1,575"),
+                ("Albums", "2,448"),
+                ("Tracks", "3,213"),
+                ("Downloads", "On"),
+                ("Downloading", "0")
+            ],
             figures(&found)
         );
         assert_eq!(
             vec![("worker", "Downloads", "on", None)],
             links(&found.links)
         );
-        assert!(aurral(&json!({}), &json!({})).is_err());
+        assert!(aurral(library, &json!({}), &json!({})).is_err());
+        assert!(
+            aurral(
+                [&json!({}), &albums, &tracks],
+                &json!({}),
+                &json!({"tracks": []})
+            )
+            .is_err()
+        );
     }
 
     #[test]
