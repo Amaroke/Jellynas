@@ -582,7 +582,10 @@ The web client wears [ElegantFin](https://github.com/lscambo13/ElegantFin), a
 sober dark theme, with its add-on for the Media Bar. [policy](#policy) keeps
 its Custom CSS, pinned to a release in `THEME` of
 `services/policy/src/jellyfin.rs`. The Media Bar plugin turns the top of the
-home page into a slideshow of backdrops, logos and overviews.
+home page into a slideshow of backdrops, logos and overviews. The Media Bar
+places its text as if the slideshow filled the whole screen, while ElegantFin
+fits it in a card, so the logo got cut at the top. The theme of policy anchors
+that text to the bottom of the card instead.
 
 1. In Dashboard > Plugins > Repositories, add
    `https://www.iamparadox.dev/jellyfin/plugins/manifest.json`.

@@ -5,7 +5,7 @@ use serde_json::{Map, Value, json};
 
 const IDLE: SignedDuration = SignedDuration::from_hours(30 * 24);
 const LDAP_PLUGIN: &str = "/Plugins/958aad6637844d2ab89aa7b6fab6e25c/Configuration";
-const THEME: &str = "@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/ElegantFin-theme-v26.09.05.css\");\n@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/assets/add-ons/media-bar-plugin-support-v26.09.05.css\");\n";
+const THEME: &str = "@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/ElegantFin-theme-v26.09.05.css\");\n@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/assets/add-ons/media-bar-plugin-support-v26.09.05.css\");\n#slides-container .slide-content { bottom: calc(var(--slideshow-dots-reserve) + 4.5rem) !important; }\n";
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Shelves {
