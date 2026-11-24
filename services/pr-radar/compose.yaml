@@ -23,7 +23,7 @@ services:
       kuma.pr-radar.http.url: http://pr-radar:8000/health
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: PR radar
-      dashboard.section: Observation
+      dashboard.section: Discord
       dashboard.icon: github.svg
       dashboard.icon-dark: github-light.svg
       dashboard.switchable: "true"

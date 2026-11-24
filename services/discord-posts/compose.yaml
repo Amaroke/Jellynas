@@ -28,7 +28,7 @@ services:
       kuma.discord-posts.docker.name: Discord posts
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: Discord posts
-      dashboard.section: Farm
+      dashboard.section: Discord
       dashboard.description:
         Republishes the Discord messages, every day at 00:30
       dashboard.icon: discord.svg

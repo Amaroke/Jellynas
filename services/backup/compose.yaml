@@ -22,7 +22,7 @@ services:
     labels:
       kuma.backup.docker.name: Backup
       dashboard.name: Backup
-      dashboard.section: Observation
+      dashboard.section: Hosting
       dashboard.description: Archive of the appdata, every night
       dashboard.icon: restic.png
       dashboard.widget: backup

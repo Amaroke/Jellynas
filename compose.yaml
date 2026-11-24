@@ -19,7 +19,7 @@ include:
   - services/slskd/compose.yaml
   # - services/lazylibrarian/compose.yaml
   # - services/suwayomi/compose.yaml
-  - services/recyclarr/compose.yaml
+  # - services/recyclarr/compose.yaml
   # - services/tdarr/compose.yaml
   # - services/bazarr/compose.yaml
   # - services/autobrr/compose.yaml

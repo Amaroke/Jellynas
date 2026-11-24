@@ -29,22 +29,21 @@ guide is written so that an AI agent can follow it as well as a person.
 11. [Radarr](#radarr)
 12. [Sonarr](#sonarr)
 13. [slskd](#slskd)
-14. [Recyclarr](#recyclarr)
-15. [Requests](#requests)
-16. [Music bot](#music-bot)
-17. [Discord messages](#discord-messages)
-18. [PR radar](#pr-radar)
-19. [Private tracker ratio](#private-tracker-ratio)
-20. [Observation](#observation)
-21. [Beszel](#beszel)
-22. [Uptime Kuma](#uptime-kuma)
-23. [Dozzle](#dozzle)
-24. [Dashboard](#dashboard)
-25. [Backup](#backup)
-26. [UPS](#ups)
-27. [Verify the NAS](#verify-the-nas)
-28. [On hold](#on-hold)
-29. [Contributing](#contributing)
+14. [Requests](#requests)
+15. [Music bot](#music-bot)
+16. [Discord messages](#discord-messages)
+17. [PR radar](#pr-radar)
+18. [Private tracker ratio](#private-tracker-ratio)
+19. [Observation](#observation)
+20. [Beszel](#beszel)
+21. [Uptime Kuma](#uptime-kuma)
+22. [Dozzle](#dozzle)
+23. [Dashboard](#dashboard)
+24. [Backup](#backup)
+25. [UPS](#ups)
+26. [Verify the NAS](#verify-the-nas)
+27. [On hold](#on-hold)
+28. [Contributing](#contributing)
 
 ## Prerequisites
 
@@ -550,6 +549,7 @@ Dashboard. The server:
 | Known proxies                      | `caddy`                                |
 | Remote access                      | On                                     |
 | UPnP                               | Off                                    |
+| Custom CSS                         | ElegantFin, see [Theme](#theme)        |
 
 Jellyfin reads its networking settings when it starts: after a change of them,
 restart it as in [Jellyfin behind Caddy](#jellyfin-behind-caddy). The Accounts:
@@ -575,6 +575,29 @@ Users, by unticking "Disable this user". A Friend enabled again must sign in
 before the next pass, or policy disables their Account again. The
 preferences of each Friend, such as the languages of the audio and of the
 subtitles, stay theirs to set.
+
+### Theme
+
+The web client wears [ElegantFin](https://github.com/lscambo13/ElegantFin), a
+sober dark theme, with its add-on for the Media Bar. [policy](#policy) keeps
+its Custom CSS, pinned to a release in `THEME` of
+`services/policy/src/jellyfin.rs`. The Media Bar plugin turns the top of the
+home page into a slideshow of backdrops, logos and overviews.
+
+1. In Dashboard > Plugins > Repositories, add
+   `https://www.iamparadox.dev/jellyfin/plugins/manifest.json`.
+2. In Dashboard > Plugins > Catalog, install "Media Bar". It pulls "File
+   Transformation" along.
+3. Restart Jellyfin:
+
+```sh
+docker restart jellyfin
+```
+
+Each library takes several backdrops and a logo per item, under Manage
+library > Image fetchers, so the slideshow has something to rotate. Each
+Account turns on "Backdrops" in Settings > Display to see them behind each
+page.
 
 ### Jellyfin behind Caddy
 
@@ -1349,83 +1372,9 @@ doco-cd builds into an image of 2 MB that runs in 1 MB of memory. To change a
 rule, edit the module of the app and open a pull request: the CI checks its
 format, its lints and its tests.
 
-## Recyclarr
-
-Requires [Radarr](#radarr) and [Sonarr](#sonarr).
-
-Recyclarr creates the quality profiles of Radarr and Sonarr, so that most
-downloads already come in a compact format that most devices play directly. It
-sees no media file and only talks to the Radarr and Sonarr APIs, with the
-`RADARR_API_KEY` and `SONARR_API_KEY` already in `.env`. Profilarr can replace
-it, or the profiles of the [TRaSH Guides](https://trash-guides.info/) copied by
-hand. Its config is `services/recyclarr/recyclarr.yml`, with a few custom
-formats of our own in `services/recyclarr/custom-formats`.
-
-Each tool gets two profiles, built from the French profiles of the [TRaSH
-Guides](https://trash-guides.info/Radarr/radarr-setup-quality-profiles-french-en/):
-
-- **MULTi 1080p**, for movies and shows: French and original audio required,
-  H265 preferred, 1080p first.
-- **Anime 1080p**, for anime: a `MULTi` with French subtitles first, then a
-  VOSTFR, then any other `MULTi`.
-
-The profiles favour MKV H265 releases and refuse a release without a French
-audio track. Quality always ranks before score, and H265 outweighs the release
-group, since it makes much smaller files without a lossy re-encode. Change a
-rule in the config, never in Radarr or Sonarr, since each sync overwrites the
-profiles.
-
-### Sync
-
-Recyclarr syncs every day at midnight in the time zone of `TZ`, not at its
-start. Sync right away after the first start, or after changing anything under
-`services/recyclarr/`:
-
-```sh
-docker exec recyclarr recyclarr sync
-```
-
-Each tool ends with a `Completed` line and no error. Lines about `conflicting
-scores` are expected: they show the config overriding a TRaSH score. The logs of
-the container only show the schedule. Each nightly sync writes its own log under
-`$APPDATA_ROOT/recyclarr/logs/cli`.
-
-### Assign the profiles
-
-Recyclarr creates the profiles but never assigns them.
-
-1. In Settings > Profiles of Radarr and of Sonarr, delete the profiles that came
-   with the tool, so a new movie or show can only get a Recyclarr one.
-2. If a library was imported before, in Sonarr, Series, click "Select Series",
-   select every show, pick `MULTi 1080p` under "Quality Profile" at the bottom,
-   and save. Then select every anime, those with the "Anime" series type, and
-   pick `Anime 1080p`. In Radarr, Movies, do the same with `MULTi 1080p` for
-   every movie, then `Anime 1080p` for each Japanese animated movie.
-
-Radarr cannot tell an anime movie apart, so give `Anime 1080p` by hand to each
-anime movie Request too.
-
-### Check a release
-
-Interactive Search, in a movie or an episode, shows the score of each release
-and why any is refused. To score a release name without searching, use the parse
-endpoint of Radarr. The name must match a movie already in Radarr, here Your
-Name, otherwise no profile applies and the score stays at 0:
-
-```bash
-. <(grep -E '^(RADARR_API_KEY|DOMAIN|CADDY_HTTPS_PORT)=' .env)
-curl -s -G -H "X-Api-Key: $RADARR_API_KEY" \
-  --data-urlencode "title=Your.Name.2016.MULTi.1080p.WEB.x265-GROUP" \
-  "https://radarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/v3/parse"
-```
-
-The answer holds `customFormats` and `customFormatScore`. A score below -5000
-means refused. Sonarr answers the same on its own name with the name of an
-episode of a show it has.
-
 ## Requests
 
-Requires [Seerr](#seerr) and [Recyclarr](#recyclarr).
+Requires [Seerr](#seerr).
 
 In Seerr, Settings > Services, click "Add Radarr Server":
 
@@ -1630,7 +1579,7 @@ flowchart LR
     class Torrents,Library dataNode
 
     classDef onHold stroke-dasharray:5 5
-    class LazyLibrarian,Suwayomi,Bazarr,Tdarr,Manga,autobrr onHold
+    class LazyLibrarian,Suwayomi,Recyclarr,Bazarr,Tdarr,Manga,autobrr onHold
     style data fill:#eceff1,stroke:#78909c,stroke-width:2px,color:#1f2937
 ```
 
@@ -2515,6 +2464,83 @@ docker restart doco-cd
 
 Then follow its section below. For LazyLibrarian, set its "Sync Level" back to
 "Full Sync" in Prowlarr, Settings > Apps.
+
+### Recyclarr
+
+Requires [Radarr](#radarr) and [Sonarr](#sonarr).
+
+Recyclarr creates the quality profiles of Radarr and Sonarr, so that most
+downloads already come in a compact format that most devices play directly. It
+sees no media file and only talks to the Radarr and Sonarr APIs, with the
+`RADARR_API_KEY` and `SONARR_API_KEY` already in `.env`. Profilarr can replace
+it, or the profiles of the [TRaSH Guides](https://trash-guides.info/) copied by
+hand. Its config is `services/recyclarr/recyclarr.yml`, with a few custom
+formats of our own in `services/recyclarr/custom-formats`.
+
+While it is on hold, the profiles it made stay in Radarr and Sonarr as they
+are, and nothing syncs them.
+
+Each tool gets two profiles, built from the French profiles of the [TRaSH
+Guides](https://trash-guides.info/Radarr/radarr-setup-quality-profiles-french-en/):
+
+- **MULTi 1080p**, for movies and shows: French and original audio required,
+  H265 preferred, 1080p first.
+- **Anime 1080p**, for anime: a `MULTi` with French subtitles first, then a
+  VOSTFR, then any other `MULTi`.
+
+The profiles favour MKV H265 releases and refuse a release without a French
+audio track. Quality always ranks before score, and H265 outweighs the release
+group, since it makes much smaller files without a lossy re-encode. Change a
+rule in the config, never in Radarr or Sonarr, since each sync overwrites the
+profiles.
+
+#### Sync
+
+Recyclarr syncs every day at midnight in the time zone of `TZ`, not at its
+start. Sync right away after the first start, or after changing anything under
+`services/recyclarr/`:
+
+```sh
+docker exec recyclarr recyclarr sync
+```
+
+Each tool ends with a `Completed` line and no error. Lines about `conflicting
+scores` are expected: they show the config overriding a TRaSH score. The logs of
+the container only show the schedule. Each nightly sync writes its own log under
+`$APPDATA_ROOT/recyclarr/logs/cli`.
+
+#### Assign the profiles
+
+Recyclarr creates the profiles but never assigns them.
+
+1. In Settings > Profiles of Radarr and of Sonarr, delete the profiles that came
+   with the tool, so a new movie or show can only get a Recyclarr one.
+2. If a library was imported before, in Sonarr, Series, click "Select Series",
+   select every show, pick `MULTi 1080p` under "Quality Profile" at the bottom,
+   and save. Then select every anime, those with the "Anime" series type, and
+   pick `Anime 1080p`. In Radarr, Movies, do the same with `MULTi 1080p` for
+   every movie, then `Anime 1080p` for each Japanese animated movie.
+
+Radarr cannot tell an anime movie apart, so give `Anime 1080p` by hand to each
+anime movie Request too.
+
+#### Check a release
+
+Interactive Search, in a movie or an episode, shows the score of each release
+and why any is refused. To score a release name without searching, use the parse
+endpoint of Radarr. The name must match a movie already in Radarr, here Your
+Name, otherwise no profile applies and the score stays at 0:
+
+```bash
+. <(grep -E '^(RADARR_API_KEY|DOMAIN|CADDY_HTTPS_PORT)=' .env)
+curl -s -G -H "X-Api-Key: $RADARR_API_KEY" \
+  --data-urlencode "title=Your.Name.2016.MULTi.1080p.WEB.x265-GROUP" \
+  "https://radarr.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/v3/parse"
+```
+
+The answer holds `customFormats` and `customFormatScore`. A score below -5000
+means refused. Sonarr answers the same on its own name with the name of an
+episode of a show it has.
 
 ### LazyLibrarian
 

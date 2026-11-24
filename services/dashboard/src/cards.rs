@@ -9,8 +9,9 @@ pub enum Section {
     PullRequests,
     Watch,
     Downloads,
-    Farm,
     Automation,
+    Farm,
+    Discord,
     Observation,
     Hosting,
 }
@@ -30,13 +31,14 @@ pub struct Card {
 }
 
 impl Section {
-    pub const ALL: [Section; 8] = [
+    pub const ALL: [Section; 9] = [
         Section::Status,
         Section::PullRequests,
         Section::Watch,
         Section::Downloads,
-        Section::Farm,
         Section::Automation,
+        Section::Farm,
+        Section::Discord,
         Section::Observation,
         Section::Hosting,
     ];
@@ -49,6 +51,7 @@ impl Section {
             Section::Downloads => "Downloads",
             Section::Farm => "Farm",
             Section::Automation => "Automation",
+            Section::Discord => "Discord",
             Section::Observation => "Observation",
             Section::Hosting => "Hosting",
         }

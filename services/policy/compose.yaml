@@ -33,7 +33,7 @@ services:
     labels:
       kuma.policy.docker.name: Policy
       dashboard.name: Policy
-      dashboard.section: Automation
+      dashboard.section: Hosting
       dashboard.icon: rust.svg
       dashboard.icon-dark: rust-light.svg
       dashboard.switchable: "true"
