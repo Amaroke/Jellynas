@@ -7,8 +7,7 @@ const TEST_ACCOUNT: &str = "test";
 const IDLE: SignedDuration = SignedDuration::from_hours(30 * 24);
 const LDAP_PLUGIN: &str = "/Plugins/958aad6637844d2ab89aa7b6fab6e25c/Configuration";
 const INJECTOR_PLUGIN: &str = "/Plugins/f5a34f7b2e8a4e6aa7223a216a81b374/Configuration";
-const REQUEST_BUTTON: &str = r#"(function(){var css='.headerRequestButtons{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1;display:flex;gap:8px}.headerRequestButtons a{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px 0 10px;border-radius:8px;background:rgba(255,255,255,.08);color:inherit;font:inherit;font-size:.9em;font-weight:500;white-space:nowrap;text-decoration:none;transition:background .15s}.headerRequestButtons a:hover{background:rgba(255,255,255,.16)}.headerRequestButtons svg{width:18px;height:18px;opacity:.85}';var links=[['seerr','Faire une requête','M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z'],['aurral','Musique','M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z'],['kavita','Livres','M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z']];function style(){if(document.getElementById('headerRequestStyle'))return;var tag=document.createElement('style');tag.id='headerRequestStyle';tag.textContent=css;document.head.appendChild(tag);}function bar(){var anchor=document.querySelector('[aria-controls="app-user-menu"]');if(!anchor||!anchor.offsetParent)anchor=document.querySelector('.headerRight');if(!anchor||!anchor.offsetParent)return null;return anchor.closest('.MuiToolbar-root,.headerTop,header')||anchor.parentNode;}function add(){var node=bar();if(!node)return;var old=document.querySelector('.headerRequestButtons');if(old&&old.parentNode===node)return;if(old)old.remove();style();if(getComputedStyle(node).position==='static')node.style.position='relative';var group=document.createElement('div');group.className='headerRequestButtons';links.forEach(function(l){var link=document.createElement('a');link.href='https://'+location.host.replace(/^jellyfin\./,l[0]+'.');link.target='_blank';link.rel='noopener';link.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="'+l[2]+'"/></svg><span>'+l[1]+'</span>';group.appendChild(link);});node.appendChild(group);}new MutationObserver(add).observe(document.body,{childList:true,subtree:true});add();})();"#;
-const THEME: &str = "@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/ElegantFin-theme-v26.09.05.css\");\n:root { --extraCardButtonsVisibility: block; }\n";
+const THEME: &str = "@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/ElegantFin-theme-v26.09.05.css\");\n:root { --extraCardButtonsVisibility: block; }\n.MuiToolbar-root > .MuiStack-root > a[target=\"_blank\"] { order: 1; }\n.MuiToolbar-root > .MuiStack-root > button { order: 2; }\n";
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Shelves {
@@ -83,6 +82,7 @@ fn library_name(account: &Account, folders: &Value) -> String {
         .as_array()
         .into_iter()
         .flatten()
+        .filter(|folder| !at(folder, &account.videos()))
         .any(|folder| folder["Name"].as_str() == Some(account.name.as_str()));
     if taken {
         format!("{} ({})", account.name, account.id)
@@ -91,42 +91,63 @@ fn library_name(account: &Account, folders: &Value) -> String {
     }
 }
 
-fn located(folders: &Value, path: &str) -> bool {
-    folders
+fn at(folder: &Value, path: &str) -> bool {
+    folder["Locations"]
         .as_array()
         .into_iter()
         .flatten()
-        .flat_map(|folder| folder["Locations"].as_array().into_iter().flatten())
         .filter_map(Value::as_str)
         .any(|location| location.trim_end_matches('/') == path)
 }
 
 fn shelve(api: &impl Api, accounts: &[Account]) -> Result<usize, String> {
     let folders = api.get("/Library/VirtualFolders")?;
-    let mut created = 0;
+    let mut changed = 0;
     for account in accounts {
-        if located(&folders, &account.videos()) {
-            continue;
-        }
         let name = library_name(account, &folders);
-        let options = json!({"LibraryOptions": {
-            "PathInfos": [{"Path": account.videos()}],
-            "PreferredMetadataLanguage": "fr",
-            "MetadataCountryCode": "FR",
-            "EnableRealtimeMonitor": true,
-        }});
-        api.send(
-            "POST",
-            &format!(
-                "/Library/VirtualFolders?name={}&collectionType=mixed&refreshLibrary=true",
-                encode(&name)
-            ),
-            &options,
-        )?;
-        println!("Jellyfin libraries: added {name} for {}", account.id);
-        created += 1;
+        let current = folders
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|folder| at(folder, &account.videos()));
+        match current.map(|folder| folder["Name"].as_str().unwrap_or_default()) {
+            Some(old) if old == name => continue,
+            Some(old) => {
+                api.send(
+                    "POST",
+                    &format!(
+                        "/Library/VirtualFolders/Name?name={}&newName={}&refreshLibrary=false",
+                        encode(old),
+                        encode(&name)
+                    ),
+                    &Value::Null,
+                )?;
+                println!(
+                    "Jellyfin libraries: renamed {old} to {name} for {}",
+                    account.id
+                );
+            }
+            None => {
+                let options = json!({"LibraryOptions": {
+                    "PathInfos": [{"Path": account.videos()}],
+                    "PreferredMetadataLanguage": "fr",
+                    "MetadataCountryCode": "FR",
+                    "EnableRealtimeMonitor": true,
+                }});
+                api.send(
+                    "POST",
+                    &format!(
+                        "/Library/VirtualFolders?name={}&collectionType=mixed&refreshLibrary=true",
+                        encode(&name)
+                    ),
+                    &options,
+                )?;
+                println!("Jellyfin libraries: added {name} for {}", account.id);
+            }
+        }
+        changed += 1;
     }
-    Ok(created)
+    Ok(changed)
 }
 
 pub fn server() -> Vec<(&'static str, &'static str, Map<String, Value>)> {
@@ -177,14 +198,7 @@ pub fn server() -> Vec<(&'static str, &'static str, Map<String, Value>)> {
             "scripts",
             INJECTOR_PLUGIN,
             rules(json!({
-                "CustomJavaScripts": [{
-                    "Name": "Request button",
-                    "Script": REQUEST_BUTTON,
-                    "Src": "",
-                    "Module": false,
-                    "Enabled": true,
-                    "RequiresAuthentication": true,
-                }],
+                "CustomJavaScripts": [],
             })),
         ),
     ]
@@ -514,6 +528,30 @@ mod tests {
     }
 
     #[test]
+    fn a_private_library_follows_the_display_name_of_its_account() {
+        let fake = Fake::new(in_line());
+        assert_eq!(Ok(1), shelve(&fake, &[account("elea_t", "Eléa M")]));
+        assert_eq!(
+            vec![
+                "POST /Library/VirtualFolders/Name?name=El%C3%A9a&newName=El%C3%A9a%20M&refreshLibrary=false"
+            ],
+            fake.paths()
+        );
+    }
+
+    #[test]
+    fn a_private_library_already_named_after_its_account_stays() {
+        let fake = Fake::new(in_line());
+        assert_eq!(
+            Ok(0),
+            shelve(
+                &fake,
+                &[account("elea_t", "Eléa"), account("moutondu", "Vincent")]
+            )
+        );
+    }
+
+    #[test]
     fn an_account_without_a_private_library_gets_one() {
         let accounts = [
             account("elea_t", "Eléa"),
@@ -602,15 +640,13 @@ mod tests {
     }
 
     #[test]
-    fn a_request_button_removed_by_hand_comes_back() {
+    fn a_script_added_by_hand_goes_away() {
         let mut pages = in_line();
-        pages.get_mut(INJECTOR_PLUGIN).unwrap()["CustomJavaScripts"] = json!([]);
+        pages.get_mut(INJECTOR_PLUGIN).unwrap()["CustomJavaScripts"] =
+            json!([{"Name": "Request button"}]);
         let fake = Fake::new(pages);
         assert_eq!(Ok(1), pass(&fake, now(), &[]));
         assert_eq!(vec![format!("POST {INJECTOR_PLUGIN}")], fake.paths());
-        assert_eq!(
-            json!(REQUEST_BUTTON),
-            fake.body(0)["CustomJavaScripts"][0]["Script"]
-        );
+        assert_eq!(json!([]), fake.body(0)["CustomJavaScripts"]);
     }
 }

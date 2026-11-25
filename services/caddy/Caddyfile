@@ -41,6 +41,9 @@
 	header Strict-Transport-Security "max-age=31536000"
 	@jellyfin host jellyfin.{$DOMAIN}
 	handle @jellyfin {
+		redir /go/kavita https://kavita.{$DOMAIN}:{$CADDY_HTTPS_PORT}
+		redir /go/aurral https://aurral.{$DOMAIN}:{$CADDY_HTTPS_PORT}
+		redir /go/seerr https://seerr.{$DOMAIN}:{$CADDY_HTTPS_PORT}
 		reverse_proxy jellyfin:8096
 	}
 	@seerr host seerr.{$DOMAIN}
@@ -67,6 +70,16 @@
 *.lan.{$DOMAIN} {
 	header Strict-Transport-Security "max-age=31536000"
 	import lan truenas host.docker.internal:80
+	@jellyfinlinks {
+		host jellyfin.lan.{$DOMAIN}
+		remote_ip {$LAN_SUBNET}
+		path /go/*
+	}
+	handle @jellyfinlinks {
+		redir /go/kavita https://kavita.lan.{$DOMAIN}:{$CADDY_HTTPS_PORT}
+		redir /go/aurral https://aurral.lan.{$DOMAIN}:{$CADDY_HTTPS_PORT}
+		redir /go/seerr https://seerr.lan.{$DOMAIN}:{$CADDY_HTTPS_PORT}
+	}
 	import lan jellyfin jellyfin:8096
 	import lan seerr seerr:5055
 	import lan aurral aurral:3001

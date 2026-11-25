@@ -495,8 +495,8 @@ pass, before the first sign-in of the Account:
 - the folder `/data/media/private/<username>`, readable by the apps only, split
   into `videos` for movies and shows and `books` for books,
 - a Jellyfin library of the content type "Mixed" on `<username>/videos`, named
-  after the display name of the Account in lldap, so movies and shows sit
-  together in one library,
+  after the display name of the Account in lldap and renamed when that name
+  changes, so movies and shows sit together in one library,
 - a root folder on `<username>/videos` in Radarr and in Sonarr, which Seerr
   offers when the Admin approves a Request, as [Requests](#requests) sets out,
 - a Kavita library on `<username>/books`, as [Kavita](#kavita) sets out.
@@ -505,9 +505,9 @@ The owner of a Private library is the folder right under `/data/media/private`
 in its path, so a library added by hand on one of its subfolders belongs to that
 Account too. policy grants
 every Account the public libraries and its own Private libraries, and takes away
-any other Private library. Renaming a Private library in the Dashboard is fine,
-policy only looks at its folder. It never deletes a folder, a library or a root
-folder, even when the Account leaves lldap.
+any other Private library. A Private library renamed in the Dashboard gets the
+display name back at the next pass. policy never deletes a folder, a library or
+a root folder, even when the Account leaves lldap.
 
 ### Friend Accounts
 
@@ -593,18 +593,17 @@ sober dark theme. [policy](#policy) keeps its Custom CSS, pinned to a release in
 `THEME` of `services/policy/src/jellyfin.rs`, and shows again the buttons the
 theme hides on each card, such as the one that marks an item as played.
 
-A "Faire une requête" button in the header opens Seerr. [policy](#policy)
-keeps its script, `REQUEST_BUTTON`, in the JavaScript Injector plugin, which is
-installed once by hand:
+The header of the web client shows three links after the libraries: "Livres"
+opens Kavita, "Musiques" opens Aurral and "Faire une requête" opens Seerr. They
+are the `menuLinks` of `services/jellyfin/web-config.json`, mounted over the
+web config of the image, so Jellyfin draws them like the libraries and moves
+them under "Plus" when the header runs out of room. Each link points at
+`/go/<app>` on Jellyfin, which Caddy redirects to the app on the same side,
+public or local, so the file holds no domain. The Custom CSS of the theme puts
+them after the libraries, since Jellyfin draws them first.
 
-1. In Dashboard > Plugins > Repositories, add
-   `https://raw.githubusercontent.com/n00bcodr/jellyfin-plugins/main/manifest.json`.
-2. In Dashboard > Plugins > Catalog, install "JavaScript Injector".
-3. Restart Jellyfin:
-
-```sh
-docker restart jellyfin
-```
+The JavaScript Injector plugin stays installed but empty: policy removes any
+script added to it by hand.
 
 ### Jellyfin behind Caddy
 

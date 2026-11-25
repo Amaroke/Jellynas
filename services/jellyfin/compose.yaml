@@ -35,6 +35,7 @@ services:
     volumes:
       - ${APPDATA_ROOT}/jellyfin:/config
       - ${DATA_ROOT}/media:/data/media:ro
+      - ./web-config.json:/usr/share/jellyfin/web/config.json:ro
     healthcheck:
       test:
         - "CMD"
