@@ -8,10 +8,42 @@ radarr:
       type: movie
       preferred_ratio: 0
       qualities:
+        - name: HDTV-720p
+          min: 17.1
+          max: 30
+        - name: WEBDL-720p
+          min: 12.5
+          max: 30
+        - name: WEBRip-720p
+          min: 12.5
+          max: 30
         - name: Bluray-720p
           min: 12.5
+          max: 30
+        - name: HDTV-1080p
+          min: 12.5
+          max: 30
+        - name: WEBDL-1080p
+          min: 12.5
+          max: 30
+        - name: WEBRip-1080p
+          min: 12.5
+          max: 30
         - name: Bluray-1080p
           min: 12.5
+          max: 30
+        - name: HDTV-2160p
+          min: 12.5
+          max: 30
+        - name: WEBDL-2160p
+          min: 12.5
+          max: 30
+        - name: WEBRip-2160p
+          min: 12.5
+          max: 30
+        - name: Bluray-2160p
+          min: 12.5
+          max: 30
 
     quality_profiles:
       - trash_id: 2572ce3ea4eef1c19d59e0e20ed1cea7
@@ -166,10 +198,42 @@ sonarr:
       type: series
       preferred_ratio: 0
       qualities:
+        - name: HDTV-720p
+          min: 10
+          max: 30
+        - name: WEBDL-720p
+          min: 10
+          max: 30
+        - name: WEBRip-720p
+          min: 10
+          max: 30
         - name: Bluray-720p
           min: 10
+          max: 30
+        - name: HDTV-1080p
+          min: 15
+          max: 30
+        - name: WEBDL-1080p
+          min: 15
+          max: 30
+        - name: WEBRip-1080p
+          min: 15
+          max: 30
         - name: Bluray-1080p
           min: 15
+          max: 30
+        - name: HDTV-2160p
+          min: 25
+          max: 30
+        - name: WEBDL-2160p
+          min: 25
+          max: 30
+        - name: WEBRip-2160p
+          min: 25
+          max: 30
+        - name: Bluray-2160p
+          min: 15
+          max: 30
 
     quality_profiles:
       - trash_id: 4c48f506c1116a3a57ae33f12346bd15
