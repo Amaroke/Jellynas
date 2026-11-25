@@ -2,7 +2,7 @@ import os
 import re
 import sys
 import time
-import xml.etree.ElementTree as ElementTree
+from xml.etree import ElementTree
 import zipfile
 from pathlib import Path
 from xml.sax.saxutils import escape, quoteattr
