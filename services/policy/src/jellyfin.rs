@@ -3,6 +3,7 @@ use crate::api::{Api, encode, report, rules, settle};
 use jiff::{SignedDuration, Timestamp};
 use serde_json::{Map, Value, json};
 
+const TEST_ACCOUNT: &str = "test";
 const IDLE: SignedDuration = SignedDuration::from_hours(30 * 24);
 const LDAP_PLUGIN: &str = "/Plugins/958aad6637844d2ab89aa7b6fab6e25c/Configuration";
 const INJECTOR_PLUGIN: &str = "/Plugins/f5a34f7b2e8a4e6aa7223a216a81b374/Configuration";
@@ -222,7 +223,7 @@ pub fn wanted_policy(user: &Value, now: Timestamp, shelves: &Shelves) -> Map<Str
     wanted.extend(access(&user["Policy"], &shelves.of(name)));
     if user["Policy"]["IsAdministrator"] != json!(true) {
         wanted.insert("EnableContentDeletion".into(), json!(false));
-        if idle(user, now) {
+        if idle(user, now) || name.eq_ignore_ascii_case(TEST_ACCOUNT) {
             wanted.insert("IsDisabled".into(), json!(true));
         }
     }
@@ -385,6 +386,13 @@ mod tests {
         let user = seen(false, "2026-10-24T03:30:01Z");
         let wanted = wanted_policy(&user, now(), &Shelves::default());
         assert!(!wanted.contains_key("IsDisabled"));
+    }
+
+    #[test]
+    fn the_test_account_is_disabled_at_every_pass() {
+        let user = json!({"Name": "test", "LastActivityDate": "2026-11-23T03:00:00Z", "Policy": {"IsAdministrator": false}});
+        let wanted = wanted_policy(&user, now(), &Shelves::default());
+        assert_eq!(Some(&json!(true)), wanted.get("IsDisabled"));
     }
 
     #[test]
