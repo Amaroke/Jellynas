@@ -39,7 +39,6 @@ WIDGETS = {
     "prowlarr",
     "radarr",
     "sonarr",
-    "suwayomi",
     "bazarr",
     "tdarr",
     "beszel",

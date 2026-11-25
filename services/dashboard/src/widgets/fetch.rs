@@ -42,26 +42,6 @@ fn deliver(
         .map_err(|error| error.to_string())
 }
 
-fn encode(input: &str) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut output = String::new();
-    for chunk in input.as_bytes().chunks(3) {
-        let bits = chunk.iter().enumerate().fold(0u32, |bits, (index, byte)| {
-            bits | (u32::from(*byte) << (16 - 8 * index))
-        });
-        for index in 0..4 {
-            if index <= chunk.len() {
-                output.push(char::from(
-                    ALPHABET[(bits >> (18 - 6 * index)) as usize & 63],
-                ));
-            } else {
-                output.push('=');
-            }
-        }
-    }
-    output
-}
-
 const STARR: [&str; 3] = [
     "/api/v3/indexer",
     "/api/v3/downloadclient",
@@ -348,7 +328,6 @@ impl Client {
                 )?;
                 Ok(found)
             }
-            "suwayomi" => self.suwayomi(),
             "bazarr" => {
                 let auth = self.key("BAZARR", "X-API-KEY")?;
                 parse::bazarr(
@@ -590,31 +569,6 @@ impl Client {
         parse::badge(&svg)
     }
 
-    fn suwayomi(&self) -> parse::Parsed {
-        let credentials = format!(
-            "{}:{}",
-            self.var("SUWAYOMI_USERNAME")?,
-            self.var("SUWAYOMI_PASSWORD")?
-        );
-        let chapters = |name: &str, condition: &str| {
-            format!(
-                "{name}: chapters(condition: {{{condition}}} filter: {{inLibrary: {{equalTo: true}}}}) {{ totalCount }}"
-            )
-        };
-        let query = format!(
-            "query Counts {{ {} {} {} {} }}",
-            chapters("download", "isDownloaded: true"),
-            chapters("nondownload", "isDownloaded: false"),
-            chapters("read", "isRead: true"),
-            chapters("unread", "isRead: false"),
-        );
-        parse::suwayomi(&self.post(
-            &self.url("SUWAYOMI", "/api/graphql")?,
-            &vec![("Authorization", format!("Basic {}", encode(&credentials)))],
-            &json!({"operationName": "Counts", "query": query}),
-        )?)
-    }
-
     fn systems(&self) -> Result<Value, String> {
         let mut cached = self
             .systems
@@ -689,18 +643,5 @@ impl Client {
             health: vec![],
             metrics: vec![],
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn basic_credentials_are_base64() {
-        assert_eq!("", encode(""));
-        assert_eq!("YQ==", encode("a"));
-        assert_eq!("YWI=", encode("ab"));
-        assert_eq!("YWRtaW46czNjcjN0", encode("admin:s3cr3t"));
     }
 }

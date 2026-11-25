@@ -5,10 +5,9 @@ mod aurral;
 mod jellyfin;
 mod kavita;
 mod lazylibrarian;
-mod suwayomi;
 
 use accounts::{Account, Directory, PRIVATE_ROOT};
-use api::{Http, basic};
+use api::Http;
 use jiff::ZonedDateTime;
 use jiff::civil::{Time, time};
 use std::path::Path;
@@ -26,7 +25,6 @@ enum App {
     Arr(arr::Arr, Http),
     Aurral(Http),
     LazyLibrarian(Http),
-    Suwayomi(Http),
 }
 
 impl App {
@@ -37,7 +35,6 @@ impl App {
             App::Arr(arr, _) => arr.name,
             App::Aurral(_) => "Aurral",
             App::LazyLibrarian(_) => "LazyLibrarian",
-            App::Suwayomi(_) => "Suwayomi",
         }
     }
 
@@ -51,7 +48,6 @@ impl App {
             }
             App::Aurral(api) => aurral::enforce(api),
             App::LazyLibrarian(api) => lazylibrarian::enforce(api),
-            App::Suwayomi(api) => suwayomi::enforce(api),
         }
     }
 }
@@ -101,13 +97,6 @@ fn apps(vars: impl Fn(&str) -> Option<String>) -> Vec<App> {
         apps.push(App::LazyLibrarian(Http {
             base: format!("http://lazylibrarian:5299/api?apikey={key}"),
             header: None,
-        }));
-    }
-    let login = (read("SUWAYOMI_USERNAME"), read("SUWAYOMI_PASSWORD"));
-    if let (Some(username), Some(password)) = login {
-        apps.push(App::Suwayomi(Http {
-            base: "http://gluetun:4567/api".into(),
-            header: Some(("Authorization", basic(&username, &password))),
         }));
     }
     apps
@@ -167,7 +156,7 @@ fn main() {
     }
     let apps = apps(|name| env::var(name).ok());
     if apps.is_empty() {
-        eprintln!("No app to keep: set the API key of an app, or the login of Suwayomi, in .env");
+        eprintln!("No app to keep: set the API key of an app in .env");
         process::exit(1);
     }
     let directory = directory(|name| env::var(name).ok());
@@ -230,8 +219,6 @@ mod tests {
             ("SONARR_API_KEY", "s"),
             ("AURRAL_API_KEY", "a"),
             ("LAZYLIBRARIAN_API_KEY", "l"),
-            ("SUWAYOMI_USERNAME", "Aladdin"),
-            ("SUWAYOMI_PASSWORD", "open sesame"),
         ]));
         let names: Vec<&str> = found.iter().map(App::name).collect();
         let expected = [
@@ -241,7 +228,6 @@ mod tests {
             "Sonarr",
             "Aurral",
             "LazyLibrarian",
-            "Suwayomi",
         ];
         assert_eq!(expected.to_vec(), names);
         let App::Jellyfin(api) = &found[0] else {
@@ -270,20 +256,11 @@ mod tests {
         };
         assert_eq!("http://lazylibrarian:5299/api?apikey=l", api.base);
         assert_eq!(None, secret(api));
-        let App::Suwayomi(api) = &found[6] else {
-            panic!("Suwayomi comes last")
-        };
-        assert_eq!("http://gluetun:4567/api", api.base);
-        assert_eq!(Some("Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="), secret(api));
     }
 
     #[test]
     fn an_app_without_a_key_is_skipped() {
-        let found = apps(vars(&[
-            ("DOMAIN", "example.org"),
-            ("SONARR_API_KEY", " "),
-            ("SUWAYOMI_USERNAME", "admin"),
-        ]));
+        let found = apps(vars(&[("DOMAIN", "example.org"), ("SONARR_API_KEY", " ")]));
         assert!(found.is_empty());
     }
 
