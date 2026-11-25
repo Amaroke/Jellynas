@@ -58,8 +58,8 @@ impl Shelves {
 fn owner(path: &str) -> Option<&str> {
     path.strip_prefix(PRIVATE_ROOT)?
         .strip_prefix('/')
-        .map(|rest| rest.trim_end_matches('/'))
-        .filter(|rest| !rest.is_empty() && !rest.contains('/'))
+        .and_then(|rest| rest.split('/').next())
+        .filter(|owner| !owner.is_empty())
 }
 
 fn kept_order(current: &Value, wanted: &[String]) -> Value {
@@ -419,6 +419,28 @@ mod tests {
         assert_eq!(vec![MOVIES, ELEA], shelves.of("elea_t"));
         assert_eq!(vec![MOVIES, VINCENT], shelves.of("Moutondu"));
         assert_eq!(vec![MOVIES], shelves.of("theo"));
+    }
+
+    #[test]
+    fn a_library_on_a_private_subfolder_belongs_to_the_account_of_that_folder() {
+        let shelves = Shelves::read(&json!([
+            library("aa", "Films", "/data/media/movies"),
+            library("bb", "Livres", "/data/media/private/elea_t/books/"),
+        ]));
+        assert_eq!(vec!["aa", "bb"], shelves.of("elea_t"));
+        assert_eq!(vec!["aa"], shelves.of("theo"));
+    }
+
+    #[test]
+    fn an_account_with_a_library_on_a_subfolder_gets_no_other() {
+        let mut pages = in_line();
+        pages.insert(
+            "/Library/VirtualFolders".into(),
+            json!([library("bb", "Livres", "/data/media/private/theo/books")]),
+        );
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(0), shelve(&fake, &[account("theo", "Théo")]));
+        assert!(fake.paths().is_empty());
     }
 
     #[test]
