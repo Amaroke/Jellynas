@@ -122,7 +122,13 @@ pub fn enforce(arr: &Arr, api: &impl Api, private: &[String]) -> Result<usize, S
         .iter()
         .copied()
         .chain(private.iter().map(String::as_str));
-    for root in wanted.filter(|root| !known.contains(root)) {
+    let held = |root: &str| {
+        known.iter().any(|path| {
+            path.strip_prefix(root)
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+        })
+    };
+    for root in wanted.filter(|root| !held(root)) {
         api.send("POST", "/rootfolder", &json!({"path": root}))?;
         println!("{} root folders: added {root}", arr.name);
         changed += 1;
@@ -247,6 +253,22 @@ mod tests {
                 fake.body(0)
             );
         }
+    }
+
+    #[test]
+    fn a_root_folder_on_a_private_subfolder_stands_for_the_account() {
+        let mut pages = in_line(&radarr());
+        pages.insert(
+            "/rootfolder".into(),
+            json!([{"path": "/data/media/movies"}, {"path": "/data/media/private/elea_t/videos"}]),
+        );
+        let private = [
+            "/data/media/private/elea".to_string(),
+            "/data/media/private/elea_t".to_string(),
+        ];
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), enforce(&radarr(), &fake, &private));
+        assert_eq!(json!({"path": "/data/media/private/elea"}), fake.body(0));
     }
 
     #[test]

@@ -495,10 +495,16 @@ pass, before the first sign-in of the Account:
 - a root folder on that folder in Radarr and in Sonarr, which Seerr offers
   when the Admin approves a Request, as [Requests](#requests) sets out.
 
-The owner of a Private library is the last folder of its path, so a library
-added by hand on `/data/media/private/<username>` belongs to that Account too.
-policy grants every Account the public libraries and its own Private library,
-and takes away any other Private library. Renaming a Private library in the
+The owner of a Private library is the folder right under `/data/media/private`
+in its path, so a library added by hand on `/data/media/private/<username>` or
+on one of its subfolders belongs to that Account too. Jellyfin refuses a library
+inside the folder of another, so an Account splits its folder into sibling
+subfolders, for example a "Mixed" library on `<username>/videos` and a "Books"
+one on `<username>/books`, with the Radarr and Sonarr root folders moved to
+`<username>/videos`. A root folder on a subfolder stands for the Account, so
+policy adds none on `<username>` then. policy grants every Account the public
+libraries and its own Private libraries, and takes away any other Private
+library. Renaming a Private library in the
 Dashboard is fine, policy only looks at its folder. It never deletes a folder,
 a library or a root folder, even when the Account leaves lldap.
 
