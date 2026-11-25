@@ -531,6 +531,7 @@ jellyfin_hostname="${domain:+jellyfin.$domain}"
 seerr_hostname="${domain:+seerr.$domain}"
 auth_hostname="${domain:+auth.$domain}"
 aurral_hostname="${domain:+aurral.$domain}"
+kavita_hostname="${domain:+kavita.$domain}"
 vpn_provider="$(env_value VPN_SERVICE_PROVIDER)"
 host_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
 https_port="$(env_value CADDY_HTTPS_PORT)"
@@ -542,6 +543,10 @@ check_compose_renders
 check_env_filled
 check_containers_up
 check_read_only jellyfin /data/media
+check_read_only kavita /data/media/books
+check_read_only kavita /data/media/manga
+check_read_only kavita /data/media/private
+check_mounts_only kavita media/books media/manga media/private
 check_doco_cd
 check_no_media_mount caddy
 check_no_media_mount gluetun
@@ -606,6 +611,7 @@ check_public_hostname "$jellyfin_hostname"
 check_public_hostname "$seerr_hostname"
 check_public_hostname "$auth_hostname"
 check_public_hostname "$aurral_hostname"
+check_public_hostname "$kavita_hostname"
 check_public_hostname "${domain:+truenas.$lan}" "$host_ip"
 check_public_hostname "${domain:+jellyfin.$lan}" "$host_ip"
 check_public_hostname "${domain:+seerr.$lan}" "$host_ip"
@@ -618,9 +624,9 @@ check_lan_refused_outside "lldap.$lan"
 check_unknown_host_refused "$jellyfin_hostname"
 check_hsts "$jellyfin_hostname"
 
-if [ -n "$jellyfin_hostname$seerr_hostname$aurral_hostname" ]; then
+if [ -n "$jellyfin_hostname$seerr_hostname$aurral_hostname$kavita_hostname" ]; then
   printf '\nOn a phone on 4G with wifi off, open each address and check that it loads:\n'
-  for host in "$jellyfin_hostname" "$seerr_hostname" "$aurral_hostname"; do
+  for host in "$jellyfin_hostname" "$seerr_hostname" "$aurral_hostname" "$kavita_hostname"; do
     [ -z "$host" ] || printf '  https://%s%s\n' "$host" "$public_port"
   done
 fi

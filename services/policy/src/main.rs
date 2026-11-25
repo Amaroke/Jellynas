@@ -3,6 +3,7 @@ mod api;
 mod arr;
 mod aurral;
 mod jellyfin;
+mod kavita;
 mod lazylibrarian;
 mod suwayomi;
 
@@ -21,6 +22,7 @@ const RETRY: i64 = 30;
 
 enum App {
     Jellyfin(Http),
+    Kavita(Http, String),
     Arr(arr::Arr, Http),
     Aurral(Http),
     LazyLibrarian(Http),
@@ -31,6 +33,7 @@ impl App {
     fn name(&self) -> &'static str {
         match self {
             App::Jellyfin(_) => "Jellyfin",
+            App::Kavita(..) => "Kavita",
             App::Arr(arr, _) => arr.name,
             App::Aurral(_) => "Aurral",
             App::LazyLibrarian(_) => "LazyLibrarian",
@@ -41,6 +44,7 @@ impl App {
     fn enforce(&self, accounts: &[Account]) -> Result<usize, String> {
         match self {
             App::Jellyfin(api) => jellyfin::enforce(api, accounts),
+            App::Kavita(api, authority) => kavita::enforce(api, accounts, authority),
             App::Arr(arr, api) => {
                 let private: Vec<String> = accounts.iter().map(Account::videos).collect();
                 arr::enforce(arr, api, &private)
@@ -65,6 +69,15 @@ fn apps(vars: impl Fn(&str) -> Option<String>) -> Vec<App> {
             base: format!("https://jellyfin.{domain}:{port}"),
             header: Some(("Authorization", format!("MediaBrowser Token=\"{key}\""))),
         }));
+    }
+    if let (Some(domain), Some(key)) = (read("DOMAIN"), read("KAVITA_API_KEY")) {
+        apps.push(App::Kavita(
+            Http {
+                base: format!("https://kavita.{domain}:{port}/api"),
+                header: Some(("x-api-key", key)),
+            },
+            format!("https://auth.{domain}:{port}"),
+        ));
     }
     for (arr, base, variable) in [
         (arr::radarr(), "http://radarr:7878/api/v3", "RADARR_API_KEY"),
@@ -212,6 +225,7 @@ mod tests {
             ("DOMAIN", "example.org"),
             ("CADDY_HTTPS_PORT", "50000"),
             ("JELLYFIN_API_KEY", "j"),
+            ("KAVITA_API_KEY", "k"),
             ("RADARR_API_KEY", "r"),
             ("SONARR_API_KEY", "s"),
             ("AURRAL_API_KEY", "a"),
@@ -222,6 +236,7 @@ mod tests {
         let names: Vec<&str> = found.iter().map(App::name).collect();
         let expected = [
             "Jellyfin",
+            "Kavita",
             "Radarr",
             "Sonarr",
             "Aurral",
@@ -234,22 +249,28 @@ mod tests {
         };
         assert_eq!("https://jellyfin.example.org:50000", api.base);
         assert_eq!(Some("MediaBrowser Token=\"j\""), secret(api));
-        let App::Arr(_, api) = &found[1] else {
-            panic!("Radarr comes second")
+        let App::Kavita(api, authority) = &found[1] else {
+            panic!("Kavita comes second")
+        };
+        assert_eq!("https://kavita.example.org:50000/api", api.base);
+        assert_eq!(Some("k"), secret(api));
+        assert_eq!("https://auth.example.org:50000", authority);
+        let App::Arr(_, api) = &found[2] else {
+            panic!("Radarr comes third")
         };
         assert_eq!("http://radarr:7878/api/v3", api.base);
         assert_eq!(Some("r"), secret(api));
-        let App::Aurral(api) = &found[3] else {
-            panic!("Aurral comes fourth")
+        let App::Aurral(api) = &found[4] else {
+            panic!("Aurral comes fifth")
         };
         assert_eq!("https://aurral.example.org:50000/api", api.base);
         assert_eq!(Some("a"), secret(api));
-        let App::LazyLibrarian(api) = &found[4] else {
-            panic!("LazyLibrarian comes fifth")
+        let App::LazyLibrarian(api) = &found[5] else {
+            panic!("LazyLibrarian comes sixth")
         };
         assert_eq!("http://lazylibrarian:5299/api?apikey=l", api.base);
         assert_eq!(None, secret(api));
-        let App::Suwayomi(api) = &found[5] else {
+        let App::Suwayomi(api) = &found[6] else {
             panic!("Suwayomi comes last")
         };
         assert_eq!("http://gluetun:4567/api", api.base);

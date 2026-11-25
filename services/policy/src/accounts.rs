@@ -21,6 +21,17 @@ impl Account {
     pub fn videos(&self) -> String {
         format!("{}/videos", self.folder())
     }
+
+    pub fn books(&self) -> String {
+        format!("{}/books", self.folder())
+    }
+}
+
+pub fn owner(path: &str) -> Option<&str> {
+    path.strip_prefix(PRIVATE_ROOT)?
+        .strip_prefix('/')
+        .and_then(|rest| rest.split('/').next())
+        .filter(|owner| !owner.is_empty())
 }
 
 pub struct Directory {
@@ -161,6 +172,7 @@ mod tests {
         );
         assert_eq!("/data/media/private/elea_t", accounts[0].folder());
         assert_eq!("/data/media/private/elea_t/videos", accounts[0].videos());
+        assert_eq!("/data/media/private/elea_t/books", accounts[0].books());
     }
 
     #[test]

@@ -182,47 +182,50 @@ chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 Requires [Settings](#settings).
 
 Caddy is the only service the NAS publishes, on `CADDY_HTTPS_PORT`. Friends
-reach `jellyfin.<DOMAIN>`, `seerr.<DOMAIN>`, `aurral.<DOMAIN>` and
-`auth.<DOMAIN>` from the internet. The Admin reaches every tool at
-`<tool>.lan.<DOMAIN>`, from the local network only: Caddy refuses a lan name to
-any address outside `LAN_SUBNET`, and refuses any name it does not know. Through
-the API of the DNS provider, Caddy obtains a wildcard certificate for
+reach `jellyfin.<DOMAIN>`, `seerr.<DOMAIN>`, `aurral.<DOMAIN>`,
+`kavita.<DOMAIN>` and `auth.<DOMAIN>` from the internet. The Admin reaches every
+tool at `<tool>.lan.<DOMAIN>`, from the local network only: Caddy refuses a lan
+name to any address outside `LAN_SUBNET`, and refuses any name it does not know.
+Through the API of the DNS provider, Caddy obtains a wildcard certificate for
 `*.<DOMAIN>` and one for `*.lan.<DOMAIN>`, so no port opens for the certificates
 and the certificate logs never list the tools, and it keeps `jellyfin`, `seerr`,
-`auth` and `aurral` on the public IP of the home. Wildcards keep the tools out
-of the certificate logs, a single port keeps what the NAS publishes small, and
-public certificates avoid installing a local root certificate on every device.
+`auth`, `aurral` and `kavita` on the public IP of the home. Wildcards keep the
+tools out of the certificate logs, a single port keeps what the NAS publishes
+small, and public certificates avoid installing a local root certificate on
+every device.
 
 Caddy also listens on `CADDY_HTTPS_PORT` inside its container and sends HSTS on
 every name, so a browser never tries plain HTTP. Inside the NAS, Caddy answers
-the public names itself, so a service reaches Jellyfin, Seerr, Aurral or
-Authelia at the same address a Friend uses.
+the public names itself, so a service reaches Jellyfin, Seerr, Aurral, Kavita
+or Authelia at the same address a Friend uses.
 
 ### Network zones
 
-Jellyfin, Seerr, Aurral and Authelia face the internet, so a flaw in one of them
-must not land next to the rest of the NAS. The services sit in five Docker
-networks:
+Jellyfin, Seerr, Aurral, Kavita and Authelia face the internet, so a flaw in one
+of them must not land next to the rest of the NAS. The services sit in six
+Docker networks:
 
 | Zone            | Services                                                   |
 | --------------- | ---------------------------------------------------------- |
 | `jellyfin-zone` | Caddy, Jellyfin, lldap                                     |
 | `seerr-zone`    | Caddy, Seerr, Radarr, Sonarr                               |
 | `aurral-zone`   | Caddy, Aurral, Gluetun                                     |
+| `kavita-zone`   | Caddy, Kavita                                              |
 | `identity-zone` | Caddy, Authelia, lldap, policy                             |
 | `internal-zone` | every other service, plus Caddy, Radarr, Sonarr, Gluetun   |
 
 qBittorrent and slskd share the network of Gluetun, in the internal zone, as
 Suwayomi does once back from [On hold](#on-hold), and the Beszel agent the
-network of the Host. A service that needs Jellyfin, Seerr, Aurral or Authelia
-from another zone, such as the Dashboard, Uptime Kuma, the Music bot, or Aurral
-signing in with Authelia, reaches it through Caddy at its public name, so the
-zones only open towards the public services, never from them. lldap speaks LDAP,
-which Caddy cannot carry, so it sits in the zones of Jellyfin and of Authelia,
-the only two services that read the Accounts over LDAP, and has no public name.
-policy reads the Accounts through the API of lldap, from the zone of Authelia.
-The zones hand out IPv6 addresses too, and Jellyfin tries them first, so lldap
-listens on `::`. `python3 -m unittest` checks the members of each zone.
+network of the Host. A service that needs Jellyfin, Seerr, Aurral, Kavita or
+Authelia from another zone, such as the Dashboard, Uptime Kuma, the Music bot,
+policy, or Aurral and Kavita signing in with Authelia, reaches it through Caddy
+at its public name, so the zones only open towards the public services, never
+from them. lldap speaks LDAP, which Caddy cannot carry, so it sits in the zones
+of Jellyfin and of Authelia, the only two services that read the Accounts over
+LDAP, and has no public name. policy reads the Accounts through the API of
+lldap, from the zone of Authelia. The zones hand out IPv6 addresses too, and
+Jellyfin tries them first, so lldap listens on `::`. `python3 -m unittest`
+checks the members of each zone.
 
 Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS
 provider, swap the `caddy-dns/ovh` module in `services/caddy/Dockerfile` for its
@@ -235,7 +238,8 @@ In the [OVH Control Panel](https://www.ovh.com/manager/), open Web Cloud >
 Domain names > `<DOMAIN>` > DNS zone, click "Add an entry", pick `A`, enter
 `*.lan` as the subdomain and the fixed local IP of the NAS as the target. Leave
 every other entry as it is, such as the ones of the OVH email. Caddy creates the
-`jellyfin`, `seerr`, `auth` and `aurral` entries itself at its first start.
+`jellyfin`, `seerr`, `auth`, `aurral` and `kavita` entries itself at its first
+start.
 
 ### API keys
 
@@ -284,11 +288,13 @@ Once [Deploy](#deploy) is done, each tool answers at its own address, with
 | Jellyfin      | `https://jellyfin.<DOMAIN>`            | Anywhere      |
 | Seerr         | `https://seerr.<DOMAIN>`               | Anywhere      |
 | Aurral        | `https://aurral.<DOMAIN>`              | Anywhere      |
+| Kavita        | `https://kavita.<DOMAIN>`              | Anywhere      |
 | Authelia      | `https://auth.<DOMAIN>`                | Anywhere      |
 | TrueNAS       | `https://truenas.lan.<DOMAIN>`         | Local network |
 | Jellyfin      | `https://jellyfin.lan.<DOMAIN>`        | Local network |
 | Seerr         | `https://seerr.lan.<DOMAIN>`           | Local network |
 | Aurral        | `https://aurral.lan.<DOMAIN>`          | Local network |
+| Kavita        | `https://kavita.lan.<DOMAIN>`          | Local network |
 | lldap         | `https://lldap.lan.<DOMAIN>`           | Local network |
 | qBittorrent   | `https://qbittorrent.lan.<DOMAIN>`     | Local network |
 | Prowlarr      | `https://prowlarr.lan.<DOMAIN>`        | Local network |
@@ -467,11 +473,10 @@ them as you like, Friends see these names, and the NAS names them in French:
 | Movies  | Movies       | `/data/media/movies` |
 | Shows   | Shows        | `/data/media/shows`  |
 | Anime   | Shows        | `/data/media/anime`  |
-| Books   | Books        | `/data/media/books`  |
-| Manga   | Books        | `/data/media/manga`  |
 
-Jellyfin holds no music: [Aurral](#aurral) serves it, to its own web player and
-to Subsonic apps.
+Jellyfin holds no music and no books: [Aurral](#aurral) serves the music, to its
+own web player and to Subsonic apps, and [Kavita](#kavita) the books and the
+manga.
 
 For each library, set the preferred metadata language and country, here French
 and France, so titles and summaries come in that language. Leave "Save artwork
@@ -494,11 +499,12 @@ pass, before the first sign-in of the Account:
   after the display name of the Account in lldap, so movies and shows sit
   together in one library,
 - a root folder on `<username>/videos` in Radarr and in Sonarr, which Seerr
-  offers when the Admin approves a Request, as [Requests](#requests) sets out.
+  offers when the Admin approves a Request, as [Requests](#requests) sets out,
+- a Kavita library on `<username>/books`, as [Kavita](#kavita) sets out.
 
 The owner of a Private library is the folder right under `/data/media/private`
-in its path, so a library added by hand on one of its subfolders, for example a
-"Books" library on `<username>/books`, belongs to that Account too. policy grants
+in its path, so a library added by hand on one of its subfolders belongs to that
+Account too. policy grants
 every Account the public libraries and its own Private libraries, and takes away
 any other Private library. Renaming a Private library in the Dashboard is fine,
 policy only looks at its folder. It never deletes a folder, a library or a root
@@ -617,13 +623,15 @@ Each Friend and the Admin has a single Account, kept in
 Jellyfin checks every password against lldap through its LDAP plugin, which
 works in every app, TV and phone included, and Seerr signs in through Jellyfin.
 [Authelia](https://www.authelia.com) reads the same Accounts and signs the
-Friends in to Aurral with OpenID Connect, on `auth.<DOMAIN>`. Authentik or
-Keycloak can replace both, with more services to run. Neither Seerr nor the
-Jellyfin apps speak OpenID Connect, which is why Jellyfin reads lldap directly.
+Friends in to Aurral and Kavita with OpenID Connect, on `auth.<DOMAIN>`.
+Authentik or Keycloak can replace both, with more services to run. Neither Seerr
+nor the Jellyfin apps speak OpenID Connect, which is why Jellyfin reads lldap
+directly.
 
 Only the Admin creates an Account, in lldap, from the local network. Each
 Friend changes their own password in Jellyfin, in Profile > Password, which
-needs the current one, and the new password then works in Aurral too. The lldap
+needs the current one, and the new password then works in Aurral and Kavita
+too. The lldap
 web UI stays on the local network, and Authelia has no email to send, so its
 password change and reset stay off. A Friend who forgets their password asks the
 Admin, who sets a new one in lldap. After 5
@@ -637,24 +645,29 @@ docker exec authelia authelia storage bans user revoke <username>
 ### Keys of Authelia
 
 Fill the Accounts block of `.env`, then create the signing key of Authelia and
-the digest of the secret of Aurral in the appdata of Authelia. Authelia restarts
-in a loop until both files are there:
+the digests of the secrets of Aurral and Kavita in the appdata of Authelia.
+Authelia restarts in a loop until every file is there:
 
 ```bash
-. <(grep -E '^(APPDATA_ROOT|AURRAL_OIDC_CLIENT_SECRET|PUID|PGID)=' .env)
+. <(grep -E '^(APPDATA_ROOT|[A-Z]+_OIDC_CLIENT_SECRET|PUID|PGID)=' .env)
 image="$(docker inspect -f '{{.Config.Image}}' authelia)"
 docker run --rm -u "$PUID:$PGID" -v "$APPDATA_ROOT/authelia:/keys" "$image" \
   authelia crypto pair rsa generate --directory /keys
-docker run --rm "$image" \
-  authelia crypto hash generate pbkdf2 --variant sha512 \
-  --password "$AURRAL_OIDC_CLIENT_SECRET" |
-  sed -n 's/^Digest: //p' > "$APPDATA_ROOT/authelia/aurral.digest"
-chown "$PUID:$PGID" "$APPDATA_ROOT/authelia/aurral.digest"
+for client in aurral kavita; do
+  upper="$(echo "$client" | tr '[:lower:]' '[:upper:]')"
+  variable="${upper}_OIDC_CLIENT_SECRET"
+  docker run --rm "$image" \
+    authelia crypto hash generate pbkdf2 --variant sha512 \
+    --password "${!variable}" |
+    sed -n 's/^Digest: //p' > "$APPDATA_ROOT/authelia/$client.digest"
+  chown "$PUID:$PGID" "$APPDATA_ROOT/authelia/$client.digest"
+done
 docker restart authelia
 ```
 
-After a change of `AURRAL_OIDC_CLIENT_SECRET`, run these lines again without the
-key line.
+After a change of `AURRAL_OIDC_CLIENT_SECRET` or `KAVITA_OIDC_CLIENT_SECRET`,
+run these lines again without the key line, and paste the new secret of Kavita
+into Kavita too, as [First start of Kavita](#first-start-of-kavita) sets out.
 
 ### lldap
 
@@ -1328,6 +1341,77 @@ the user token of their ListenBrainz settings. Aurral then sends what they play
 in the browser and in the apps, and recommends from it. ListenBrainz can carry
 it on to Last.fm, which Aurral no longer reaches itself.
 
+## Kavita
+
+Requires [Accounts](#accounts).
+
+[Kavita](https://www.kavitareader.com) reads the books and the manga of the
+Library, in the browser and in reading apps. Each Friend signs in with their
+Account through Authelia, keeps their own progress, and sees the public
+libraries plus their own Private library. Kavita mounts the books, the manga and
+the private folders read only, so it never changes a file, and sits in a zone of
+its own with Caddy. Komga reads the same files with fewer reading apps, and
+Jellyfin reads books poorly.
+
+### First start of Kavita
+
+1. Open `https://kavita.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` from the local network
+   and create the local account `admin`, a recovery login stored in your
+   password manager. It is no lldap Account, so policy never takes a library
+   from it, and policy reads Kavita with it.
+2. Signed in as `admin`, open Settings > Account > Auth Keys, create a key
+   named `policy` without an expiry date, and copy it into `KAVITA_API_KEY` in
+   `.env`.
+3. In Settings > OpenID Connect, paste `KAVITA_OIDC_CLIENT_SECRET` as the
+   secret and save. policy fills every other field at its next pass. Kavita
+   reads its sign-in at start only, so restart it once both are set:
+
+   ```sh
+   docker restart policy
+   docker restart kavita
+   ```
+
+### Settings of Kavita kept by policy
+
+| Setting                  | Value                                |
+| ------------------------ | ------------------------------------ |
+| OpenID Connect authority | `https://auth.<DOMAIN>:<port>`       |
+| Client ID                | `kavita`                             |
+| Provision Accounts       | On                                   |
+| Require verified email   | Off, the Accounts have no real email |
+| Sync user settings       | Off                                  |
+| Provider name            | Authelia                             |
+| Default roles            | Login, Download, Bookmark            |
+| Default libraries        | The public libraries                 |
+| OPDS                     | On                                   |
+
+Kavita creates the user of a Friend at their first sign-in, named after their
+Account. policy keeps these libraries, and adds the missing ones at each pass:
+
+| Library         | Type  | Folder                     | Files         |
+| --------------- | ----- | -------------------------- | ------------- |
+| Livres          | Book  | `/data/media/books`        | EPUB, PDF     |
+| Mangas          | Manga | `/data/media/manga`        | Archive       |
+| Name of Account | Book  | `private/<username>/books` | Archive, EPUB |
+
+It grants every Account the public libraries and its own Private library, and
+takes away any other, like in Jellyfin. A library added by hand on a private
+folder belongs to the Account of that folder. A user that is no lldap Account,
+such as `admin`, keeps its libraries.
+
+Kavita groups a series by folder, one folder per series, and never a file at the
+root of a library. It reads the series and the volume of an EPUB from
+`calibre:series` and `calibre:series_index` in its OPF, and those of an archive
+from its `ComicInfo.xml`.
+
+### Reading apps
+
+A Friend finds their OPDS address in Settings > Account > OPDS in Kavita, and
+adds it to an OPDS app such as KOReader, Panels or Moon+ Reader. KOReader also
+syncs its progress with Kavita, at the address Kavita shows in the same page.
+Mihon reads Kavita through the
+[Kavita extension](https://github.com/Kareadita/tach-extension).
+
 ## Policy
 
 Requires [Jellyfin](#jellyfin), [Radarr](#radarr), [Sonarr](#sonarr) and
@@ -1348,17 +1432,19 @@ It keeps the settings listed in
 [Rules of the server and the Accounts](#rules-of-the-server-and-the-accounts),
 [Settings kept by policy](#settings-kept-by-policy),
 [Settings of Sonarr kept by policy](#settings-of-sonarr-kept-by-policy),
-[Settings of Aurral kept by policy](#settings-of-aurral-kept-by-policy), and,
+[Settings of Aurral kept by policy](#settings-of-aurral-kept-by-policy),
+[Settings of Kavita kept by policy](#settings-of-kavita-kept-by-policy), and,
 once they are back from [On hold](#on-hold),
 [Settings of LazyLibrarian kept by policy](#settings-of-lazylibrarian-kept-by-policy)
 and
 [Settings of Suwayomi kept by policy](#settings-of-suwayomi-kept-by-policy).
 
 It keeps an app once its API key is in `.env`: `JELLYFIN_API_KEY`,
-`RADARR_API_KEY`, `SONARR_API_KEY`, `AURRAL_API_KEY` or `LAZYLIBRARIAN_API_KEY`,
+`KAVITA_API_KEY`, `RADARR_API_KEY`, `SONARR_API_KEY`, `AURRAL_API_KEY` or
+`LAZYLIBRARIAN_API_KEY`,
 and Suwayomi once `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD` are. It reaches
 Radarr, Sonarr and LazyLibrarian in the internal zone, Suwayomi through Gluetun,
-and Jellyfin and Aurral through Caddy. Aurral takes
+and Jellyfin, Kavita and Aurral through Caddy. Aurral takes
 `AURRAL_API_KEY` as its own API key in place of the one it generates. Its logs
 name each setting it puts back:
 

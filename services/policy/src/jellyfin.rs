@@ -1,4 +1,4 @@
-use crate::accounts::{Account, PRIVATE_ROOT};
+use crate::accounts::{Account, PRIVATE_ROOT, owner};
 use crate::api::{Api, report, rules, settle};
 use jiff::{SignedDuration, Timestamp};
 use serde_json::{Map, Value, json};
@@ -53,13 +53,6 @@ impl Shelves {
         ids.dedup();
         ids
     }
-}
-
-fn owner(path: &str) -> Option<&str> {
-    path.strip_prefix(PRIVATE_ROOT)?
-        .strip_prefix('/')
-        .and_then(|rest| rest.split('/').next())
-        .filter(|owner| !owner.is_empty())
 }
 
 fn kept_order(current: &Value, wanted: &[String]) -> Value {

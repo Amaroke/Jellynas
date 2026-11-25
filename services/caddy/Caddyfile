@@ -15,7 +15,7 @@
 			consumer_key {env.OVH_CONSUMER_KEY}
 		}
 		domains {
-			{$DOMAIN} jellyfin seerr auth aurral
+			{$DOMAIN} jellyfin seerr auth aurral kavita
 		}
 		versions ipv4
 		check_interval 5m
@@ -55,6 +55,10 @@
 	handle @aurral {
 		reverse_proxy aurral:3001
 	}
+	@kavita host kavita.{$DOMAIN}
+	handle @kavita {
+		reverse_proxy kavita:5000
+	}
 	handle {
 		abort
 	}
@@ -66,6 +70,7 @@
 	import lan jellyfin jellyfin:8096
 	import lan seerr seerr:5055
 	import lan aurral aurral:3001
+	import lan kavita kavita:5000
 	import lan lldap lldap:17170
 	@qbittorrent {
 		host qbittorrent.lan.{$DOMAIN}
