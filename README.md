@@ -134,8 +134,8 @@ Both roots live outside the repo, at the paths set in `DATA_ROOT` and
 `APPDATA_ROOT`, and so do the archives of the appdata, at `BACKUP_ROOT`. The
 data root holds a single tree, so that one folder holds every download and the
 whole Library. Radarr and Sonarr download into the qBittorrent
-categories `movies` and `shows`, ratio into `farm`, and LazyLibrarian, once back
-from [On hold](#on-hold), into `books`. qBittorrent
+categories `movies` and `shows`, ratio into `farm`, and LazyLibrarian into
+`books`. qBittorrent
 creates the folder of a category the first time a torrent lands in it.
 cross-seed hardlinks its matches into `cross-seed`, and slskd downloads into
 `soulseek`:
@@ -1411,6 +1411,110 @@ syncs its progress with Kavita, at the address Kavita shows in the same page.
 Mihon reads Kavita through the
 [Kavita extension](https://github.com/Kareadita/tach-extension).
 
+## LazyLibrarian
+
+Requires [Prowlarr](#prowlarr) and [Kavita](#kavita).
+
+LazyLibrarian follows authors, books and manga: a wanted book or volume arrives
+in the Library on its own, from the indexers through qBittorrent, and Kavita
+reads it. It sees only the books and manga folders, under `/data/media/books`
+and `/data/media/manga`, and the torrents tree, under `/data/torrents`. Readarr
+is retired, and no other maintained open source tool finds and files books this
+way. The private books folders are not mounted in LazyLibrarian and stay filed
+by hand.
+
+### Login of LazyLibrarian
+
+Open `https://lazylibrarian.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. In Config >
+Interface:
+
+1. Under WebServer Options, set "User" and "Pass" to a username and a strong
+   password, distinct from the other tools.
+2. Under API, check "Enable API" and generate the "API Full Access key", which
+   Prowlarr and policy use.
+3. Click "Save changes" and restart LazyLibrarian from its menu.
+
+In `.env`, set `LAZYLIBRARIAN_API_KEY` to the API Full Access key, then restart
+doco-cd to apply `.env`:
+
+```sh
+docker restart doco-cd
+```
+
+`./scripts/verify.sh` checks that the web UI then asks for the login.
+
+### Download client of LazyLibrarian
+
+1. In qBittorrent, add a category `books` with `/data/torrents/books` as the
+   save path.
+2. In LazyLibrarian, Config > Downloaders, under Torrents, enter the qBittorrent
+   login, click "Test qBitTorrent", then "Save changes". policy sets the rest.
+
+### Settings of LazyLibrarian kept by policy
+
+[policy](#policy) puts these back every night:
+
+| Setting                        | Value                             |
+| ------------------------------ | --------------------------------- |
+| Authentication type            | Basic (Browser Popup)             |
+| Enable user accounts           | off                               |
+| Telemetry                      | off                               |
+| eBook Library Folder           | `/data/media/books`               |
+| Keep original files            | on                                |
+| eBook folder                   | `{$SerName\|$Title}`              |
+| eBook filename                 | `$Title{ ($SerName, #$PadNum)}`   |
+| Comics tab                     | on                                |
+| Comic folder relative          | off                               |
+| Comic folder                   | `/data/media/manga/$Title`        |
+| qBitTorrent                    | on, host `gluetun`, port `8080`   |
+| qBitTorrent Label/Category     | `books`                           |
+| Download directory             | `/data/torrents/books`            |
+| Keep seeding after processing  | on                                |
+| Do not delete if still seeding | on                                |
+
+Each import is a copy, so the torrent keeps seeding from the torrents tree, and
+LazyLibrarian never removes a torrent before qBittorrent stops it at its seeding
+goal. LazyLibrarian sees the download directory at the same path as
+qBittorrent. A change of the authentication type applies once LazyLibrarian
+restarts.
+
+A book of a series lands as `<Series>/<Title> (<Series>, #NN).epub`, the layout
+of the Library. A book without a series lands as `<Title>/<Title>.epub`: the
+braces drop the series part when it is empty, and the folder falls back to the
+title, so each book still has a folder of its own. Next to the book,
+LazyLibrarian writes `<name>.opf` and its cover as `<name>.jpg`, which it has no
+setting to turn off. Kavita reads neither, it only opens the file types of each
+library.
+
+A manga volume lands as `/data/media/manga/<Title>/<Title> <Issue>.cbz`.
+
+### Indexers of LazyLibrarian
+
+In Prowlarr, Settings > Apps, click "+" and pick LazyLibrarian. Set "Prowlarr
+Server" to `http://prowlarr:9696` and "LazyLibrarian Server" to
+`http://lazylibrarian:5299`, paste the API Full Access key, set "Sync Level" to
+"Full Sync", click "Test", then "Save". Every indexer with book or comic
+categories then shows up in LazyLibrarian, Config > Providers.
+
+### ComicVine
+
+LazyLibrarian identifies manga on [ComicVine](https://comicvine.gamespot.com).
+Create a free account there, copy the API key from
+[comicvine.gamespot.com/api](https://comicvine.gamespot.com/api/), and paste it
+in LazyLibrarian, Config > Processing > Comics, "ComicVine API key".
+
+### Want a book
+
+In Authors, search a book or an author, add it and mark the book as Wanted.
+LazyLibrarian searches the indexers, sends the book to qBittorrent, then copies
+it into the books folder, where the Livres library of Kavita picks it up.
+
+### Want a manga
+
+In Comics, search a manga, add it and mark the volumes to get as Wanted.
+LazyLibrarian searches the comic categories of the indexers and files each
+volume into the manga folder, where the Mangas library of Kavita picks it up.
+
 ## Policy
 
 Requires [Jellyfin](#jellyfin), [Radarr](#radarr), [Sonarr](#sonarr) and
@@ -1432,8 +1536,7 @@ It keeps the settings listed in
 [Settings kept by policy](#settings-kept-by-policy),
 [Settings of Sonarr kept by policy](#settings-of-sonarr-kept-by-policy),
 [Settings of Aurral kept by policy](#settings-of-aurral-kept-by-policy),
-[Settings of Kavita kept by policy](#settings-of-kavita-kept-by-policy), and,
-once it is back from [On hold](#on-hold),
+[Settings of Kavita kept by policy](#settings-of-kavita-kept-by-policy) and
 [Settings of LazyLibrarian kept by policy](#settings-of-lazylibrarian-kept-by-policy).
 
 It keeps an app once its API key is in `.env`: `JELLYFIN_API_KEY`,
@@ -1553,7 +1656,7 @@ flowchart LR
         FlareSolverr("FlareSolverr<br/>Cloudflare")
         Radarr("Radarr<br/>movies")
         Sonarr("Sonarr<br/>shows, anime")
-        LazyLibrarian("LazyLibrarian<br/>books")
+        LazyLibrarian("LazyLibrarian<br/>books, manga")
         Bazarr("Bazarr<br/>subtitles")
         Tdarr("Tdarr<br/>MKV H265")
     end
@@ -1616,7 +1719,7 @@ flowchart LR
     Prowlarr --- FlareSolverr
     Prowlarr -->|indexers| Radarr
     Prowlarr -->|indexers| Sonarr
-    Prowlarr -.->|indexers| LazyLibrarian
+    Prowlarr -->|indexers| LazyLibrarian
     Recyclarr -->|profiles| Radarr
     Recyclarr -->|profiles| Sonarr
     Radarr -.->|"new files"| Bazarr
@@ -1658,7 +1761,7 @@ flowchart LR
     class Torrents,Library dataNode
 
     classDef onHold stroke-dasharray:5 5
-    class LazyLibrarian,Recyclarr,Bazarr,Tdarr,autobrr onHold
+    class Recyclarr,Bazarr,Tdarr,autobrr onHold
     style data fill:#eceff1,stroke:#78909c,stroke-width:2px,color:#1f2937
 ```
 
@@ -2012,7 +2115,7 @@ Every switch and setting below lives in the Farm section of the Dashboard.
    Sonarr can import it, whether a C411 copy exists or not. The Nyaa copy of a
    Twin stays until its C411 copy seeds, and its files stay with that copy.
 8. **Files every torrent.** qBittorrent holds five categories: `movies`,
-   `shows` and `books` for Radarr, Sonarr and LazyLibrarian, on hold, `music`,
+   `shows` and `books` for Radarr, Sonarr and LazyLibrarian, `music`,
    which nothing uses since Aurral downloads from Soulseek, and `farm` for the
    grabs of ratio and the cross-seeds. The Library stays in its categories. The
    "Adopt the Library" switch, off by default, moves a C411 torrent of the
@@ -2528,10 +2631,8 @@ until it has a use for them. Their lines are commented out in `compose.yaml`,
 their keys sit empty at the end of `.env`, so policy and the Dashboard leave
 them alone, and the [Architecture](#architecture) draws them dashed.
 
-Their lan names stay in Caddy: `lazylibrarian`, `bazarr`, `tdarr` and
-`autobrr`, under `.lan.<DOMAIN>`, so each one is reachable again as soon as
-it runs. In Prowlarr, Settings > Apps, LazyLibrarian keeps its "Sync Level" on
-"Disabled" while it is on hold.
+Their lan names stay in Caddy: `bazarr`, `tdarr` and `autobrr`, under
+`.lan.<DOMAIN>`, so each one is reachable again as soon as it runs.
 
 To bring one back, uncomment its line in `compose.yaml`, fill its keys in
 `.env`, and restart doco-cd:
@@ -2540,8 +2641,7 @@ To bring one back, uncomment its line in `compose.yaml`, fill its keys in
 docker restart doco-cd
 ```
 
-Then follow its section below. For LazyLibrarian, set its "Sync Level" back to
-"Full Sync" in Prowlarr, Settings > Apps.
+Then follow its section below.
 
 ### Recyclarr
 
@@ -2619,81 +2719,6 @@ curl -s -G -H "X-Api-Key: $RADARR_API_KEY" \
 The answer holds `customFormats` and `customFormatScore`. A score below -5000
 means refused. Sonarr answers the same on its own name with the name of an
 episode of a show it has.
-
-### LazyLibrarian
-
-Requires [Prowlarr](#prowlarr).
-
-LazyLibrarian follows authors and books: a wanted book arrives in the Library on
-its own, from the indexers through qBittorrent. It sees only the books folder,
-under `/data/media/books`, and the torrents tree, under `/data/torrents`.
-Readarr is retired, and no other maintained open source tool finds and files
-books this way.
-
-#### Login of LazyLibrarian
-
-Open `https://lazylibrarian.lan.<DOMAIN>:<CADDY_HTTPS_PORT>`. In Config >
-Interface:
-
-1. Under WebServer Options, set "User" and "Pass" to a username and a strong
-   password, distinct from the other tools.
-2. Under API, check "Enable API" and generate the "API Full Access key", which
-   Prowlarr and policy use.
-3. Click "Save changes" and restart LazyLibrarian from its menu.
-
-In `.env`, set `LAZYLIBRARIAN_API_KEY` to the API Full Access key, then restart
-doco-cd to apply `.env`:
-
-```sh
-docker restart doco-cd
-```
-
-`./scripts/verify.sh` checks that the web UI then asks for the login.
-
-#### Download client of LazyLibrarian
-
-1. In qBittorrent, add a category `books` with `/data/torrents/books` as the
-   save path.
-2. In LazyLibrarian, Config > Downloaders, under Torrents, enter the qBittorrent
-   login, click "Test qBitTorrent", then "Save changes". policy sets the rest.
-
-#### Settings of LazyLibrarian kept by policy
-
-[policy](#policy) puts these back every night:
-
-| Setting                        | Value                           |
-| ------------------------------ | ------------------------------- |
-| Authentication type            | Basic (Browser Popup)           |
-| Enable user accounts           | off                             |
-| Telemetry                      | off                             |
-| eBook Library Folder           | `/data/media/books`             |
-| Keep original files            | on                              |
-| qBitTorrent                    | on, host `gluetun`, port `8080` |
-| qBitTorrent Label/Category     | `books`                         |
-| Download directory             | `/data/torrents/books`          |
-| Keep seeding after processing  | on                              |
-| Do not delete if still seeding | on                              |
-
-Each import is a copy, so the torrent keeps seeding from the torrents tree, and
-LazyLibrarian never removes a torrent before qBittorrent stops it at its seeding
-goal. LazyLibrarian sees the download directory at the same path as
-qBittorrent. A change of the authentication type applies once LazyLibrarian
-restarts.
-
-#### Indexers of LazyLibrarian
-
-In Prowlarr, Settings > Apps, click "+" and pick LazyLibrarian. Set "Prowlarr
-Server" to `http://prowlarr:9696` and "LazyLibrarian Server" to
-`http://lazylibrarian:5299`, paste the API Full Access key, click "Test", then
-"Save". Every indexer with book categories then shows up in LazyLibrarian,
-Config > Providers.
-
-#### Want a book
-
-In Authors, search a book or an author, add it and mark the book as Wanted.
-LazyLibrarian searches the indexers, sends the book to qBittorrent, then copies
-it into the books folder, where the Books library of Jellyfin picks it up. A
-Friend reads it in the Jellyfin app or downloads it to their phone.
 
 ### Tdarr
 
