@@ -27,7 +27,7 @@ services:
       - ${APPDATA_ROOT}/lazylibrarian:/config
       - ${DATA_ROOT}/media/books:/data/media/books
       - ${DATA_ROOT}/media/manga:/data/media/manga
-      - ${DATA_ROOT}/media/private/amaroke/books:/data/media/private/amaroke/books:ro
+      - ${DATA_ROOT}/media/private:/data/media/private:ro
       - ${DATA_ROOT}/torrents:/data/torrents
     healthcheck:
       test:

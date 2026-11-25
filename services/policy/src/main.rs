@@ -47,7 +47,7 @@ impl App {
                 arr::enforce(arr, api, &private)
             }
             App::Aurral(api) => aurral::enforce(api),
-            App::LazyLibrarian(api) => lazylibrarian::enforce(api),
+            App::LazyLibrarian(api) => lazylibrarian::enforce(api, accounts),
         }
     }
 }
