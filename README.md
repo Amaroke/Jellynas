@@ -1430,7 +1430,7 @@ books this way. The private libraries are mounted read-only under
 folder of every Account, so LazyLibrarian lists the private books without
 moving or adding a file. A wanted book still lands in the public folders.
 
-A scan only lists a book that the book source of LazyLibrarian, OpenLibrary,
+A scan only lists a book that the book source of LazyLibrarian, Hardcover,
 also knows. A found author brings all their books, so the books of that author
 can match. LazyLibrarian has a single manga folder, which it scans and files
 into: it is the private books folder of `MANGA_ACCOUNT`, so a wanted manga
@@ -1489,6 +1489,8 @@ docker restart doco-cd
 | Keep seeding after processing  | on                                 |
 | Do not delete if still seeding | on                                 |
 | Add books of new authors       | on                                 |
+| Hardcover                      | on                                 |
+| Book source                    | HardCover                          |
 | ComicVine web search           | on                                 |
 
 Each import is a copy, so the torrent keeps seeding from the torrents tree, and
@@ -1508,6 +1510,21 @@ library.
 A manga volume lands as
 `/data/media/private-manga/<Title>/<Title> <Issue>.cbz`, and
 [Shelver](#shelver) then files it.
+
+### Hardcover
+
+LazyLibrarian finds books and series on [Hardcover](https://hardcover.app),
+which knows far more light novels and manga than OpenLibrary. Create a free
+account there and copy the token from Settings > API. LazyLibrarian keeps it
+in the admin user of its database, which has no setting in the API, so set it
+once with LazyLibrarian stopped:
+
+```sh
+docker stop lazylibrarian
+sudo sqlite3 /mnt/tank/appdata/lazylibrarian/lazylibrarian.db \
+  "UPDATE users SET hc_token='<token>' WHERE perms=65535"
+docker start lazylibrarian
+```
 
 ### Indexers of LazyLibrarian
 

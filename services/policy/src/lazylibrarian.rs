@@ -2,7 +2,7 @@ use crate::accounts::Account;
 use crate::api::{Api, encode, report};
 use serde_json::{Map, Value};
 
-const SETTINGS: [(&str, &str, &str); 21] = [
+const SETTINGS: [(&str, &str, &str); 23] = [
     ("General", "AUTH_TYPE", "BASIC"),
     ("General", "USER_ACCOUNTS", ""),
     ("General", "EBOOK_DIR", "/data/media/books"),
@@ -28,6 +28,8 @@ const SETTINGS: [(&str, &str, &str); 21] = [
     ("Telemetry", "TELEMETRY_ENABLE", ""),
     ("LibraryScan", "NEWAUTHOR_BOOKS", "1"),
     ("API", "CV_WEBSEARCH", "1"),
+    ("API", "HC_API", "1"),
+    ("API", "BOOK_API", "HardCover"),
 ];
 
 fn read_path(group: &str, name: &str) -> String {
