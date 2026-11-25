@@ -13,18 +13,28 @@ services:
           - seerr.${DOMAIN}
           - auth.${DOMAIN}
           - aurral.${DOMAIN}
+          - kavita.${DOMAIN}
       aurral-zone:
         aliases:
           - jellyfin.${DOMAIN}
           - seerr.${DOMAIN}
           - auth.${DOMAIN}
           - aurral.${DOMAIN}
+          - kavita.${DOMAIN}
+      kavita-zone:
+        aliases:
+          - jellyfin.${DOMAIN}
+          - seerr.${DOMAIN}
+          - auth.${DOMAIN}
+          - aurral.${DOMAIN}
+          - kavita.${DOMAIN}
       internal-zone:
         aliases:
           - jellyfin.${DOMAIN}
           - seerr.${DOMAIN}
           - auth.${DOMAIN}
           - aurral.${DOMAIN}
+          - kavita.${DOMAIN}
     security_opt:
       - no-new-privileges
     cap_drop:

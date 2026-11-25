@@ -1,0 +1,49 @@
+---
+services:
+  kavita:
+    image: lscr.io/linuxserver/kavita:v0.9.1.4-ls133
+    container_name: kavita
+    restart: unless-stopped
+    networks:
+      - kavita-zone
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+    labels:
+      kuma.kavita.http.name: Kavita
+      kuma.kavita.http.url:
+        https://kavita.${DOMAIN}:${CADDY_HTTPS_PORT:-443}/api/health
+      kuma.kavita.http.expiry_notification: "true"
+      docker-volume-backup.stop-during-backup: "true"
+      dashboard.name: Kavita
+      dashboard.section: Watch
+      dashboard.description: Reads the books and the manga
+      dashboard.icon: kavita.svg
+      dashboard.href: https://kavita.lan.${DOMAIN}:${CADDY_HTTPS_PORT:-443}
+      dashboard.switchable: "true"
+      cd.doco.deployment.autostart: "false"
+    volumes:
+      - ${APPDATA_ROOT}/kavita:/config
+      - ${DATA_ROOT}/media/books:/data/media/books:ro
+      - ${DATA_ROOT}/media/manga:/data/media/manga:ro
+      - ${DATA_ROOT}/media/private:/data/media/private:ro
+    healthcheck:
+      test:
+        - "CMD"
+        - "curl"
+        - "--fail"
+        - "--silent"
+        - "--output"
+        - "/dev/null"
+        - "http://localhost:5000/api/health"
+      timeout: 10s
+      start_period: 60s

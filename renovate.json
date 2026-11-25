@@ -82,6 +82,11 @@
     },
     {
       "matchDatasources": ["docker"],
+      "matchPackageNames": ["lscr.io/linuxserver/kavita"],
+      "versioning": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)-ls(?<revision>\\d+)$"
+    },
+    {
+      "matchDatasources": ["docker"],
       "matchPackageNames": ["lscr.io/linuxserver/jellyfin"],
       "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)(?:\\.(?<patch>\\d+))?ubu(?<compatibility>\\d+)-ls(?<build>\\d+)$"
     },

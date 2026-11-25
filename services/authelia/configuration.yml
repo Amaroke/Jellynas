@@ -89,3 +89,21 @@ identity_providers:
           - email
           - groups
         token_endpoint_auth_method: client_secret_basic
+      - client_id: kavita
+        client_name: Kavita
+        client_secret: '{{ secret "/var/lib/authelia/kavita.digest" }}'
+        public: false
+        authorization_policy: admin_two_factor
+        consent_mode: implicit
+        claims_policy: id_token_claims
+        redirect_uris:
+          - '{{ env "KAVITA_URL" }}/signin-oidc'
+        scopes:
+          - openid
+          - profile
+          - email
+          - offline_access
+        grant_types:
+          - authorization_code
+          - refresh_token
+        token_endpoint_auth_method: client_secret_post
