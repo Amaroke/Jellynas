@@ -1382,6 +1382,7 @@ Jellyfin reads books poorly.
 | Provider name            | Authelia                             |
 | Default roles            | Login, Download, Bookmark            |
 | Default libraries        | The public libraries                 |
+| Default age rating       | None, unknown ratings included       |
 | OPDS                     | On                                   |
 
 Kavita creates the user of a Friend at their first sign-in, named after their
@@ -1394,9 +1395,10 @@ Account. policy keeps these libraries, and adds the missing ones at each pass:
 | Name of Account | Book  | `private/<username>/books` | Archive, EPUB |
 
 It grants every Account the public libraries and its own Private library, and
-takes away any other, like in Jellyfin. A library added by hand on a private
-folder belongs to the Account of that folder. A user that is no lldap Account,
-such as `admin`, keeps its libraries.
+takes away any other, like in Jellyfin. It also lifts any age rating on an
+Account, since most books carry no rating and Kavita would hide them. A library
+added by hand on a private folder belongs to the Account of that folder. A user
+that is no lldap Account, such as `admin`, keeps its libraries.
 
 Kavita groups a series by folder, one folder per series, and never a file at the
 root of a library. It reads the series and the volume of an EPUB from

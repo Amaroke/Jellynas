@@ -10,6 +10,7 @@ const PDF: u8 = 3;
 const HARDCOVER: u8 = 2;
 const MANGABAKA: u8 = 3;
 const ROLES: [&str; 3] = ["Login", "Download", "Bookmark"];
+const NO_AGE_RATING: i64 = -1;
 
 #[derive(Debug, PartialEq)]
 struct Shelf {
@@ -178,6 +179,10 @@ fn granted(user: &Value) -> Vec<i64> {
     ids
 }
 
+fn unrestricted() -> Value {
+    json!({"ageRating": NO_AGE_RATING, "includeUnknowns": true})
+}
+
 fn grant(api: &impl Api, accounts: &[Account], libraries: &Value) -> Result<usize, String> {
     let shelves = Shelves::read(libraries);
     let users = api.get("/users")?;
@@ -193,25 +198,29 @@ fn grant(api: &impl Api, accounts: &[Account], libraries: &Value) -> Result<usiz
             continue;
         }
         let wanted = shelves.of(name);
-        if granted(user) == wanted {
+        if granted(user) == wanted && user["ageRestriction"] == unrestricted() {
             continue;
         }
-        let selected: Vec<&Value> = libraries
+        let roles: Vec<&Value> = user["roles"]
             .as_array()
             .into_iter()
             .flatten()
-            .filter(|library| {
-                library["id"]
-                    .as_i64()
-                    .is_some_and(|id| wanted.contains(&id))
-            })
+            .filter(|role| role.as_str() != Some("Pleb"))
             .collect();
         api.send(
             "POST",
-            "/library/grant-access",
-            &json!({"username": name, "selectedLibraries": selected}),
+            "/account/update",
+            &json!({
+                "userId": user["id"],
+                "username": name,
+                "email": user["email"],
+                "roles": roles,
+                "libraries": wanted,
+                "ageRestriction": unrestricted(),
+                "identityProvider": user["identityProvider"],
+            }),
         )?;
-        println!("Kavita {name}: set libraries");
+        println!("Kavita {name}: set libraries and no age rating");
         changed += 1;
     }
     Ok(changed)
@@ -229,6 +238,8 @@ pub fn sign_in(authority: &str, libraries: &[i64]) -> Map<String, Value> {
         "providerName": "Authelia",
         "defaultRoles": ROLES,
         "defaultLibraries": libraries,
+        "defaultAgeRestriction": NO_AGE_RATING,
+        "defaultIncludeUnknowns": true,
     }))
 }
 
@@ -284,7 +295,15 @@ mod tests {
 
     fn user(name: &str, ids: &[i64]) -> Value {
         let libraries: Vec<Value> = ids.iter().map(|id| json!({"id": id})).collect();
-        json!({"id": 9, "username": name, "libraries": libraries, "roles": ["Login"]})
+        json!({
+            "id": 9,
+            "username": name,
+            "email": format!("{name}@jellynas.invalid"),
+            "libraries": libraries,
+            "roles": ["Pleb", "Login"],
+            "ageRestriction": {"ageRating": -1, "includeUnknowns": true},
+            "identityProvider": 1,
+        })
     }
 
     fn in_line() -> BTreeMap<String, Value> {
@@ -367,17 +386,14 @@ mod tests {
         pages.insert("/users".into(), json!([user("theo", &[1, 2, 3, 4])]));
         let fake = Fake::new(pages);
         assert_eq!(Ok(1), enforce(&fake, &accounts(), AUTHORITY));
-        assert_eq!(vec!["POST /library/grant-access"], fake.paths());
+        assert_eq!(vec!["POST /account/update"], fake.paths());
         let sent = fake.body(0);
+        assert_eq!(json!(9), sent["userId"]);
         assert_eq!(json!("theo"), sent["username"]);
-        let ids: Vec<i64> = sent["selectedLibraries"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|library| library["id"].as_i64().unwrap())
-            .collect();
-        assert_eq!(vec![1, 2, 4], ids);
-        assert_eq!(json!("Livres"), sent["selectedLibraries"][0]["name"]);
+        assert_eq!(json!("theo@jellynas.invalid"), sent["email"]);
+        assert_eq!(json!(["Login"]), sent["roles"]);
+        assert_eq!(json!([1, 2, 4]), sent["libraries"]);
+        assert_eq!(json!(1), sent["identityProvider"]);
     }
 
     #[test]
@@ -386,10 +402,30 @@ mod tests {
         pages.insert("/users".into(), json!([user("elea_t", &[])]));
         let fake = Fake::new(pages);
         assert_eq!(Ok(1), enforce(&fake, &accounts(), AUTHORITY));
+        assert_eq!(json!([1, 2, 3]), fake.body(0)["libraries"]);
+    }
+
+    #[test]
+    fn an_account_hidden_behind_an_age_rating_sees_everything_again() {
+        let mut pages = in_line();
+        let mut elea = user("elea_t", &[1, 2, 3]);
+        elea["ageRestriction"] = json!({"ageRating": 0, "includeUnknowns": false});
+        pages.insert("/users".into(), json!([elea]));
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), enforce(&fake, &accounts(), AUTHORITY));
+        let sent = fake.body(0);
+        assert_eq!(json!([1, 2, 3]), sent["libraries"]);
         assert_eq!(
-            3,
-            fake.body(0)["selectedLibraries"].as_array().unwrap().len()
+            json!({"ageRating": -1, "includeUnknowns": true}),
+            sent["ageRestriction"]
         );
+    }
+
+    #[test]
+    fn new_accounts_start_without_an_age_rating() {
+        let oidc = sign_in(AUTHORITY, &[1, 2]);
+        assert_eq!(json!(-1), oidc["defaultAgeRestriction"]);
+        assert_eq!(json!(true), oidc["defaultIncludeUnknowns"]);
     }
 
     #[test]
