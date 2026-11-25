@@ -1486,7 +1486,8 @@ LazyLibrarian writes `<name>.opf` and its cover as `<name>.jpg`, which it has no
 setting to turn off. Kavita reads neither, it only opens the file types of each
 library.
 
-A manga volume lands as `/data/media/manga/<Title>/<Title> <Issue>.cbz`.
+A manga volume lands as `/data/media/manga/<Title>/<Title> <Issue>.cbz`, and
+[Shelver](#shelver) then files it.
 
 ### Indexers of LazyLibrarian
 
@@ -1514,6 +1515,23 @@ it into the books folder, where the Livres library of Kavita picks it up.
 In Comics, search a manga, add it and mark the volumes to get as Wanted.
 LazyLibrarian searches the comic categories of the indexers and files each
 volume into the manga folder, where the Mangas library of Kavita picks it up.
+
+### Shelver
+
+The `shelver` service runs `scripts/shelver.py` every 15 minutes, after each
+import of LazyLibrarian. It sees only the books and manga folders and skips the
+`.recycle` folders.
+
+- In an epub without a series of its own, it writes the series, the index and
+  a sort title like `Dune 01`, read from the `.opf` beside it, so Kavita groups
+  and orders the books. The `.opf` stays where it is.
+- A volume without `ComicInfo.xml`, named `<Title> <Issue>.cbz`, becomes
+  `Tome <Issue> (<Title>, #NN).cbz` with a `ComicInfo.xml` holding its series,
+  number, French language and manga flag, the layout of the Library.
+
+A file already done, a name without a number, or a volume that would land on
+another one is left alone, so a run changes nothing twice. The logs of the
+service list each file it changed.
 
 ## Policy
 
