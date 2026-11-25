@@ -112,6 +112,7 @@ fn shelve(api: &impl Api, accounts: &[Account]) -> Result<usize, String> {
             "PathInfos": [{"Path": account.videos()}],
             "PreferredMetadataLanguage": "fr",
             "MetadataCountryCode": "FR",
+            "EnableRealtimeMonitor": true,
         }});
         api.send(
             "POST",
