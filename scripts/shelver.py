@@ -2,9 +2,9 @@ import os
 import re
 import sys
 import time
-from xml.etree import ElementTree
 import zipfile
 from pathlib import Path
+from xml.etree import ElementTree
 from xml.sax.saxutils import escape, quoteattr
 
 BOOKS = Path("/data/media/books")
