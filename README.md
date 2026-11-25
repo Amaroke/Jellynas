@@ -575,11 +575,14 @@ restart it as in [Jellyfin behind Caddy](#jellyfin-behind-caddy). The Accounts:
 | Deletion of media                        | Off, except for the Admin     |
 | Disabled after 30 days without activity  | On, except for the Admin      |
 | Next episode plays by itself             | On                            |
+| Account `test` disabled at every pass    | On                            |
 
 An Account locked out after 3 failed sign-ins, or disabled after 30 days
 without activity, stays so until the Admin enables it again, in Dashboard >
 Users, by unticking "Disable this user". A Friend enabled again must sign in
-before the next pass, or policy disables their Account again. The
+before the next pass, or policy disables their Account again. The Account
+`test`, a member of `jellynas_users` kept for trying things as a Friend, is
+disabled at every pass, so it stays usable only until the next night. The
 preferences of each Friend, such as the languages of the audio and of the
 subtitles, stay theirs to set.
 
