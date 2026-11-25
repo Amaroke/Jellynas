@@ -75,6 +75,17 @@ impl Api for Http {
     }
 }
 
+pub fn encode(text: &str) -> String {
+    text.bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                char::from(byte).to_string()
+            }
+            _ => format!("%{byte:02X}"),
+        })
+        .collect()
+}
+
 pub fn rules(value: Value) -> Map<String, Value> {
     value.as_object().cloned().unwrap_or_default()
 }
@@ -204,6 +215,16 @@ mod tests {
     fn a_merge_keeps_every_other_field() {
         let whole = merged(&json!({"a": 1, "kept": true}), &rules(json!({"a": 2})));
         assert_eq!(json!({"a": 2, "kept": true}), whole);
+    }
+
+    #[test]
+    fn encode_escapes_everything_but_the_unreserved_characters() {
+        assert_eq!("a-b_c.d~e", encode("a-b_c.d~e"));
+        assert_eq!(
+            "%24Title%7B%20%28%23%24PadNum%29%7D",
+            encode("$Title{ (#$PadNum)}")
+        );
+        assert_eq!("Th%C3%A9o", encode("Théo"));
     }
 
     #[test]

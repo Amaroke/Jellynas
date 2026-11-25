@@ -556,7 +556,7 @@ check_mounts_only slskd media/aurral torrents/soulseek
 check_read_only slskd /data/media/aurral
 check_no_media_mount music-bot
 check_slskd_port
-check_mounts_only lazylibrarian media/books torrents
+check_mounts_only lazylibrarian media/books media/manga torrents
 check_no_media_mount seerr
 check_no_media_mount lldap
 check_no_media_mount authelia
