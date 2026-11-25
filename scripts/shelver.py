@@ -9,6 +9,7 @@ from xml.sax.saxutils import escape, quoteattr
 
 BOOKS = Path("/data/media/books")
 MANGA = Path("/data/media/manga")
+PRIVATE_MANGA = Path("/data/media/private-manga")
 HELD = re.compile(r'name="calibre:series"|property="belongs-to-collection"')
 CLOSE = re.compile(r"</(?:\w+:)?metadata>")
 VOLUME = re.compile(r"^(?P<series>.+?)\s+(?P<number>\d+(?:\.\d+)?)$")
@@ -152,11 +153,12 @@ def shelve_manga(root):
     return done
 
 
-def shelve(books=BOOKS, manga=MANGA):
+def shelve(books=BOOKS, manga=(MANGA, PRIVATE_MANGA)):
     for path in shelve_books(books):
         print(f"Wrote the series inside {path}")
-    for path in shelve_manga(manga):
-        print(f"Filed {path}")
+    for root in manga:
+        for path in shelve_manga(root):
+            print(f"Filed {path}")
 
 
 def main(arguments):

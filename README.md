@@ -1421,19 +1421,22 @@ Requires [Prowlarr](#prowlarr) and [Kavita](#kavita).
 
 LazyLibrarian follows authors, books and manga: a wanted book or volume arrives
 in the Library on its own, from the indexers through qBittorrent, and Kavita
-reads it. It sees the books and manga folders, under `/data/media/books`
-and `/data/media/manga`, and the torrents tree, under `/data/torrents`. Readarr
-is retired, and no other maintained open source tool finds and files books this
-way. The private libraries are mounted read-only under `/data/media/private`:
-at each pass, [policy](#policy) scans the `books` folder of every Account, so
-LazyLibrarian lists the private books without moving or adding a file. A
-wanted book still lands in the public folders, and a private one is filed by
-hand.
+reads it. It sees the books folder, under `/data/media/books`, the private
+books folder of the Account named by `MANGA_ACCOUNT` in `.env`, under
+`/data/media/private-manga`, and the torrents tree, under `/data/torrents`.
+Readarr is retired, and no other maintained open source tool finds and files
+books this way. The private libraries are mounted read-only under
+`/data/media/private`: at each pass, [policy](#policy) scans the `books`
+folder of every Account, so LazyLibrarian lists the private books without
+moving or adding a file. A wanted book still lands in the public folders.
 
 A scan only lists a book that the book source of LazyLibrarian, OpenLibrary,
 also knows. A found author brings all their books, so the books of that author
-can match. The manga scan covers `/data/media/manga` only, and matches a
-volume through the ComicVine website as long as no ComicVine key is set.
+can match. LazyLibrarian has a single manga folder, which it scans and files
+into: it is the private books folder of `MANGA_ACCOUNT`, so a wanted manga
+lands in that private library, and the public Mangas library is filed by hand.
+The manga scan reads only `cbr` and `cbz`, and matches a volume through the
+ComicVine website as long as no ComicVine key is set.
 
 ### Login of LazyLibrarian
 
@@ -1466,25 +1469,27 @@ docker restart doco-cd
 
 [policy](#policy) puts these back every night:
 
-| Setting                        | Value                             |
-| ------------------------------ | --------------------------------- |
-| Authentication type            | Basic (Browser Popup)             |
-| Enable user accounts           | off                               |
-| Telemetry                      | off                               |
-| eBook Library Folder           | `/data/media/books`               |
-| Keep original files            | on                                |
-| eBook folder                   | `{$SerName\|$Title}`              |
-| eBook filename                 | `$Title{ ($SerName, #$PadNum)}`   |
-| Comics tab                     | on                                |
-| Comic folder relative          | off                               |
-| Comic folder                   | `/data/media/manga/$Title`        |
-| qBitTorrent                    | on, host `gluetun`, port `8080`   |
-| qBitTorrent Label/Category     | `books`                           |
-| Download directory             | `/data/torrents/books`            |
-| Keep seeding after processing  | on                                |
-| Do not delete if still seeding | on                                |
-| Add books of new authors       | on                                |
-| ComicVine web search           | on                                |
+| Setting                        | Value                              |
+| ------------------------------ | ---------------------------------- |
+| Authentication type            | Basic (Browser Popup)              |
+| Enable user accounts           | off                                |
+| Telemetry                      | off                                |
+| eBook Library Folder           | `/data/media/books`                |
+| Keep original files            | on                                 |
+| eBook folder                   | `{$SerName\|$Title}`               |
+| eBook filename                 | `$Title{ ($SerName, #$PadNum)}`    |
+| Comics tab                     | on                                 |
+| Comic folder relative          | off                                |
+| Comic folder                   | `/data/media/private-manga/$Title` |
+| Comic file types               | `cbr, cbz`                         |
+| Comic cover file               | off                                |
+| qBitTorrent                    | on, host `gluetun`, port `8080`    |
+| qBitTorrent Label/Category     | `books`                            |
+| Download directory             | `/data/torrents/books`             |
+| Keep seeding after processing  | on                                 |
+| Do not delete if still seeding | on                                 |
+| Add books of new authors       | on                                 |
+| ComicVine web search           | on                                 |
 
 Each import is a copy, so the torrent keeps seeding from the torrents tree, and
 LazyLibrarian never removes a torrent before qBittorrent stops it at its seeding
@@ -1500,7 +1505,8 @@ LazyLibrarian writes `<name>.opf` and its cover as `<name>.jpg`, which it has no
 setting to turn off. Kavita reads neither, it only opens the file types of each
 library.
 
-A manga volume lands as `/data/media/manga/<Title>/<Title> <Issue>.cbz`, and
+A manga volume lands as
+`/data/media/private-manga/<Title>/<Title> <Issue>.cbz`, and
 [Shelver](#shelver) then files it.
 
 ### Indexers of LazyLibrarian
@@ -1528,13 +1534,14 @@ it into the books folder, where the Livres library of Kavita picks it up.
 
 In Comics, search a manga, add it and mark the volumes to get as Wanted.
 LazyLibrarian searches the comic categories of the indexers and files each
-volume into the manga folder, where the Mangas library of Kavita picks it up.
+volume into the private books folder of `MANGA_ACCOUNT`, where the private
+library of that Account in Kavita picks it up.
 
 ### Shelver
 
 The `shelver` service runs `scripts/shelver.py` every 15 minutes, after each
-import of LazyLibrarian. It sees only the books and manga folders and skips the
-`.recycle` folders.
+import of LazyLibrarian. It sees only the books and manga folders and the
+private books folder of `MANGA_ACCOUNT`, and skips the `.recycle` folders.
 
 - In an epub without a series of its own, it writes the series, the index and
   a sort title like `Dune 01`, read from the `.opf` beside it, so Kavita groups

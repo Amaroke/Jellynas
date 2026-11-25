@@ -28,3 +28,4 @@ services:
       - ../../scripts:/app/scripts:ro
       - ${DATA_ROOT}/media/books:/data/media/books
       - ${DATA_ROOT}/media/manga:/data/media/manga
+      - ${DATA_ROOT}/media/private/${MANGA_ACCOUNT:?}/books:/data/media/private-manga
