@@ -557,7 +557,6 @@ check_read_only slskd /data/media/aurral
 check_no_media_mount music-bot
 check_slskd_port
 check_mounts_only lazylibrarian media/books torrents
-check_mounts_only suwayomi media/manga
 check_no_media_mount seerr
 check_no_media_mount lldap
 check_no_media_mount authelia
@@ -594,7 +593,6 @@ check_login_required prowlarr "https://prowlarr.$lan:$https_port/"
 check_login_required radarr "https://radarr.$lan:$https_port/"
 check_login_required sonarr "https://sonarr.$lan:$https_port/"
 check_login_required lazylibrarian "https://lazylibrarian.$lan:$https_port/home"
-check_login_required suwayomi "https://suwayomi.$lan:$https_port/api/graphql"
 check_login_required slskd "https://slskd.$lan:$https_port/api/v0/application"
 check_login_required bazarr "https://bazarr.$lan:$https_port/bazarr.log"
 check_login_required tdarr "https://tdarr.$lan:$https_port/api/v2/get-nodes"
@@ -605,8 +603,7 @@ check_login_required dozzle "https://dozzle.$lan:$https_port/"
 check_api_key_required cross-seed "http://cross-seed:2468/api/status"
 check_exit_ip qbittorrent
 check_exit_ip slskd
-check_exit_ip suwayomi
-check_kill_switch qbittorrent slskd suwayomi
+check_kill_switch qbittorrent slskd
 check_public_hostname "$jellyfin_hostname"
 check_public_hostname "$seerr_hostname"
 check_public_hostname "$auth_hostname"

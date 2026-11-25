@@ -172,7 +172,7 @@ mkdir -p "$BACKUP_ROOT" \
   "$DATA_ROOT"/media/{movies,shows,anime,music,aurral,books,manga,private} \
   "$DATA_ROOT"/media/{movies,shows}/.recycle \
   "$APPDATA_ROOT"/{seerr,lldap,authelia,aurral,recyclarr,autobrr,cross-seed} \
-  "$APPDATA_ROOT"/{ratio,discord-posts,pr-radar,slskd,suwayomi} \
+  "$APPDATA_ROOT"/{ratio,discord-posts,pr-radar,slskd} \
   "$APPDATA_ROOT"/dashboard
 chown -R "$PUID:$PGID" "$DATA_ROOT" "$APPDATA_ROOT"
 ```
@@ -214,18 +214,17 @@ Docker networks:
 | `identity-zone` | Caddy, Authelia, lldap, policy                             |
 | `internal-zone` | every other service, plus Caddy, Radarr, Sonarr, Gluetun   |
 
-qBittorrent and slskd share the network of Gluetun, in the internal zone, as
-Suwayomi does once back from [On hold](#on-hold), and the Beszel agent the
-network of the Host. A service that needs Jellyfin, Seerr, Aurral, Kavita or
-Authelia from another zone, such as the Dashboard, Uptime Kuma, the Music bot,
-policy, or Aurral and Kavita signing in with Authelia, reaches it through Caddy
-at its public name, so the zones only open towards the public services, never
-from them. lldap speaks LDAP, which Caddy cannot carry, so it sits in the zones
-of Jellyfin and of Authelia, the only two services that read the Accounts over
-LDAP, and has no public name. policy reads the Accounts through the API of
-lldap, from the zone of Authelia. The zones hand out IPv6 addresses too, and
-Jellyfin tries them first, so lldap listens on `::`. `python3 -m unittest`
-checks the members of each zone.
+qBittorrent and slskd share the network of Gluetun, in the internal zone, and
+the Beszel agent the network of the Host. A service that needs Jellyfin, Seerr,
+Aurral, Kavita or Authelia from another zone, such as the Dashboard, Uptime
+Kuma, the Music bot, policy, or Aurral and Kavita signing in with Authelia,
+reaches it through Caddy at its public name, so the zones only open towards the
+public services, never from them. lldap speaks LDAP, which Caddy cannot carry,
+so it sits in the zones of Jellyfin and of Authelia, the only two services that
+read the Accounts over LDAP, and has no public name. policy reads the Accounts
+through the API of lldap, from the zone of Authelia. The zones hand out IPv6
+addresses too, and Jellyfin tries them first, so lldap listens on `::`. `python3
+-m unittest` checks the members of each zone.
 
 Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS
 provider, swap the `caddy-dns/ovh` module in `services/caddy/Dockerfile` for its
@@ -1434,17 +1433,13 @@ It keeps the settings listed in
 [Settings of Sonarr kept by policy](#settings-of-sonarr-kept-by-policy),
 [Settings of Aurral kept by policy](#settings-of-aurral-kept-by-policy),
 [Settings of Kavita kept by policy](#settings-of-kavita-kept-by-policy), and,
-once they are back from [On hold](#on-hold),
-[Settings of LazyLibrarian kept by policy](#settings-of-lazylibrarian-kept-by-policy)
-and
-[Settings of Suwayomi kept by policy](#settings-of-suwayomi-kept-by-policy).
+once it is back from [On hold](#on-hold),
+[Settings of LazyLibrarian kept by policy](#settings-of-lazylibrarian-kept-by-policy).
 
 It keeps an app once its API key is in `.env`: `JELLYFIN_API_KEY`,
 `KAVITA_API_KEY`, `RADARR_API_KEY`, `SONARR_API_KEY`, `AURRAL_API_KEY` or
-`LAZYLIBRARIAN_API_KEY`,
-and Suwayomi once `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD` are. It reaches
-Radarr, Sonarr and LazyLibrarian in the internal zone, Suwayomi through Gluetun,
-and Jellyfin, Kavita and Aurral through Caddy. Aurral takes
+`LAZYLIBRARIAN_API_KEY`. It reaches Radarr, Sonarr and LazyLibrarian in the
+internal zone, and Jellyfin, Kavita and Aurral through Caddy. Aurral takes
 `AURRAL_API_KEY` as its own API key in place of the one it generates. Its logs
 name each setting it puts back:
 
@@ -1522,7 +1517,6 @@ flowchart LR
     GitHub{{"GitHub"}}
     Trackers{{"Trackers and peers"}}
     Soulseek{{"Soulseek"}}
-    Manga{{"Manga sites"}}
     Discord{{"Discord"}}
 
     subgraph exposure["Exposure"]
@@ -1548,6 +1542,7 @@ flowchart LR
         Jellyfin("Jellyfin<br/>streaming")
         Seerr("Seerr<br/>Requests")
         Aurral("Aurral<br/>music discovery, playlists")
+        Kavita("Kavita<br/>books, manga")
         MusicBot("Music bot<br/>Discord voice")
     end
 
@@ -1567,7 +1562,6 @@ flowchart LR
         direction TB
         qBittorrent("qBittorrent<br/>torrents")
         slskd("slskd<br/>Soulseek")
-        Suwayomi("Suwayomi<br/>manga")
     end
 
     subgraph ratio["Ratio"]
@@ -1599,6 +1593,7 @@ flowchart LR
     Jellyfin -->|LDAP| lldap
     Authelia -->|LDAP| lldap
     Aurral -->|"OpenID Connect"| Authelia
+    Kavita -->|"OpenID Connect"| Authelia
     Aurral -->|"FLAC from Soulseek"| vpn
     watch -->|"Requests, Seerr zone"| automation
     automation -->|grab| vpn
@@ -1606,7 +1601,6 @@ flowchart LR
     automation -->|search| Trackers
     vpn -->|"tunnel only"| Trackers
     vpn -->|"tunnel only"| Soulseek
-    vpn -.->|"tunnel only"| Manga
     vpn -->|download| data
     automation -->|"import, subtitles, MKV H265"| data
     watch -->|"read-only"| data
@@ -1634,7 +1628,7 @@ flowchart LR
     classDef person fill:#37474f,stroke:#263238,color:#ffffff,stroke-width:2px
     classDef external fill:#ffffff,stroke:#607d8b,color:#1f2937,stroke-width:1.5px
     class Friend,Admin person
-    class GitHub,Trackers,Soulseek,Manga,Discord external
+    class GitHub,Trackers,Soulseek,Discord external
     classDef exposureNode fill:#ffffff,stroke:#1e88e5,color:#1f2937,stroke-width:1.5px
     class OVH,Caddy exposureNode
     style exposure fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#1f2937
@@ -1645,14 +1639,14 @@ flowchart LR
     class Renovate,Deployer gitopsNode
     style gitops fill:#ede7f6,stroke:#7e57c2,stroke-width:2px,color:#1f2937
     classDef watchNode fill:#ffffff,stroke:#ab47bc,color:#1f2937,stroke-width:1.5px
-    class Jellyfin,Seerr,Aurral,MusicBot watchNode
+    class Jellyfin,Seerr,Aurral,Kavita,MusicBot watchNode
     style watch fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px,color:#1f2937
     classDef automationNode fill:#ffffff,stroke:#43a047,color:#1f2937,stroke-width:1.5px
     class Prowlarr,Recyclarr,FlareSolverr,Radarr,Sonarr automationNode
     class LazyLibrarian,Bazarr,Tdarr automationNode
     style automation fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#1f2937
     classDef vpnNode fill:#ffffff,stroke:#fb8c00,color:#1f2937,stroke-width:1.5px
-    class qBittorrent,slskd,Suwayomi vpnNode
+    class qBittorrent,slskd vpnNode
     style vpn fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#1f2937
     classDef ratioNode fill:#ffffff,stroke:#ec407a,color:#1f2937,stroke-width:1.5px
     class autobrr,crossseed,ratioscript ratioNode
@@ -1664,7 +1658,7 @@ flowchart LR
     class Torrents,Library dataNode
 
     classDef onHold stroke-dasharray:5 5
-    class LazyLibrarian,Suwayomi,Recyclarr,Bazarr,Tdarr,Manga,autobrr onHold
+    class LazyLibrarian,Recyclarr,Bazarr,Tdarr,autobrr onHold
     style data fill:#eceff1,stroke:#78909c,stroke-width:2px,color:#1f2937
 ```
 
@@ -2362,12 +2356,11 @@ others, then restart doco-cd to apply `.env`:
 - Sonarr, `SONARR_API_KEY`: set in [Sonarr](#sonarr)
 - slskd, `SLSKD_API_KEY`: set in [slskd](#slskd)
 - Aurral, `AURRAL_API_KEY`: already set for [policy](#policy)
-- Suwayomi, Bazarr, Tdarr and autobrr, left empty while they are [On
-  hold](#on-hold). Once back: `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD` as set
-  in [Suwayomi](#suwayomi), `BAZARR_API_KEY` from Settings > General > Security
-  in Bazarr, `TDARR_API_KEY` as set in [Tdarr](#tdarr), and `AUTOBRR_API_KEY`
-  from Settings > API Keys in autobrr, named `Dashboard` with read access on
-  Filters and Releases
+- Bazarr, Tdarr and autobrr, left empty while they are [On hold](#on-hold).
+  Once back: `BAZARR_API_KEY` from Settings > General > Security in Bazarr,
+  `TDARR_API_KEY` as set in [Tdarr](#tdarr), and `AUTOBRR_API_KEY` from
+  Settings > API Keys in autobrr, named `Dashboard` with read access on Filters
+  and Releases
 - Beszel, `BESZEL_EMAIL` and `BESZEL_PASSWORD`: set in [Beszel](#beszel)
 
 ```sh
@@ -2520,9 +2513,9 @@ Run the verification script from the Clone:
 
 It checks the NAS from the outside and prints one line per promise, for the
 services `compose.yaml` includes. To prove the kill switch, it cuts the VPN for
-a few seconds and then restarts Gluetun, qBittorrent, slskd, and Suwayomi when
-it runs. A failing line names the service that broke it, and the script exits
-with an error if any check fails.
+a few seconds and then restarts Gluetun, qBittorrent and slskd. A failing line
+names the service that broke it, and the script exits with an error if any check
+fails.
 
 The script ends with the public addresses to test yourself. Open each one on a
 phone on 4G with wifi off: it must load over HTTPS without a certificate
@@ -2535,8 +2528,8 @@ until it has a use for them. Their lines are commented out in `compose.yaml`,
 their keys sit empty at the end of `.env`, so policy and the Dashboard leave
 them alone, and the [Architecture](#architecture) draws them dashed.
 
-Their lan names stay in Caddy: `lazylibrarian`, `suwayomi`, `bazarr`, `tdarr`
-and `autobrr`, under `.lan.<DOMAIN>`, so each one is reachable again as soon as
+Their lan names stay in Caddy: `lazylibrarian`, `bazarr`, `tdarr` and
+`autobrr`, under `.lan.<DOMAIN>`, so each one is reachable again as soon as
 it runs. In Prowlarr, Settings > Apps, LazyLibrarian keeps its "Sync Level" on
 "Disabled" while it is on hold.
 
@@ -2701,63 +2694,6 @@ In Authors, search a book or an author, add it and mark the book as Wanted.
 LazyLibrarian searches the indexers, sends the book to qBittorrent, then copies
 it into the books folder, where the Books library of Jellyfin picks it up. A
 Friend reads it in the Jellyfin app or downloads it to their phone.
-
-### Suwayomi
-
-Requires [qBittorrent](#qbittorrent).
-
-Suwayomi follows manga: it runs the Mihon extensions, which read manga sites,
-and downloads each new chapter of a manga in the library as a CBZ file into the
-manga folder of the Library, where Jellyfin reads it. It shares the network of
-Gluetun, like qBittorrent: manga sites see the IP of the VPN, and when the VPN
-is down, it has no connectivity at all. It sees only the manga folder, mounted
-as its downloads folder, and its appdata folder. Kaizoku is archived and points
-to Suwayomi, and LazyLibrarian handles manga poorly. Suwayomi passes the
-Cloudflare challenge of a site with its own built-in browser. A site that
-refuses the IPs of the VPN stays out of reach.
-
-#### Login of Suwayomi
-
-In `.env`, set `SUWAYOMI_USERNAME` and `SUWAYOMI_PASSWORD` to the login of its
-web UI, letters and digits only and distinct from the other tools, then restart
-doco-cd to apply `.env`:
-
-```sh
-docker restart doco-cd
-```
-
-Suwayomi asks for this login at every visit. The Dashboard uses it to read its
-figures, and policy to keep its settings. `./scripts/verify.sh` checks that the
-web UI asks for it.
-
-#### Extensions
-
-Open `https://suwayomi.lan.<DOMAIN>:<CADDY_HTTPS_PORT>` and sign in. In
-Settings > Browse, add the URL of a Mihon extension repository, then in Browse >
-Extensions, install the extension of each manga site you read.
-
-#### Settings of Suwayomi kept by policy
-
-[policy](#policy) puts these back every night:
-
-| Setting                         | Value    |
-| ------------------------------- | -------- |
-| Download new chapters           | on       |
-| Skip manga with unread chapters | off      |
-| Save as CBZ                     | on       |
-| Automatic update interval       | 12 hours |
-
-Suwayomi checks the sites for new chapters every 12 hours and downloads each new
-one on its own. Friends read in Jellyfin, so Suwayomi sees every chapter as
-unread, and would skip every manga if it left out those with unread chapters.
-CBZ is also set from compose, at each start.
-
-#### Want a manga
-
-In Browse, pick a source, search a manga and add it to the library. Open it,
-select the chapters to keep and click "Download". Suwayomi files them under
-`mangas/<source>/<manga>` in the manga folder, where the Manga library of
-Jellyfin picks them up. New chapters follow on their own.
 
 ### Tdarr
 
