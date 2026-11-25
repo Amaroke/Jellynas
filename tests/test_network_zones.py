@@ -4,17 +4,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCO_CD = ROOT / "services" / "doco-cd" / "compose.yaml"
-PUBLIC_ALIASES = {"jellyfin.${DOMAIN}", "seerr.${DOMAIN}", "auth.${DOMAIN}", "aurral.${DOMAIN}"}
+PUBLIC_ALIASES = {"jellyfin.${DOMAIN}", "seerr.${DOMAIN}", "auth.${DOMAIN}", "aurral.${DOMAIN}", "kavita.${DOMAIN}"}
 ZONE_MEMBERS = {
     "jellyfin-zone": {"caddy", "jellyfin", "lldap"},
     "seerr-zone": {"caddy", "seerr", "radarr", "sonarr"},
     "identity-zone": {"caddy", "authelia", "lldap", "policy"},
     "aurral-zone": {"caddy", "aurral", "gluetun"},
+    "kavita-zone": {"caddy", "kavita"},
     "dashboard-docker-zone": {"dashboard", "dashboard-socket-proxy"},
 }
-OUTSIDE_INTERNAL_ZONE = {"jellyfin", "seerr", "authelia", "lldap", "aurral", "dashboard-socket-proxy"}
+OUTSIDE_INTERNAL_ZONE = {"jellyfin", "seerr", "authelia", "lldap", "aurral", "kavita", "dashboard-socket-proxy"}
 SOCKET_HOLDERS = {"socket-proxy", "dashboard-socket-proxy", "backup", "doco-cd"}
-DIRECT_ADDRESSES = ("jellyfin:8096", "seerr:5055", "authelia:9091", "aurral:3001")
+DIRECT_ADDRESSES = ("jellyfin:8096", "seerr:5055", "authelia:9091", "aurral:3001", "kavita:5000")
 
 
 def included_compose_files():
@@ -119,6 +120,9 @@ class NetworkZonesTest(unittest.TestCase):
     def test_aurral_sits_with_caddy_and_gluetun_only(self):
         self.assertEqual(ZONE_MEMBERS["aurral-zone"], zone_members("aurral-zone"))
 
+    def test_kavita_sits_with_caddy_only(self):
+        self.assertEqual(ZONE_MEMBERS["kavita-zone"], zone_members("kavita-zone"))
+
     def test_lldap_has_no_public_name(self):
         caddyfile = (ROOT / "services" / "caddy" / "Caddyfile").read_text(encoding="utf-8")
         public = caddyfile.split("*.lan.{$DOMAIN}")[0]
@@ -146,7 +150,7 @@ class NetworkZonesTest(unittest.TestCase):
 
     def test_caddy_answers_the_public_names_inside_the_nas(self):
         found = aliases(all_services()["caddy"])
-        for zone in ("seerr-zone", "aurral-zone", "internal-zone"):
+        for zone in ("seerr-zone", "aurral-zone", "kavita-zone", "internal-zone"):
             self.assertEqual(PUBLIC_ALIASES, found[zone], zone)
 
     def test_only_caddy_names_the_public_services_directly(self):

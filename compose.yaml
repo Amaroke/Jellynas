@@ -3,6 +3,7 @@ name: jellynas
 
 include:
   - services/jellyfin/compose.yaml
+  - services/kavita/compose.yaml
   - services/policy/compose.yaml
   - services/seerr/compose.yaml
   - services/lldap/compose.yaml
@@ -40,5 +41,6 @@ networks:
   seerr-zone:
   identity-zone:
   aurral-zone:
+  kavita-zone:
   internal-zone:
   dashboard-docker-zone:
