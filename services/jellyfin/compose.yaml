@@ -35,9 +35,7 @@ services:
     volumes:
       - ${APPDATA_ROOT}/jellyfin:/config
       - ${DATA_ROOT}/media:/data/media:ro
-    configs:
-      - source: jellyfin-web
-        target: /usr/share/jellyfin/web/config.json
+      - ./web-config.json:/usr/share/jellyfin/web/config.json:ro
     healthcheck:
       test:
         - "CMD"
@@ -50,53 +48,3 @@ services:
       timeout: 10s
       start_period: 60s
 
-configs:
-  jellyfin-web:
-    content: |
-      {
-        "includeCorsCredentials": false,
-        "multiserver": false,
-        "themes": [
-          { "name": "Apple TV", "id": "appletv", "color": "#bcbcbc" },
-          { "name": "Blue Radiance", "id": "blueradiance", "color": "#011432" },
-          { "name": "Dark", "id": "dark", "color": "#202020", "default": true },
-          { "name": "Light", "id": "light", "color": "#303030" },
-          { "name": "Purple Haze", "id": "purplehaze", "color": "#000420" },
-          { "name": "WMC", "id": "wmc", "color": "#0c2450" }
-        ],
-        "menuLinks": [
-          {
-            "name": "Livres",
-            "icon": "menu_book",
-            "url": "https://kavita.${DOMAIN}:${CADDY_HTTPS_PORT:-443}"
-          },
-          {
-            "name": "Musiques",
-            "icon": "library_music",
-            "url": "https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT:-443}"
-          },
-          {
-            "name": "Faire une requête",
-            "icon": "add",
-            "url": "https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT:-443}"
-          }
-        ],
-        "servers": [],
-        "plugins": [
-          "playAccessValidation/plugin",
-          "experimentalWarnings/plugin",
-          "htmlAudioPlayer/plugin",
-          "htmlVideoPlayer/plugin",
-          "photoPlayer/plugin",
-          "comicsPlayer/plugin",
-          "bookPlayer/plugin",
-          "youtubePlayer/plugin",
-          "backdropScreensaver/plugin",
-          "pdfPlayer/plugin",
-          "logoScreensaver/plugin",
-          "sessionPlayer/plugin",
-          "chromecastPlayer/plugin",
-          "stillWatching/plugin",
-          "syncPlay/plugin"
-        ]
-      }

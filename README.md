@@ -592,10 +592,12 @@ theme hides on each card, such as the one that marks an item as played.
 
 The header of the web client shows three links after the libraries: "Livres"
 opens Kavita, "Musiques" opens Aurral and "Faire une requête" opens Seerr. They
-are the `menuLinks` of the web config that `services/jellyfin/compose.yaml`
-mounts, so Jellyfin draws them like the libraries and moves them under "Plus"
-when the header runs out of room. The Custom CSS of the theme puts them after
-the libraries, since Jellyfin draws them first.
+are the `menuLinks` of `services/jellyfin/web-config.json`, mounted over the
+web config of the image, so Jellyfin draws them like the libraries and moves
+them under "Plus" when the header runs out of room. Each link points at
+`/go/<app>` on Jellyfin, which Caddy redirects to the app on the same side,
+public or local, so the file holds no domain. The Custom CSS of the theme puts
+them after the libraries, since Jellyfin draws them first.
 
 The JavaScript Injector plugin stays installed but empty: policy removes any
 script added to it by hand.
