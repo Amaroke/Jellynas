@@ -2,7 +2,7 @@ use crate::accounts::Account;
 use crate::api::{Api, encode, report};
 use serde_json::{Map, Value};
 
-const SETTINGS: [(&str, &str, &str); 23] = [
+const SETTINGS: [(&str, &str, &str); 21] = [
     ("General", "AUTH_TYPE", "BASIC"),
     ("General", "USER_ACCOUNTS", ""),
     ("General", "EBOOK_DIR", "/data/media/books"),
@@ -15,9 +15,7 @@ const SETTINGS: [(&str, &str, &str); 23] = [
     ),
     ("Comics", "COMIC_TAB", "1"),
     ("Comics", "COMIC_RELATIVE", ""),
-    ("Comics", "COMIC_DEST_FOLDER", "/data/media/private-manga/$Title"),
-    ("Comics", "COMIC_TYPE", "cbr, cbz"),
-    ("General", "IMP_COMICCOVER", ""),
+    ("Comics", "COMIC_DEST_FOLDER", "/data/media/manga/$Title"),
     ("TORRENT", "TOR_DOWNLOADER_QBITTORRENT", "1"),
     ("TORRENT", "KEEP_SEEDING", "1"),
     ("TORRENT", "SEED_WAIT", "1"),
