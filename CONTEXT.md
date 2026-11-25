@@ -34,7 +34,8 @@ _Avoid_: media collection, catalog
 
 **Private library**:
 The part of the Library that only one Account sees, in its own folder of the
-Media tree, where the Admin can send a Request instead of the shared Library.
+Media tree, split into videos and books, where the Admin can send a Request
+instead of the shared Library.
 _Avoid_: personal library, prive
 
 **Media tree**:
