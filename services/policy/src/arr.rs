@@ -234,41 +234,41 @@ mod tests {
     }
 
     #[test]
-    fn each_private_folder_becomes_a_root_folder() {
+    fn each_private_videos_folder_becomes_a_root_folder() {
         for arr in [radarr(), sonarr()] {
             let mut pages = in_line(&arr);
             let mut roots: Vec<Value> =
                 arr.roots.iter().map(|path| json!({"path": path})).collect();
-            roots.push(json!({"path": "/data/media/private/elea_t"}));
+            roots.push(json!({"path": "/data/media/private/elea_t/videos"}));
             pages.insert("/rootfolder".into(), json!(roots));
             let private = [
-                "/data/media/private/elea_t".to_string(),
-                "/data/media/private/moutondu".to_string(),
+                "/data/media/private/elea_t/videos".to_string(),
+                "/data/media/private/moutondu/videos".to_string(),
             ];
             let fake = Fake::new(pages);
             enforce(&arr, &fake, &private).unwrap();
             assert_eq!(vec!["POST /rootfolder"], fake.paths()[..1].to_vec());
             assert_eq!(
-                json!({"path": "/data/media/private/moutondu"}),
+                json!({"path": "/data/media/private/moutondu/videos"}),
                 fake.body(0)
             );
         }
     }
 
     #[test]
-    fn a_root_folder_on_a_private_subfolder_stands_for_the_account() {
+    fn a_root_folder_on_the_whole_private_folder_does_not_stand_for_its_videos() {
         let mut pages = in_line(&radarr());
         pages.insert(
             "/rootfolder".into(),
-            json!([{"path": "/data/media/movies"}, {"path": "/data/media/private/elea_t/videos"}]),
+            json!([{"path": "/data/media/movies"}, {"path": "/data/media/private/elea_t"}]),
         );
-        let private = [
-            "/data/media/private/elea".to_string(),
-            "/data/media/private/elea_t".to_string(),
-        ];
+        let private = ["/data/media/private/elea_t/videos".to_string()];
         let fake = Fake::new(pages);
         assert_eq!(Ok(1), enforce(&radarr(), &fake, &private));
-        assert_eq!(json!({"path": "/data/media/private/elea"}), fake.body(0));
+        assert_eq!(
+            json!({"path": "/data/media/private/elea_t/videos"}),
+            fake.body(0)
+        );
     }
 
     #[test]
