@@ -1421,11 +1421,19 @@ Requires [Prowlarr](#prowlarr) and [Kavita](#kavita).
 
 LazyLibrarian follows authors, books and manga: a wanted book or volume arrives
 in the Library on its own, from the indexers through qBittorrent, and Kavita
-reads it. It sees only the books and manga folders, under `/data/media/books`
+reads it. It sees the books and manga folders, under `/data/media/books`
 and `/data/media/manga`, and the torrents tree, under `/data/torrents`. Readarr
 is retired, and no other maintained open source tool finds and files books this
-way. The private books folders are not mounted in LazyLibrarian and stay filed
-by hand.
+way. The private libraries are mounted read-only under `/data/media/private`:
+at each pass, [policy](#policy) scans the `books` folder of every Account, so
+LazyLibrarian lists the private books without moving or adding a file. A
+wanted book still lands in the public folders, and a private one is filed by
+hand.
+
+A scan only lists a book that the book source of LazyLibrarian, Hardcover,
+also knows. A found author brings all their books, so the books of that author
+can match. The manga scan covers `/data/media/manga` only, and matches a
+volume through the ComicVine website as long as no ComicVine key is set.
 
 ### Login of LazyLibrarian
 
@@ -1475,6 +1483,10 @@ docker restart doco-cd
 | Download directory             | `/data/torrents/books`            |
 | Keep seeding after processing  | on                                |
 | Do not delete if still seeding | on                                |
+| Add books of new authors       | on                                |
+| Hardcover                      | on                                |
+| Book source                    | HardCover                         |
+| ComicVine web search           | on                                |
 
 Each import is a copy, so the torrent keeps seeding from the torrents tree, and
 LazyLibrarian never removes a torrent before qBittorrent stops it at its seeding
@@ -1492,6 +1504,21 @@ library.
 
 A manga volume lands as `/data/media/manga/<Title>/<Title> <Issue>.cbz`, and
 [Shelver](#shelver) then files it.
+
+### Hardcover
+
+LazyLibrarian finds books and series on [Hardcover](https://hardcover.app),
+which knows far more light novels and manga than OpenLibrary. Create a free
+account there and copy the token from Settings > API. LazyLibrarian keeps it
+in the admin user of its database, which has no setting in the API, so set it
+once with LazyLibrarian stopped:
+
+```sh
+docker stop lazylibrarian
+sudo sqlite3 /mnt/tank/appdata/lazylibrarian/lazylibrarian.db \
+  "UPDATE users SET hc_token='<token>' WHERE perms=65535"
+docker start lazylibrarian
+```
 
 ### Indexers of LazyLibrarian
 
