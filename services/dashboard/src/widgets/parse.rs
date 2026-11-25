@@ -817,19 +817,6 @@ pub fn tdarr(stats: &Value, nodes: &Value) -> Parsed {
     Ok(found)
 }
 
-pub fn suwayomi(counts: &Value) -> Parsed {
-    let data = field(counts, "data")?;
-    let total = |key: &str| -> Result<String, String> {
-        Ok(count(whole(field(data, key)?, "totalCount")?))
-    };
-    Ok(reading(vec![
-        ("Downloaded", total("download")?),
-        ("Not downloaded", total("nondownload")?),
-        ("Read", total("read")?),
-        ("Unread", total("unread")?),
-    ]))
-}
-
 pub fn qbittorrent(torrents: &Value) -> Parsed {
     const LEECHING: [&str; 8] = [
         "downloading",
@@ -1586,26 +1573,6 @@ mod tests {
                 ("Processed", "107"),
                 ("Errored", "2"),
                 ("Saved", "1.4 GiB")
-            ],
-            figures(&reading)
-        );
-    }
-
-    #[test]
-    fn suwayomi_counts_the_chapters() {
-        let counts = json!({"data": {
-            "download": {"totalCount": 40},
-            "nondownload": {"totalCount": 1200},
-            "read": {"totalCount": 35},
-            "unread": {"totalCount": 1205}
-        }});
-        let reading = suwayomi(&counts).unwrap();
-        assert_eq!(
-            vec![
-                ("Downloaded", "40"),
-                ("Not downloaded", "1,200"),
-                ("Read", "35"),
-                ("Unread", "1,205")
             ],
             figures(&reading)
         );

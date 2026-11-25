@@ -75,26 +75,6 @@ impl Api for Http {
     }
 }
 
-pub fn basic(username: &str, password: &str) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut encoded = String::from("Basic ");
-    for chunk in format!("{username}:{password}").as_bytes().chunks(3) {
-        let mut bits = 0u32;
-        for (index, byte) in chunk.iter().enumerate() {
-            bits |= u32::from(*byte) << (16 - 8 * index);
-        }
-        for index in 0..4 {
-            let sextet = (bits >> (18 - 6 * index)) & 63;
-            if index <= chunk.len() {
-                encoded.push(char::from(ALPHABET[sextet as usize]));
-            } else {
-                encoded.push('=');
-            }
-        }
-    }
-    encoded
-}
-
 pub fn rules(value: Value) -> Map<String, Value> {
     value.as_object().cloned().unwrap_or_default()
 }
@@ -224,16 +204,6 @@ mod tests {
     fn a_merge_keeps_every_other_field() {
         let whole = merged(&json!({"a": 1, "kept": true}), &rules(json!({"a": 2})));
         assert_eq!(json!({"a": 2, "kept": true}), whole);
-    }
-
-    #[test]
-    fn basic_encodes_the_login_in_base64() {
-        assert_eq!(
-            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
-            basic("Aladdin", "open sesame")
-        );
-        assert_eq!("Basic YTpi", basic("a", "b"));
-        assert_eq!("Basic YWI6Yw==", basic("ab", "c"));
     }
 
     #[test]

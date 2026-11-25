@@ -40,9 +40,6 @@ services:
       RADARR_API_KEY: ${RADARR_API_KEY}
       SONARR_URL: http://sonarr:8989
       SONARR_API_KEY: ${SONARR_API_KEY}
-      SUWAYOMI_URL: http://gluetun:4567
-      SUWAYOMI_USERNAME: ${SUWAYOMI_USERNAME:-}
-      SUWAYOMI_PASSWORD: ${SUWAYOMI_PASSWORD:-}
       BAZARR_URL: http://bazarr:6767
       BAZARR_API_KEY: ${BAZARR_API_KEY:-}
       TDARR_URL: http://tdarr:8265
