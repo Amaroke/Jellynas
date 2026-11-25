@@ -32,7 +32,9 @@ radarr:
           - name: 2160p
             qualities: [Bluray-2160p, WEBRip-2160p, WEBDL-2160p]
           - name: Remux-1080p
+            enabled: false
           - name: Remux-2160p
+            enabled: false
 
       - name: Anime 1080p
         score_set: french-anime-multi
@@ -52,7 +54,9 @@ radarr:
           - name: 2160p
             qualities: [Bluray-2160p, WEBRip-2160p, WEBDL-2160p, HDTV-2160p]
           - name: Remux-1080p
+            enabled: false
           - name: Remux-2160p
+            enabled: false
 
     custom_format_groups:
       skip:
@@ -186,7 +190,9 @@ sonarr:
           - name: 2160p
             qualities: [Bluray-2160p, WEBRip-2160p, WEBDL-2160p]
           - name: Bluray-1080p Remux
+            enabled: false
           - name: Bluray-2160p Remux
+            enabled: false
 
       - name: Anime 1080p
         score_set: french-anime-multi
@@ -206,7 +212,9 @@ sonarr:
           - name: 2160p
             qualities: [Bluray-2160p, WEBRip-2160p, WEBDL-2160p, HDTV-2160p]
           - name: Bluray-1080p Remux
+            enabled: false
           - name: Bluray-2160p Remux
+            enabled: false
 
     custom_format_groups:
       skip:
