@@ -23,15 +23,19 @@ def files(root, suffix):
 
 def rewrite(path, changed, extra=None):
     temporary = path.with_name(f".{path.name}.shelver")
-    with zipfile.ZipFile(path) as source, zipfile.ZipFile(temporary, "w") as target:
-        for entry in source.infolist():
-            data = source.read(entry)
-            if entry.filename in changed:
-                data = changed[entry.filename].encode("utf-8")
-            target.writestr(entry, data, compress_type=entry.compress_type)
-        if extra:
-            name, text = extra
-            target.writestr(name, text.encode("utf-8"), compress_type=zipfile.ZIP_DEFLATED)
+    try:
+        with zipfile.ZipFile(path) as source, zipfile.ZipFile(temporary, "w") as target:
+            for entry in source.infolist():
+                data = source.read(entry)
+                if entry.filename in changed:
+                    data = changed[entry.filename].encode("utf-8")
+                target.writestr(entry, data, compress_type=entry.compress_type)
+            if extra:
+                name, text = extra
+                target.writestr(name, text.encode("utf-8"), compress_type=zipfile.ZIP_DEFLATED)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
     return temporary
 
 
