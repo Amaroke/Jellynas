@@ -108,21 +108,26 @@ fn library_name(account: &Account, folders: &Value) -> String {
     }
 }
 
+fn located(folders: &Value, path: &str) -> bool {
+    folders
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|folder| folder["Locations"].as_array().into_iter().flatten())
+        .filter_map(Value::as_str)
+        .any(|location| location.trim_end_matches('/') == path)
+}
+
 fn shelve(api: &impl Api, accounts: &[Account]) -> Result<usize, String> {
     let folders = api.get("/Library/VirtualFolders")?;
-    let shelves = Shelves::read(&folders);
     let mut created = 0;
     for account in accounts {
-        if shelves
-            .private
-            .iter()
-            .any(|(owner, _)| *owner == account.id)
-        {
+        if located(&folders, &account.videos()) {
             continue;
         }
         let name = library_name(account, &folders);
         let options = json!({"LibraryOptions": {
-            "PathInfos": [{"Path": account.folder()}],
+            "PathInfos": [{"Path": account.videos()}],
             "PreferredMetadataLanguage": "fr",
             "MetadataCountryCode": "FR",
         }});
@@ -302,8 +307,8 @@ mod tests {
     fn libraries() -> Value {
         json!([
             library(MOVIES, "Films", "/data/media/movies"),
-            library(ELEA, "Eléa", "/data/media/private/elea_t"),
-            library(VINCENT, "Vincent", "/data/media/private/moutondu/"),
+            library(ELEA, "Eléa", "/data/media/private/elea_t/videos"),
+            library(VINCENT, "Vincent", "/data/media/private/moutondu/videos/"),
         ])
     }
 
@@ -432,15 +437,35 @@ mod tests {
     }
 
     #[test]
-    fn an_account_with_a_library_on_a_subfolder_gets_no_other() {
+    fn a_books_library_does_not_stand_for_the_videos_library() {
         let mut pages = in_line();
         pages.insert(
             "/Library/VirtualFolders".into(),
             json!([library("bb", "Livres", "/data/media/private/theo/books")]),
         );
         let fake = Fake::new(pages);
-        assert_eq!(Ok(0), shelve(&fake, &[account("theo", "Théo")]));
-        assert!(fake.paths().is_empty());
+        assert_eq!(Ok(1), shelve(&fake, &[account("theo", "Théo")]));
+        assert_eq!(
+            json!("/data/media/private/theo/videos"),
+            fake.body(0)["LibraryOptions"]["PathInfos"][0]["Path"]
+        );
+    }
+
+    #[test]
+    fn a_library_on_the_whole_private_folder_does_not_stand_for_the_videos_library() {
+        let mut pages = in_line();
+        pages.insert(
+            "/Library/VirtualFolders".into(),
+            json!([library("tt", "Théo", "/data/media/private/theo")]),
+        );
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), shelve(&fake, &[account("theo", "Théo")]));
+        assert_eq!(
+            vec![
+                "POST /Library/VirtualFolders?name=Th%C3%A9o%20%28theo%29&collectionType=mixed&refreshLibrary=true"
+            ],
+            fake.paths()
+        );
     }
 
     #[test]
@@ -514,7 +539,7 @@ mod tests {
             fake.paths()
         );
         assert_eq!(
-            json!("/data/media/private/theo"),
+            json!("/data/media/private/theo/videos"),
             fake.body(0)["LibraryOptions"]["PathInfos"][0]["Path"]
         );
     }

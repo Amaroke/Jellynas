@@ -42,7 +42,7 @@ impl App {
         match self {
             App::Jellyfin(api) => jellyfin::enforce(api, accounts),
             App::Arr(arr, api) => {
-                let private: Vec<String> = accounts.iter().map(Account::folder).collect();
+                let private: Vec<String> = accounts.iter().map(Account::videos).collect();
                 arr::enforce(arr, api, &private)
             }
             App::Aurral(api) => aurral::enforce(api),

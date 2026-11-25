@@ -488,25 +488,21 @@ Each Account of the group `jellynas_users` in lldap gets a Private library,
 which only that Account sees, the Admin included. policy prepares it at each
 pass, before the first sign-in of the Account:
 
-- the folder `/data/media/private/<username>`, readable by the apps only,
-- a Jellyfin library of the content type "Mixed" on that folder, named after
-  the display name of the Account in lldap, so movies and shows sit together
-  in one library,
-- a root folder on that folder in Radarr and in Sonarr, which Seerr offers
-  when the Admin approves a Request, as [Requests](#requests) sets out.
+- the folder `/data/media/private/<username>`, readable by the apps only, split
+  into `videos` for movies and shows and `books` for books,
+- a Jellyfin library of the content type "Mixed" on `<username>/videos`, named
+  after the display name of the Account in lldap, so movies and shows sit
+  together in one library,
+- a root folder on `<username>/videos` in Radarr and in Sonarr, which Seerr
+  offers when the Admin approves a Request, as [Requests](#requests) sets out.
 
 The owner of a Private library is the folder right under `/data/media/private`
-in its path, so a library added by hand on `/data/media/private/<username>` or
-on one of its subfolders belongs to that Account too. Jellyfin refuses a library
-inside the folder of another, so an Account splits its folder into sibling
-subfolders, for example a "Mixed" library on `<username>/videos` and a "Books"
-one on `<username>/books`, with the Radarr and Sonarr root folders moved to
-`<username>/videos`. A root folder on a subfolder stands for the Account, so
-policy adds none on `<username>` then. policy grants every Account the public
-libraries and its own Private libraries, and takes away any other Private
-library. Renaming a Private library in the
-Dashboard is fine, policy only looks at its folder. It never deletes a folder,
-a library or a root folder, even when the Account leaves lldap.
+in its path, so a library added by hand on one of its subfolders, for example a
+"Books" library on `<username>/books`, belongs to that Account too. policy grants
+every Account the public libraries and its own Private libraries, and takes away
+any other Private library. Renaming a Private library in the Dashboard is fine,
+policy only looks at its folder. It never deletes a folder, a library or a root
+folder, even when the Account leaves lldap.
 
 ### Friend Accounts
 
@@ -1408,8 +1404,8 @@ their own.
 
 A Request goes to the movies, shows or anime folder by default. To send it to
 the [Private library](#private-libraries) of an Account instead, open it in
-Seerr, click "Edit Request", pick `/data/media/private/<username>` as the root
-folder, and approve it. Radarr and Sonarr then file it there, and only that
+Seerr, click "Edit Request", pick `/data/media/private/<username>/videos` as the
+root folder, and approve it. Radarr and Sonarr then file it there, and only that
 Account sees it in Jellyfin. Keep every "Auto-Approve" permission off in Seerr,
 or a Request skips this choice and lands in the public library.
 

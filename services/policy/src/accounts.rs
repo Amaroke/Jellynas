@@ -17,6 +17,10 @@ impl Account {
     pub fn folder(&self) -> String {
         format!("{PRIVATE_ROOT}/{}", self.id)
     }
+
+    pub fn videos(&self) -> String {
+        format!("{}/videos", self.folder())
+    }
 }
 
 pub struct Directory {
@@ -84,14 +88,17 @@ fn safe(id: &str) -> bool {
 pub fn shelve(root: &Path, accounts: &[Account]) -> Result<usize, String> {
     let mut created = 0;
     for account in accounts {
-        let folder = root.join(&account.id);
-        if folder.is_dir() {
-            continue;
+        let home = root.join(&account.id);
+        for folder in [home.clone(), home.join("videos"), home.join("books")] {
+            if folder.is_dir() {
+                continue;
+            }
+            fs::create_dir(&folder)
+                .and_then(|()| restrict(&folder))
+                .map_err(|error| format!("{}: {error}", folder.display()))?;
+            println!("Private folders: created {}", folder.display());
+            created += 1;
         }
-        fs::create_dir(&folder).map_err(|error| format!("{}: {error}", folder.display()))?;
-        restrict(&folder).map_err(|error| format!("{}: {error}", folder.display()))?;
-        println!("Private folders: created {}", account.id);
-        created += 1;
     }
     Ok(created)
 }
@@ -153,6 +160,7 @@ mod tests {
             accounts.iter().map(|a| a.id.as_str()).collect::<Vec<_>>()
         );
         assert_eq!("/data/media/private/elea_t", accounts[0].folder());
+        assert_eq!("/data/media/private/elea_t/videos", accounts[0].videos());
     }
 
     #[test]
@@ -173,13 +181,28 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_missing_folder_is_created_once() {
-        let root = std::env::temp_dir().join(format!("policy-shelve-{}", std::process::id()));
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("policy-{name}-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
-        assert_eq!(Ok(1), shelve(&root, &[eléa()]));
-        assert!(root.join("elea_t").is_dir());
+        root
+    }
+
+    #[test]
+    fn a_missing_folder_is_created_once_with_videos_and_books() {
+        let root = scratch("shelve");
+        assert_eq!(Ok(3), shelve(&root, &[eléa()]));
+        assert!(root.join("elea_t/videos").is_dir());
+        assert!(root.join("elea_t/books").is_dir());
         assert_eq!(Ok(0), shelve(&root, &[eléa()]));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn an_existing_folder_gets_its_missing_videos_and_books() {
+        let root = scratch("split");
+        fs::create_dir_all(root.join("elea_t/videos")).unwrap();
+        assert_eq!(Ok(1), shelve(&root, &[eléa()]));
+        assert!(root.join("elea_t/books").is_dir());
         fs::remove_dir_all(&root).unwrap();
     }
 }
