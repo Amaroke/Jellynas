@@ -1,5 +1,5 @@
 use crate::accounts::{Account, PRIVATE_ROOT, owner};
-use crate::api::{Api, report, rules, settle};
+use crate::api::{Api, encode, report, rules, settle};
 use jiff::{SignedDuration, Timestamp};
 use serde_json::{Map, Value, json};
 
@@ -75,17 +75,6 @@ fn access(current: &Value, wanted: &[String]) -> Map<String, Value> {
         "EnableAllFolders": false,
         "EnabledFolders": kept_order(&current["EnabledFolders"], wanted),
     }))
-}
-
-fn encode(text: &str) -> String {
-    text.bytes()
-        .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                char::from(byte).to_string()
-            }
-            _ => format!("%{byte:02X}"),
-        })
-        .collect()
 }
 
 fn library_name(account: &Account, folders: &Value) -> String {

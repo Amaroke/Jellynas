@@ -1,11 +1,20 @@
-use crate::api::{Api, report};
+use crate::api::{Api, encode, report};
 use serde_json::{Map, Value};
 
-const SETTINGS: [(&str, &str, &str); 12] = [
+const SETTINGS: [(&str, &str, &str); 17] = [
     ("General", "AUTH_TYPE", "BASIC"),
     ("General", "USER_ACCOUNTS", ""),
     ("General", "EBOOK_DIR", "/data/media/books"),
     ("General", "DESTINATION_COPY", "1"),
+    ("PostProcess", "EBOOK_DEST_FOLDER", "{$SerName|$Title}"),
+    (
+        "PostProcess",
+        "EBOOK_DEST_FILE",
+        "$Title{ ($SerName, #$PadNum)}",
+    ),
+    ("Comics", "COMIC_TAB", "1"),
+    ("Comics", "COMIC_RELATIVE", ""),
+    ("Comics", "COMIC_DEST_FOLDER", "/data/media/manga/$Title"),
     ("TORRENT", "TOR_DOWNLOADER_QBITTORRENT", "1"),
     ("TORRENT", "KEEP_SEEDING", "1"),
     ("TORRENT", "SEED_WAIT", "1"),
@@ -21,7 +30,10 @@ fn read_path(group: &str, name: &str) -> String {
 }
 
 fn write_path(group: &str, name: &str, value: &str) -> String {
-    format!("&cmd=writeCFG&name={name}&group={group}&value={value}")
+    format!(
+        "&cmd=writeCFG&name={name}&group={group}&value={}",
+        encode(value)
+    )
 }
 
 fn read(api: &impl Api, group: &str, name: &str) -> Result<String, String> {
@@ -92,6 +104,39 @@ mod tests {
             write_path("QBITTORRENT", "QBITTORRENT_LABEL", "books"),
         ];
         assert_eq!(expected.to_vec(), writes(&fake));
+    }
+
+    #[test]
+    fn a_book_lands_in_the_folder_of_its_series_with_its_index() {
+        let mut pages = in_line();
+        pages.insert(
+            read_path("PostProcess", "EBOOK_DEST_FILE"),
+            json!("[$Title - $Author]"),
+        );
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), enforce(&fake));
+        assert_eq!(
+            vec![
+                "&cmd=writeCFG&name=EBOOK_DEST_FILE&group=PostProcess&value=%24Title%7B%20%28%24SerName%2C%20%23%24PadNum%29%7D"
+            ],
+            writes(&fake)
+        );
+    }
+
+    #[test]
+    fn manga_are_filed_in_the_manga_folder() {
+        let mut pages = in_line();
+        pages.insert(read_path("Comics", "COMIC_RELATIVE"), json!("[1]"));
+        pages.insert(read_path("Comics", "COMIC_TAB"), json!("[]"));
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), enforce(&fake));
+        assert_eq!(
+            vec![
+                write_path("Comics", "COMIC_TAB", "1"),
+                write_path("Comics", "COMIC_RELATIVE", ""),
+            ],
+            writes(&fake)
+        );
     }
 
     #[test]
