@@ -65,9 +65,21 @@ configs:
           { "name": "WMC", "id": "wmc", "color": "#0c2450" }
         ],
         "menuLinks": [
-          { "name": "Livres", "icon": "menu_book", "url": "https://kavita.${DOMAIN}:${CADDY_HTTPS_PORT:-443}" },
-          { "name": "Musiques", "icon": "library_music", "url": "https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT:-443}" },
-          { "name": "Faire une requête", "icon": "add", "url": "https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT:-443}" }
+          {
+            "name": "Livres",
+            "icon": "menu_book",
+            "url": "https://kavita.${DOMAIN}:${CADDY_HTTPS_PORT:-443}"
+          },
+          {
+            "name": "Musiques",
+            "icon": "library_music",
+            "url": "https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT:-443}"
+          },
+          {
+            "name": "Faire une requête",
+            "icon": "add",
+            "url": "https://seerr.${DOMAIN}:${CADDY_HTTPS_PORT:-443}"
+          }
         ],
         "servers": [],
         "plugins": [
