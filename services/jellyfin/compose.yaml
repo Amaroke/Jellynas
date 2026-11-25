@@ -47,4 +47,3 @@ services:
         - "http://localhost:8096/health"
       timeout: 10s
       start_period: 60s
-
