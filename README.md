@@ -1421,11 +1421,13 @@ Requires [Prowlarr](#prowlarr) and [Kavita](#kavita).
 
 LazyLibrarian follows authors, books and manga: a wanted book or volume arrives
 in the Library on its own, from the indexers through qBittorrent, and Kavita
-reads it. It sees only the books and manga folders, under `/data/media/books`
+reads it. It sees the books and manga folders, under `/data/media/books`
 and `/data/media/manga`, and the torrents tree, under `/data/torrents`. Readarr
 is retired, and no other maintained open source tool finds and files books this
-way. The private books folders are not mounted in LazyLibrarian and stay filed
-by hand.
+way. The private books folder of amaroke is mounted read-only under
+`/data/media/private/amaroke/books`, so a library scan lists the books there
+without moving or adding a file. A wanted book still lands in the public
+folders, and a private one is filed by hand.
 
 ### Login of LazyLibrarian
 
