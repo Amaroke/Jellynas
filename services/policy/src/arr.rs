@@ -5,7 +5,8 @@ pub struct Arr {
     pub name: &'static str,
     pub roots: &'static [&'static str],
     pub recycle_bin: &'static str,
-    pub unmonitor_deleted: &'static str,
+    pub media: Map<String, Value>,
+    pub rename: (&'static str, &'static str, &'static str),
     pub naming: Map<String, Value>,
     pub category: (&'static str, &'static str),
 }
@@ -15,7 +16,8 @@ pub fn radarr() -> Arr {
         name: "Radarr",
         roots: &["/data/media/movies"],
         recycle_bin: "/data/media/movies/.recycle",
-        unmonitor_deleted: "autoUnmonitorPreviouslyDownloadedMovies",
+        media: rules(json!({"autoUnmonitorPreviouslyDownloadedMovies": true})),
+        rename: ("/movie", "movieId", "movieFileId"),
         naming: rules(json!({
             "renameMovies": true,
             "standardMovieFormat": "{Movie Title} ({Release Year}) [tmdbid-{TmdbId}]",
@@ -30,7 +32,11 @@ pub fn sonarr() -> Arr {
         name: "Sonarr",
         roots: &["/data/media/shows", "/data/media/anime"],
         recycle_bin: "/data/media/shows/.recycle",
-        unmonitor_deleted: "autoUnmonitorPreviouslyDownloadedEpisodes",
+        media: rules(json!({
+            "autoUnmonitorPreviouslyDownloadedEpisodes": true,
+            "episodeTitleRequired": "never",
+        })),
+        rename: ("/series", "seriesId", "episodeFileId"),
         naming: rules(json!({
             "renameEpisodes": true,
             "seriesFolderFormat": "{Series TitleYear} [tvdbid-{TvdbId}]",
@@ -52,16 +58,15 @@ impl Arr {
                     "logLevel": "info",
                 })),
             ),
-            (
-                "media management",
-                "/config/mediamanagement",
-                rules(json!({
+            ("media management", "/config/mediamanagement", {
+                let mut page = rules(json!({
                     "copyUsingHardlinks": true,
                     "recycleBin": self.recycle_bin,
                     "recycleBinCleanupDays": 30,
-                    self.unmonitor_deleted: true,
-                })),
-            ),
+                }));
+                page.extend(self.media.clone());
+                page
+            }),
             ("naming", "/config/naming", self.naming.clone()),
         ]
     }
@@ -148,6 +153,32 @@ pub fn enforce(arr: &Arr, api: &impl Api, private: &[String]) -> Result<usize, S
         }
         changed += report(arr.name, "download client", &[&changes]);
     }
+    changed += rename(arr, api)?;
+    Ok(changed)
+}
+
+fn rename(arr: &Arr, api: &impl Api) -> Result<usize, String> {
+    let (list, param, file) = arr.rename;
+    let mut changed = 0;
+    for item in api.get(list)?.as_array().into_iter().flatten() {
+        let id = &item["id"];
+        let files: Vec<Value> = api
+            .get(&format!("/rename?{param}={id}"))?
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|entry| entry[file].clone())
+            .filter(|file| !file.is_null())
+            .collect();
+        if files.is_empty() {
+            continue;
+        }
+        let command = json!({"name": "RenameFiles", param: id, "files": files});
+        api.send("POST", "/command", &command)?;
+        let title = item["title"].as_str().unwrap_or_default();
+        println!("{} rename: {} files of {title}", arr.name, files.len());
+        changed += 1;
+    }
     Ok(changed)
 }
 
@@ -187,6 +218,9 @@ mod tests {
         let roots: Vec<Value> = arr.roots.iter().map(|path| json!({"path": path})).collect();
         pages.insert("/rootfolder".into(), json!(roots));
         pages.insert("/downloadclient".into(), json!([client("movies", true)]));
+        let (list, param, _) = arr.rename;
+        pages.insert(list.into(), json!([{"id": 7, "title": "Kept"}]));
+        pages.insert(format!("/rename?{param}=7"), json!([]));
         pages
     }
 
@@ -296,5 +330,48 @@ mod tests {
         );
         let fake = Fake::new(pages);
         assert_eq!(Ok(0), enforce(&radarr(), &fake, &[]));
+    }
+
+    #[test]
+    fn sonarr_imports_an_episode_without_its_title() {
+        let mut pages = in_line(&sonarr());
+        pages.get_mut("/config/mediamanagement").unwrap()["episodeTitleRequired"] = json!("always");
+        let mut tv = client("shows", true);
+        tv["fields"][3] = json!({"name": "tvCategory", "value": "shows"});
+        pages.insert("/downloadclient".into(), json!([tv]));
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), enforce(&sonarr(), &fake, &[]));
+        assert_eq!(json!("never"), fake.body(0)["episodeTitleRequired"]);
+    }
+
+    #[test]
+    fn a_file_whose_name_no_longer_fits_is_renamed() {
+        let mut pages = in_line(&sonarr());
+        let mut tv = client("shows", true);
+        tv["fields"][3] = json!({"name": "tvCategory", "value": "shows"});
+        pages.insert("/downloadclient".into(), json!([tv]));
+        pages.insert(
+            "/rename?seriesId=7".into(),
+            json!([{"episodeFileId": 3, "existingPath": "a TBA.mkv"}, {"episodeFileId": 4}]),
+        );
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), enforce(&sonarr(), &fake, &[]));
+        assert_eq!(vec!["POST /command"], fake.paths());
+        assert_eq!(
+            json!({"name": "RenameFiles", "seriesId": 7, "files": [3, 4]}),
+            fake.body(0)
+        );
+    }
+
+    #[test]
+    fn radarr_renames_by_movie() {
+        let mut pages = in_line(&radarr());
+        pages.insert("/rename?movieId=7".into(), json!([{"movieFileId": 5}]));
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), enforce(&radarr(), &fake, &[]));
+        assert_eq!(
+            json!({"name": "RenameFiles", "movieId": 7, "files": [5]}),
+            fake.body(0)
+        );
     }
 }
