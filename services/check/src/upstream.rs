@@ -4,6 +4,8 @@ use crate::report::{Report, Severity};
 use jiff::Timestamp;
 use serde_json::{Value, json};
 
+const PAUSED: &str = "Paused";
+
 pub fn containers(report: &mut Report, input: &Input, names: &[&str]) {
     let mut states = json!({});
     for name in names {
@@ -61,7 +63,7 @@ pub fn prowlarr(report: &mut Report, api: &impl Api, now: Timestamp) {
                 format!("{name} is disabled in Prowlarr"),
             );
         }
-        if !searches {
+        if !searches && profile_name != PAUSED {
             report.flag(
                 Severity::High,
                 "prowlarr",
@@ -81,6 +83,7 @@ pub fn prowlarr(report: &mut Report, api: &impl Api, now: Timestamp) {
             "enable": indexer["enable"],
             "priority": indexer["priority"],
             "profile": profile_name,
+            "searches": searches,
             "disabledTill": till,
             "mostRecentFailure": status["mostRecentFailure"],
         }));
@@ -119,9 +122,9 @@ pub fn ratio(report: &mut Report, input: &Input) {
         .find(|line| line.contains("Cannot read the profile"))
     {
         report.flag(
-            Severity::High,
+            Severity::Low,
             "ratio",
-            format!("ratio cannot read the C411 profile, so it spends no download on C411: {line}"),
+            format!("ratio could not read the C411 profile on its last try, it tries again on its next run: {line}"),
         );
     }
     report.fact("ratio", json!(last.into_iter().rev().collect::<Vec<_>>()));
@@ -170,22 +173,30 @@ mod tests {
     }
 
     #[test]
-    fn an_indexer_on_a_paused_profile_is_flagged() {
+    fn an_indexer_on_a_profile_without_search_is_flagged_unless_ratio_paused_it() {
         let api = Fake::new(&[
             (
                 "/api/v1/indexer",
-                json!([{"id": 3, "name": "C411", "enable": true, "priority": 25, "appProfileId": 2}]),
+                json!([
+                    {"id": 3, "name": "C411", "enable": true, "priority": 25, "appProfileId": 2},
+                    {"id": 4, "name": "Other", "enable": true, "appProfileId": 3},
+                ]),
             ),
             (
                 "/api/v1/appprofile",
-                json!([{"id": 2, "name": "Paused", "enableRss": false, "enableAutomaticSearch": false, "enableInteractiveSearch": false}]),
+                json!([
+                    {"id": 2, "name": "Paused", "enableRss": false, "enableAutomaticSearch": false, "enableInteractiveSearch": false},
+                    {"id": 3, "name": "Manual", "enableRss": false},
+                ]),
             ),
             ("/api/v1/indexerstatus", json!([])),
             ("/api/v1/health", json!([])),
         ]);
         let mut report = Report::default();
         prowlarr(&mut report, &api, now());
-        assert!(report.flagged(Severity::High, "C411 sits on the sync profile Paused"));
+        assert!(!report.flagged(Severity::High, "C411"));
+        assert!(report.flagged(Severity::High, "Other sits on the sync profile Manual"));
+        assert_eq!(report.facts["prowlarr"][0]["profile"], "Paused");
     }
 
     #[test]
@@ -220,7 +231,7 @@ mod tests {
         );
         let mut report = Report::default();
         ratio(&mut report, &input);
-        assert!(report.flagged(Severity::High, "cannot read the C411 profile"));
+        assert!(report.flagged(Severity::Low, "could not read the C411 profile"));
     }
 
     #[test]

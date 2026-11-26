@@ -3,7 +3,7 @@ set -eu
 
 usage() {
   echo "Usage: check.sh radarr|sonarr|lazylibrarian" >&2
-  echo "       check.sh api radarr|sonarr|prowlarr|lazylibrarian METHOD PATH [JSON]" >&2
+  echo "       check.sh api radarr|sonarr|prowlarr|lazylibrarian METHOD PATH [JSON|-]" >&2
   exit 2
 }
 
@@ -32,6 +32,13 @@ facts() {
   done
   docker inspect -f '{{range .Mounts}}{{println .Destination}}{{end}}' lazylibrarian 2>/dev/null |
     sed '/^$/d; s/^/mount|lazylibrarian|/'
+  appdata=$(sed -n 's/^APPDATA_ROOT=//p' "$env_file" | tr -d "\"'")
+  db="$appdata/$1/$1.db"
+  if [ -f "$db" ] && command -v sqlite3 >/dev/null; then
+    sqlite3 -readonly "file:$db?immutable=1" \
+      "select ProviderId || '|' || ifnull(DisabledTill, '') from IndexerStatus" 2>/dev/null |
+      sed "s/^/indexer|$1|/"
+  fi
   for name in "$@"; do
     docker logs -t --since 24h "$name" 2>&1 | sed "s/^/log|$name|/"
   done

@@ -1480,6 +1480,7 @@ docker restart doco-cd
 | Enable user accounts           | off                               |
 | Telemetry                      | off                               |
 | eBook Library Folder           | `/data/media/books`               |
+| Processing directory           | `/data/torrents/books`            |
 | Keep original files            | on                                |
 | eBook folder                   | `{$SerName\|$Title}`              |
 | eBook filename                 | `$Title{ ($SerName, #$PadNum)}`   |
@@ -2705,8 +2706,9 @@ its key, and prints the reply with every key masked. doco-cd never deploys the
 tool: its compose file stays out of `compose.yaml`.
 
 The Claude Code skills `check-radarr`, `check-sonarr` and `check-lazylibrarian`
-run it over SSH, trace each finding to its cause and propose the fixes, applied
-one at a time once the Admin agrees. `docs/agents/nas-access.md` sets out the
+run it over SSH, show each library as tables, offer searches of what is
+missing, trace each real problem to its cause and propose the fixes. A search
+or a fix runs once the Admin agrees. `docs/agents/nas-access.md` sets out the
 SSH access they need.
 
 ## On hold

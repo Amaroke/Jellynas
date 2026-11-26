@@ -1,10 +1,11 @@
 use crate::api::{Api, encode, report};
 use serde_json::{Map, Value};
 
-const SETTINGS: [(&str, &str, &str); 21] = [
+const SETTINGS: [(&str, &str, &str); 22] = [
     ("General", "AUTH_TYPE", "BASIC"),
     ("General", "USER_ACCOUNTS", ""),
     ("General", "EBOOK_DIR", "/data/media/books"),
+    ("General", "DOWNLOAD_DIR", "/data/torrents/books"),
     ("General", "DESTINATION_COPY", "1"),
     ("PostProcess", "EBOOK_DEST_FOLDER", "{$SerName|$Title}"),
     (
