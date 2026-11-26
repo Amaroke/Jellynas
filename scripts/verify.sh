@@ -306,6 +306,12 @@ check_socket_proxy_read_only() {
   else
     fail socket-proxy "does not refuse a write (HTTP $code)"
   fi
+  code="$(http_code http://127.0.0.1:2375/containers/socket-proxy/json)"
+  if [ "$code" = 403 ]; then
+    pass socket-proxy "refuses an inspect"
+  else
+    fail socket-proxy "does not refuse an inspect (HTTP $code)"
+  fi
 }
 
 check_hsts() {

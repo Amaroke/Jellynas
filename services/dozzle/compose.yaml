@@ -6,14 +6,15 @@ services:
     restart: unless-stopped
     networks:
       - internal-zone
+      - dozzle-docker-zone
     depends_on:
-      - socket-proxy
+      - dozzle-socket-proxy
     security_opt:
       - no-new-privileges
     environment:
       DOZZLE_AUTH_PROVIDER: simple
       DOZZLE_NO_ANALYTICS: "true"
-      DOCKER_HOST: tcp://socket-proxy:2375
+      DOCKER_HOST: tcp://dozzle-socket-proxy:2375
     labels:
       kuma.dozzle.http.name: Dozzle
       kuma.dozzle.http.url: http://dozzle:8080/healthcheck
@@ -31,3 +32,32 @@ services:
       test: ["CMD", "/dozzle", "healthcheck"]
       timeout: 10s
       start_period: 30s
+
+  dozzle-socket-proxy:
+    image: lscr.io/linuxserver/socket-proxy:3.4.8-r0-ls107
+    container_name: dozzle-socket-proxy
+    restart: unless-stopped
+    networks:
+      - dozzle-docker-zone
+    security_opt:
+      - no-new-privileges
+    read_only: true
+    tmpfs:
+      - /run
+    environment:
+      CONTAINERS: "1"
+      EVENTS: "1"
+      INFO: "1"
+      PING: "1"
+      VERSION: "1"
+      ALLOW_INSPECT: "1"
+      ALLOW_LOGS: "1"
+      POST: "0"
+    labels:
+      kuma.dozzle-socket-proxy.docker.name: Dozzle socket proxy
+      dashboard.name: Dozzle socket proxy
+      dashboard.section: Observation
+      dashboard.icon: docker.svg
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ../socket-proxy/haproxy.cfg:/templates/haproxy.cfg:ro

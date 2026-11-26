@@ -4,8 +4,11 @@ services:
     image: louislam/uptime-kuma:2.5.12
     container_name: uptime-kuma
     restart: unless-stopped
+    depends_on:
+      - uptime-kuma-socket-proxy
     networks:
       - internal-zone
+      - uptime-kuma-docker-zone
     security_opt:
       - no-new-privileges
     environment:
@@ -27,6 +30,7 @@ services:
     restart: unless-stopped
     networks:
       - internal-zone
+      - autokuma-docker-zone
     security_opt:
       - no-new-privileges
     depends_on:
@@ -48,7 +52,7 @@ services:
     labels:
       kuma.nas.docker_host.name: NAS
       kuma.nas.docker_host.connection_type: tcp
-      kuma.nas.docker_host.path: http://socket-proxy:2375
+      kuma.nas.docker_host.path: http://uptime-kuma-socket-proxy:2375
       kuma.discord.notification.name: discord
       kuma.discord.notification.active: "true"
       kuma.discord.notification.config: >-
@@ -64,3 +68,30 @@ services:
       cd.doco.deployment.autostart: "false"
     volumes:
       - ${APPDATA_ROOT}/autokuma:/data
+
+  uptime-kuma-socket-proxy:
+    image: lscr.io/linuxserver/socket-proxy:3.4.8-r0-ls107
+    container_name: uptime-kuma-socket-proxy
+    restart: unless-stopped
+    networks:
+      - uptime-kuma-docker-zone
+    security_opt:
+      - no-new-privileges
+    read_only: true
+    tmpfs:
+      - /run
+    environment:
+      CONTAINERS: "1"
+      INFO: "1"
+      PING: "1"
+      VERSION: "1"
+      ALLOW_INSPECT: "1"
+      POST: "0"
+    labels:
+      kuma.uptime-kuma-socket-proxy.docker.name: Uptime Kuma socket proxy
+      dashboard.name: Uptime Kuma socket proxy
+      dashboard.section: Observation
+      dashboard.icon: docker.svg
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ../socket-proxy/haproxy.cfg:/templates/haproxy.cfg:ro
