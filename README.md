@@ -1392,6 +1392,7 @@ Jellyfin reads books poorly.
 | Default libraries        | The public libraries                 |
 | Default age rating       | None, unknown ratings included       |
 | OPDS                     | On                                   |
+| Cover image size         | Extra large                          |
 
 Kavita creates the user of a Friend at their first sign-in, named after their
 Account. policy keeps these libraries, and adds the missing ones at each pass:

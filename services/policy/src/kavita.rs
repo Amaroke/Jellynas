@@ -11,6 +11,7 @@ const HARDCOVER: u8 = 2;
 const MANGABAKA: u8 = 3;
 const ROLES: [&str; 3] = ["Login", "Download", "Bookmark"];
 const NO_AGE_RATING: i64 = -1;
+const LARGEST_COVERS: u8 = 4;
 
 #[derive(Debug, PartialEq)]
 struct Shelf {
@@ -249,7 +250,7 @@ fn server(current: &Value, authority: &str, libraries: &[i64]) -> Map<String, Va
         .cloned()
         .unwrap_or_default();
     oidc.extend(sign_in(authority, libraries));
-    let mut wanted = rules(json!({"enableOpds": true}));
+    let mut wanted = rules(json!({"enableOpds": true, "coverImageSize": LARGEST_COVERS}));
     wanted.insert("oidcConfig".into(), Value::Object(oidc));
     wanted
 }
@@ -313,7 +314,7 @@ mod tests {
         oidc.insert("secret".into(), json!("********"));
         pages.insert(
             "/settings".into(),
-            json!({"enableOpds": true, "taskScan": "daily", "oidcConfig": oidc}),
+            json!({"enableOpds": true, "coverImageSize": 4, "taskScan": "daily", "oidcConfig": oidc}),
         );
         pages.insert(
             "/users".into(),
@@ -458,5 +459,14 @@ mod tests {
         let fake = Fake::new(pages);
         assert_eq!(Ok(1), enforce(&fake, &accounts(), AUTHORITY));
         assert_eq!(json!(true), fake.body(0)["enableOpds"]);
+    }
+
+    #[test]
+    fn covers_are_kept_at_the_largest_size() {
+        let mut pages = in_line();
+        pages.get_mut("/settings").unwrap()["coverImageSize"] = json!(1);
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), enforce(&fake, &accounts(), AUTHORITY));
+        assert_eq!(json!(4), fake.body(0)["coverImageSize"]);
     }
 }
