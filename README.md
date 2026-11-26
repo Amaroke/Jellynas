@@ -617,10 +617,11 @@ subtitles, stay theirs to set.
 The web client wears [ElegantFin](https://github.com/lscambo13/ElegantFin), a
 sober dark theme. [policy](#policy) keeps its Custom CSS, pinned to a release in
 `THEME` of `services/policy/src/jellyfin.rs`, and shows again the buttons the
-theme hides on each card, such as the one that marks an item as played. It also
-shows again the name of the show on the page of a season or an episode, which
-the theme hides behind the logo of the show, so that name links back to the
-show.
+theme hides on each card, such as the one that marks an item as played, and
+hides the original title of an item. On the page of a season with a logo, only
+the logo names it: the name of the season is hidden. On the page of a show, the
+column of "À suivre" shrinks to its card, so the seasons take the rest of the
+row.
 
 The header of the web client shows three links after the libraries: "Livres"
 opens Kavita, "Musiques" opens Aurral and "Faire une requête" opens Seerr. They
@@ -631,8 +632,10 @@ them under "Plus" when the header runs out of room. Each link points at
 public or local, so the file holds no domain. The Custom CSS of the theme puts
 them after the libraries, since Jellyfin draws them first.
 
-The JavaScript Injector plugin stays installed but empty: policy removes any
-script added to it by hand.
+The JavaScript Injector plugin holds one script, `BACK_TO_SHOW` of
+`services/policy/src/jellyfin.rs`: on the page of a season or an episode, it
+puts a button with an arrow left of "Lire" that leads back to the show. policy
+removes any script added to it by hand.
 
 ### Jellyfin behind Caddy
 
