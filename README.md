@@ -1390,11 +1390,11 @@ Jellyfin reads books poorly.
 Kavita creates the user of a Friend at their first sign-in, named after their
 Account. policy keeps these libraries, and adds the missing ones at each pass:
 
-| Library         | Type  | Folder                     | Files         |
-| --------------- | ----- | -------------------------- | ------------- |
-| Livres          | Book  | `/data/media/books`        | EPUB, PDF     |
-| Mangas          | Manga | `/data/media/manga`        | Archive       |
-| Name of Account | Book  | `private/<username>/books` | Archive, EPUB |
+| Library         | Type  | Folder                     | Files              |
+| --------------- | ----- | -------------------------- | ------------------ |
+| Livres          | Book  | `/data/media/books`        | EPUB, PDF          |
+| Mangas          | Manga | `/data/media/manga`        | Archive            |
+| Name of Account | Book  | `private/<username>/books` | Archive, EPUB, PDF |
 
 It grants every Account the public libraries and its own Private library, and
 takes away any other, like in Jellyfin. It also lifts any age rating on an
