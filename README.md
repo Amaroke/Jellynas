@@ -2185,13 +2185,18 @@ Every switch and setting below lives in the Farm section of the Dashboard.
 
 The Twins come from `RATIO_TWIN_INDEXER_IDS`, through Prowlarr. A Twin is the
 same release on a public tracker, so its download costs nothing on C411, then
-its C411 copy seeds the same files. For each release of C411 at most 8 hours old
-with at least one leecher, an episode, a season pack or a movie, ratio searches
+its C411 copy seeds the same files. For each VOSTFR release of C411 at most 8
+hours old with at least one leecher, an episode, a season pack or a movie,
+ratio searches
 its episode, season or year with its language, for example `S03E06 VOSTFR`, and
 keeps a result of the same release group whose size is within 5 %, since Nyaa
 rounds its sizes. It then downloads both torrent files and compares the length
 of every file. A release is checked every 10 minutes during its first hour,
-then every 30 minutes until it is 8 hours old, up to 30 lookups per run.
+then every 30 minutes until it is 8 hours old, up to 30 lookups per run and
+at most 10 searches a minute and 200 an hour, well under the query limit of
+Nyaa in Prowlarr so that Radarr and Sonarr keep room. Only VOSTFR releases are
+searched: the 13 Twins found from November 23 to 26, 2026 were all VOSTFR,
+while the MULTI releases took three quarters of the searches and found none.
 Prowlarr answers 429 when it is queried too often, and ratio then leaves it
 alone for as long as it asks, an hour when it does not say. Holding or releasing
 C411 at the floor still goes through meanwhile.

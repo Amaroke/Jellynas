@@ -36,6 +36,9 @@ const TWIN_MIN_LEECHERS: i64 = 1;
 const TWIN_SIZE_SLACK: f64 = 0.05;
 const TWIN_ATTEMPTS: u32 = 3;
 const TWIN_RETRY: f64 = 600.0;
+const TWIN_LANGUAGES: [&str; 1] = ["VOSTFR"];
+const SEARCHES_PER_MINUTE: usize = 10;
+const SEARCHES_PER_HOUR: usize = 200;
 
 pub type Torrents = BTreeMap<String, Torrent>;
 
@@ -405,6 +408,18 @@ fn may_be_twin(release: &Release, candidate: &Release) -> bool {
         && candidate.seeders >= 1
 }
 
+pub fn searches_left(searches: &[f64], now: f64) -> usize {
+    let minute = searches.iter().filter(|at| now - **at < 60.0).count();
+    let hour = searches.iter().filter(|at| now - **at < 3600.0).count();
+    SEARCHES_PER_MINUTE
+        .saturating_sub(minute)
+        .min(SEARCHES_PER_HOUR.saturating_sub(hour))
+}
+
+fn twin_worth(release: &Release) -> bool {
+    language_of(&release.title).is_some_and(|language| TWIN_LANGUAGES.contains(&language))
+}
+
 pub fn twin_due(release: &Release, checked: Option<f64>, now: f64) -> bool {
     if release.age_hours > TWIN_MAX_AGE_HOURS || release.leechers < TWIN_MIN_LEECHERS {
         return false;
@@ -435,6 +450,7 @@ fn find_twin(
     release: &Release,
     now: f64,
     cache: &mut Cache,
+    searches: &mut Vec<f64>,
 ) -> Result<Option<Twin>, Fail> {
     let (Some(marker), Some(language)) = (marker_of(&release.title), language_of(&release.title))
     else {
@@ -444,6 +460,7 @@ fn find_twin(
         let query = format!("{marker} {language}");
         let key = format!("{indexer} {query}");
         if !cache.searches.contains_key(&key) {
+            searches.push(now);
             let found = prowlarr.search(indexer, &query, now)?;
             cache.searches.insert(key.clone(), found);
         }
@@ -519,12 +536,14 @@ pub fn grab_twins(
         .filter(|r| {
             !known.contains(&r.infohash)
                 && marker_of(&r.title).is_some()
+                && twin_worth(r)
                 && twin_due(r, state.checked.get(&r.infohash).copied(), now)
         })
         .collect();
     wanted.sort_by_key(|r| -r.leechers);
+    state.searches.retain(|at| now - at < 3600.0);
     for release in wanted {
-        if lookups == 0 {
+        if lookups == 0 || searches_left(&state.searches, now) < settings.twin_indexers.len() {
             return Ok(());
         }
         if release.size as f64 > budget.farm {
@@ -532,7 +551,15 @@ pub fn grab_twins(
         }
         lookups -= 1;
         state.checked.insert(release.infohash.clone(), now);
-        match find_twin(prowlarr, c411, settings, release, now, &mut cache) {
+        match find_twin(
+            prowlarr,
+            c411,
+            settings,
+            release,
+            now,
+            &mut cache,
+            &mut state.searches,
+        ) {
             Ok(Some(twin)) => {
                 let via = format!("its public twin {}", twin.release.title);
                 match take(qbt, budget, known, release, &twin.torrent, &via) {
@@ -1009,14 +1036,15 @@ mod tests {
     }
 
     #[test]
-    fn a_movie_or_a_season_pack_is_searched_by_its_year_or_season() {
+    fn a_vostfr_movie_or_season_pack_is_searched_by_its_year_or_season() {
         let qbt = FakeQbt::default();
         let prowlarr = FakeProwlarr::default();
         let c411 = FakeC411::default();
         let mut state = State::default();
         let releases = vec![
-            release("m", "Movie.2024.MULTi.1080p-Grp"),
+            release("m", "Movie.2024.VOSTFR.1080p-Grp"),
             release("s", "Show.S03.VOSTFR.1080p-Grp"),
+            release("x", "Other.S01E02.MULTi.1080p-Grp"),
         ];
         grab_twins(
             &qbt,
@@ -1032,7 +1060,40 @@ mod tests {
         .unwrap();
         let mut searched = prowlarr.searches.borrow().clone();
         searched.sort();
-        assert_eq!(vec!["1 2024 MULTI", "1 S03 VOSTFR"], searched);
+        assert_eq!(vec!["1 2024 VOSTFR", "1 S03 VOSTFR"], searched);
+        assert_eq!(vec![0.0, 0.0], state.searches);
+    }
+
+    #[test]
+    fn twin_searches_stop_at_ten_a_minute_and_two_hundred_an_hour() {
+        let qbt = FakeQbt::default();
+        let prowlarr = FakeProwlarr::default();
+        let c411 = FakeC411::default();
+        let releases: Vec<Release> = (0..20)
+            .map(|n| release(&format!("r{n}"), &format!("Show.S01E{n:02}.VOSTFR-Grp")))
+            .collect();
+        let mut state = State::default();
+        let run = |state: &mut State, now: f64| {
+            grab_twins(
+                &qbt,
+                &prowlarr,
+                &c411,
+                &settings(),
+                state,
+                &releases,
+                &mut BTreeSet::new(),
+                &mut Budget { farm: 1e12 },
+                now,
+            )
+            .unwrap();
+        };
+        run(&mut state, 0.0);
+        assert_eq!(10, prowlarr.searches.borrow().len());
+        run(&mut state, 30.0);
+        assert_eq!(10, prowlarr.searches.borrow().len());
+        state.searches = vec![1000.0; 195];
+        assert_eq!(5, searches_left(&state.searches, 1100.0));
+        assert_eq!(10, searches_left(&state.searches, 4700.0));
     }
 
     #[test]

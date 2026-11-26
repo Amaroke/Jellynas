@@ -40,6 +40,7 @@ pub struct State {
     pub twins: BTreeMap<String, Twin>,
     pub free: BTreeMap<String, f64>,
     pub checked: BTreeMap<String, f64>,
+    pub searches: Vec<f64>,
     pub paused: bool,
     pub origins: BTreeMap<String, (String, String)>,
     pub history: BTreeMap<String, Vec<(f64, i64, i64)>>,
