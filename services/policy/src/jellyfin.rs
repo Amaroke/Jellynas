@@ -1,5 +1,5 @@
 use crate::accounts::{Account, PRIVATE_ROOT, owner};
-use crate::api::{Api, encode, report, rules, settle};
+use crate::api::{Api, encode, merged, report, rules, settle};
 use jiff::{SignedDuration, Timestamp};
 use serde_json::{Map, Value, json};
 
@@ -150,6 +150,96 @@ fn shelve(api: &impl Api, accounts: &[Account]) -> Result<usize, String> {
     Ok(changed)
 }
 
+const TVDB: &str = "TheTVDB";
+const TMDB: &str = "TheMovieDb";
+const OMDB: &str = "The Open Movie Database";
+const FANART: &str = "Fanart";
+const EMBEDDED: &str = "Embedded Image Extractor";
+const GRABBER: &str = "Screen Grabber";
+
+fn fetchers(kind: &str) -> Option<(Vec<&'static str>, Vec<&'static str>)> {
+    match kind {
+        "Series" => Some((vec![TVDB, TMDB, OMDB], vec![TVDB, FANART, TMDB])),
+        "Season" => Some((vec![TVDB, TMDB], vec![TVDB, FANART, TMDB])),
+        "Episode" => Some((
+            vec![TVDB, TMDB, OMDB],
+            vec![TVDB, TMDB, OMDB, EMBEDDED, GRABBER],
+        )),
+        "Movie" => Some((
+            vec![TMDB, OMDB, TVDB],
+            vec![TMDB, FANART, TVDB, OMDB, EMBEDDED, GRABBER],
+        )),
+        _ => None,
+    }
+}
+
+fn kinds(collection: &str) -> &'static [&'static str] {
+    match collection {
+        "movies" => &["Movie"],
+        "tvshows" => &["Series", "Season", "Episode"],
+        "boxsets" | "music" | "books" | "photos" | "musicvideos" | "playlists" => &[],
+        _ => &["Series", "Season", "Episode", "Movie"],
+    }
+}
+
+pub fn type_options(current: &Value, collection: &str) -> Value {
+    let mut options: Vec<Value> = current.as_array().cloned().unwrap_or_default();
+    for kind in kinds(collection) {
+        let Some((metadata, images)) = fetchers(kind) else {
+            continue;
+        };
+        let wanted = json!({
+            "MetadataFetchers": metadata,
+            "MetadataFetcherOrder": metadata,
+            "ImageFetchers": images,
+            "ImageFetcherOrder": images,
+        });
+        match options
+            .iter_mut()
+            .find(|option| option["Type"] == json!(kind))
+        {
+            Some(option) => *option = merged(option, &rules(wanted)),
+            None => {
+                let mut option = rules(json!({"Type": kind, "ImageOptions": []}));
+                option.extend(rules(wanted));
+                options.push(Value::Object(option));
+            }
+        }
+    }
+    json!(options)
+}
+
+fn fetch(api: &impl Api, folders: &Value) -> Result<usize, String> {
+    let mut changed = 0;
+    for folder in folders.as_array().into_iter().flatten() {
+        let (Some(id), Some(name)) = (folder["ItemId"].as_str(), folder["Name"].as_str()) else {
+            continue;
+        };
+        let collection = folder["CollectionType"].as_str().unwrap_or("mixed");
+        let options = &folder["LibraryOptions"];
+        let wanted = type_options(&options["TypeOptions"], collection);
+        if options["TypeOptions"] == wanted {
+            continue;
+        }
+        let whole = merged(options, &rules(json!({"TypeOptions": wanted})));
+        api.send(
+            "POST",
+            "/Library/VirtualFolders/LibraryOptions",
+            &json!({"Id": id, "LibraryOptions": whole}),
+        )?;
+        api.send(
+            "POST",
+            &format!(
+                "/Items/{id}/Refresh?Recursive=true&MetadataRefreshMode=FullRefresh&ImageRefreshMode=FullRefresh&ReplaceAllMetadata=true&ReplaceAllImages=false"
+            ),
+            &Value::Null,
+        )?;
+        println!("Jellyfin libraries: set the metadata of {name} and refreshed it");
+        changed += 1;
+    }
+    Ok(changed)
+}
+
 pub fn server() -> Vec<(&'static str, &'static str, Map<String, Value>)> {
     vec![
         (
@@ -255,7 +345,9 @@ fn pass(api: &impl Api, now: Timestamp, accounts: &[Account]) -> Result<usize, S
         changed += report("Jellyfin", page, &[&changes]);
     }
     changed += shelve(api, accounts)?;
-    let shelves = Shelves::read(&api.get("/Library/VirtualFolders")?);
+    let folders = api.get("/Library/VirtualFolders")?;
+    changed += fetch(api, &folders)?;
+    let shelves = Shelves::read(&folders);
     let plugin = api.get(LDAP_PLUGIN)?;
     let defaults = settle(
         api,
@@ -299,7 +391,7 @@ mod tests {
     const VINCENT: &str = "vv";
 
     fn library(id: &str, name: &str, path: &str) -> Value {
-        json!({"ItemId": id, "Name": name, "Locations": [path]})
+        json!({"ItemId": id, "Name": name, "Locations": [path], "CollectionType": "mixed", "LibraryOptions": {"TypeOptions": type_options(&Value::Null, "mixed")}})
     }
 
     fn libraries() -> Value {
@@ -648,5 +740,50 @@ mod tests {
         assert_eq!(Ok(1), pass(&fake, now(), &[]));
         assert_eq!(vec![format!("POST {INJECTOR_PLUGIN}")], fake.paths());
         assert_eq!(json!([]), fake.body(0)["CustomJavaScripts"]);
+    }
+
+    #[test]
+    fn a_library_without_thetvdb_gets_it_and_is_refreshed() {
+        let mut pages = in_line();
+        pages.insert(
+            "/Library/VirtualFolders".into(),
+            json!([{"ItemId": MOVIES, "Name": "Séries", "Locations": ["/data/media/shows"], "CollectionType": "tvshows", "LibraryOptions": {"EnableRealtimeMonitor": true, "TypeOptions": [{"Type": "Series", "MetadataFetchers": [TMDB], "ImageOptions": [{"Type": "Primary"}]}]}}]),
+        );
+        pages.insert("/Users".into(), json!([]));
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), pass(&fake, now(), &[]));
+        assert_eq!(
+            vec![
+                "POST /Library/VirtualFolders/LibraryOptions",
+                "POST /Items/aa/Refresh?Recursive=true&MetadataRefreshMode=FullRefresh&ImageRefreshMode=FullRefresh&ReplaceAllMetadata=true&ReplaceAllImages=false",
+            ],
+            fake.paths()
+        );
+        let saved = fake.body(0);
+        assert_eq!(json!(MOVIES), saved["Id"]);
+        assert_eq!(
+            json!(true),
+            saved["LibraryOptions"]["EnableRealtimeMonitor"]
+        );
+        let options = saved["LibraryOptions"]["TypeOptions"].as_array().unwrap();
+        let types: Vec<&str> = options.iter().filter_map(|o| o["Type"].as_str()).collect();
+        assert_eq!(vec!["Series", "Season", "Episode"], types);
+        assert_eq!(
+            json!([TVDB, TMDB, OMDB]),
+            options[0]["MetadataFetcherOrder"]
+        );
+        assert_eq!(json!([{"Type": "Primary"}]), options[0]["ImageOptions"]);
+    }
+
+    #[test]
+    fn a_movies_library_keeps_themoviedb_first() {
+        let options = type_options(&Value::Null, "movies");
+        assert_eq!(json!([TMDB, OMDB, TVDB]), options[0]["MetadataFetchers"]);
+        assert_eq!(1, options.as_array().unwrap().len());
+    }
+
+    #[test]
+    fn the_collections_library_is_left_alone() {
+        assert_eq!(json!([]), type_options(&Value::Null, "boxsets"));
     }
 }

@@ -510,6 +510,16 @@ any other Private library. A Private library renamed in the Dashboard gets the
 display name back at the next pass. policy never deletes a folder, a library or
 a root folder, even when the Account leaves lldap.
 
+### Metadata of the libraries
+
+Sonarr names every show after TheTVDB, so policy turns on the TheTVDB plugin as
+a metadata and image source in every library but Collections. Shows, seasons and
+episodes read TheTVDB first, then TheMovieDb and The Open Movie Database. Movies
+keep TheMovieDb first, with TheTVDB after The Open Movie Database. When policy
+changes the sources of a library, it refreshes the metadata of that whole
+library, replacing it, and keeps the images already there. The plugin is
+installed by hand from the Catalog of the Dashboard.
+
 ### Friend Accounts
 
 Each Friend gets their own Account, so their watch history and progress are
