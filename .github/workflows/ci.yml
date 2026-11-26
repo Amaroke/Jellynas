@@ -43,6 +43,8 @@ jobs:
           cp .env.example .env
           docker compose config --quiet
           docker compose -f services/doco-cd/compose.yaml config --quiet
+          docker compose -f services/check/compose.yaml --env-file .env \
+            config --quiet
 
   images:
     name: Images

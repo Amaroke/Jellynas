@@ -42,8 +42,9 @@ guide is written so that an AI agent can follow it as well as a person.
 24. [Backup](#backup)
 25. [UPS](#ups)
 26. [Verify the NAS](#verify-the-nas)
-27. [On hold](#on-hold)
-28. [Contributing](#contributing)
+27. [Check the Automation stack](#check-the-automation-stack)
+28. [On hold](#on-hold)
+29. [Contributing](#contributing)
 
 ## Prerequisites
 
@@ -2680,6 +2681,33 @@ fails.
 The script ends with the public addresses to test yourself. Open each one on a
 phone on 4G with wifi off: it must load over HTTPS without a certificate
 warning.
+
+## Check the Automation stack
+
+Requires [Prowlarr](#prowlarr), [Radarr](#radarr) and [Sonarr](#sonarr).
+
+`scripts/check.sh` reports the state of Radarr, Sonarr or LazyLibrarian as one
+JSON report: health, queue, missing items, failed downloads, indexers, download
+client, free space and the warnings of the last 24 hours, with the state of
+Prowlarr, ratio, Gluetun and qBittorrent upstream. Each finding comes ranked
+high, medium or low, and a key written in clear in the logs is one of them.
+Run it from the Clone, on `main` without local changes:
+
+```sh
+sudo sh scripts/check.sh radarr
+```
+
+It builds `services/check`, a Rust tool that runs once in the internal zone and
+reads the API keys of `.env`, then feeds it the logs and container states it
+reads through Docker. `sudo sh scripts/check.sh api <app> <METHOD> <path>`
+sends one request to the API of Radarr, Sonarr, Prowlarr or LazyLibrarian with
+its key, and prints the reply with every key masked. doco-cd never deploys the
+tool: its compose file stays out of `compose.yaml`.
+
+The Claude Code skills `check-radarr`, `check-sonarr` and `check-lazylibrarian`
+run it over SSH, trace each finding to its cause and propose the fixes, applied
+one at a time once the Admin agrees. `docs/agents/nas-access.md` sets out the
+SSH access they need.
 
 ## On hold
 
