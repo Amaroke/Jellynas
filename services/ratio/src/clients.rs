@@ -7,7 +7,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 pub const C411_URL: &str = "https://c411.org";
-const TORZNAB: &str = "http://torznab.com/schemas/2015/feed";
 
 #[derive(Debug, PartialEq)]
 pub enum Fail {
@@ -54,12 +53,6 @@ pub struct Torrent {
     pub tags: String,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct TorrentFile {
-    pub name: String,
-    pub size: i64,
-}
-
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Release {
     pub infohash: String,
@@ -91,9 +84,6 @@ pub trait Qbt {
     fn torrents(&self) -> Result<Vec<Torrent>, String>;
     fn add(&self, torrent: &[u8], category: &str, save_path: Option<&str>) -> Result<(), String>;
     fn delete(&self, hashes: &[String], delete_files: bool) -> Result<(), String>;
-    fn files(&self, hash: &str) -> Result<Vec<TorrentFile>, String>;
-    fn rename_file(&self, hash: &str, old: &str, new: &str) -> Result<(), String>;
-    fn recheck(&self, hash: &str) -> Result<(), String>;
     fn start(&self, hashes: &[String]) -> Result<(), String>;
     fn set_category(&self, hashes: &[String], category: &str) -> Result<(), String>;
     fn categories(&self) -> Result<Vec<String>, String>;
@@ -107,12 +97,9 @@ pub trait Qbt {
     fn reset_share_limits(&self, hashes: &[String]) -> Result<(), String>;
     fn preferences(&self) -> Result<Value, String>;
     fn set_preferences(&self, preferences: &Value) -> Result<(), String>;
-    fn pause(&self, _seconds: u64) {}
 }
 
 pub trait Indexers {
-    fn search(&self, indexer: &str, query: &str, now: f64) -> Result<Vec<Release>, Fail>;
-    fn torrent(&self, release: &Release) -> Result<Vec<u8>, Fail>;
     fn hold(
         &self,
         indexer: &str,
@@ -127,38 +114,6 @@ pub trait Tracker {
     fn account(&self) -> Result<Account, Fail>;
     fn catalog(&self, now: f64) -> Result<Vec<Release>, Fail>;
     fn download(&self, infohash: &str) -> Result<Vec<u8>, Fail>;
-}
-
-pub fn match_files(qbt: &dyn Qbt, hash: &str, wanted: &[TorrentFile]) -> Result<(), String> {
-    let mut files = vec![];
-    for _ in 0..10 {
-        files = qbt.files(hash)?;
-        if !files.is_empty() {
-            break;
-        }
-        qbt.pause(1);
-    }
-    if files.is_empty() {
-        return Err("qBittorrent has not read the torrent file yet".into());
-    }
-    let mut names: Vec<(i64, Vec<String>)> = vec![];
-    for file in wanted {
-        match names.iter_mut().find(|(size, _)| *size == file.size) {
-            Some((_, list)) => list.push(file.name.clone()),
-            None => names.push((file.size, vec![file.name.clone()])),
-        }
-    }
-    for file in files {
-        let name = names
-            .iter_mut()
-            .find(|(size, list)| *size == file.size && !list.is_empty())
-            .map(|(_, list)| list.remove(0))
-            .ok_or_else(|| format!("no file of {} bytes in the public copy", file.size))?;
-        if file.name != name {
-            qbt.rename_file(hash, &file.name, &name)?;
-        }
-    }
-    qbt.recheck(hash)
 }
 
 pub struct QBittorrent {
@@ -307,27 +262,6 @@ impl Qbt for QBittorrent {
         .map(|_| ())
     }
 
-    fn files(&self, hash: &str) -> Result<Vec<TorrentFile>, String> {
-        self.json(&format!("/api/v2/torrents/files?hash={hash}"))
-    }
-
-    fn rename_file(&self, hash: &str, old: &str, new: &str) -> Result<(), String> {
-        self.post(
-            "/api/v2/torrents/renameFile",
-            &[
-                ("hash", hash.into()),
-                ("oldPath", old.into()),
-                ("newPath", new.into()),
-            ],
-        )
-        .map(|_| ())
-    }
-
-    fn recheck(&self, hash: &str) -> Result<(), String> {
-        self.post("/api/v2/torrents/recheck", &[("hashes", hash.into())])
-            .map(|_| ())
-    }
-
     fn start(&self, hashes: &[String]) -> Result<(), String> {
         self.post("/api/v2/torrents/start", &[("hashes", joined(hashes))])
             .map(|_| ())
@@ -421,10 +355,6 @@ impl Qbt for QBittorrent {
         )
         .map(|_| ())
     }
-
-    fn pause(&self, seconds: u64) {
-        thread::sleep(Duration::from_secs(seconds));
-    }
 }
 
 pub fn wait_of(header: Option<&str>) -> f64 {
@@ -508,31 +438,6 @@ impl Prowlarr {
 }
 
 impl Indexers for Prowlarr {
-    fn search(&self, indexer: &str, query: &str, now: f64) -> Result<Vec<Release>, Fail> {
-        let url = format!(
-            "{}/{indexer}/api?t=search&q={}&limit=100",
-            self.url,
-            http::encode(query)
-        );
-        parse_torznab(&self.open(&url, "GET", None, &[])?, now).map_err(Fail::Other)
-    }
-
-    fn torrent(&self, release: &Release) -> Result<Vec<u8>, Fail> {
-        let link = match nyaa_view(&release.page) {
-            Some(id) => format!("https://nyaa.si/download/{id}.torrent"),
-            None => release.link.clone(),
-        };
-        self.open(
-            &link,
-            "GET",
-            None,
-            &[(
-                "user-agent",
-                "Mozilla/5.0 (compatible; jellynas-ratio)".into(),
-            )],
-        )
-    }
-
     fn hold(
         &self,
         indexer: &str,
@@ -582,15 +487,6 @@ impl Indexers for Prowlarr {
         self.api(&format!("/indexer/{indexer}"), "PUT", Some(definition))?;
         Ok(Some(before))
     }
-}
-
-fn nyaa_view(page: &str) -> Option<&str> {
-    let start = page.find("nyaa.si/view/")? + "nyaa.si/view/".len();
-    let digits = &page[start..];
-    let end = digits
-        .find(|c: char| !c.is_ascii_digit())
-        .unwrap_or(digits.len());
-    (end > 0).then(|| &digits[..end])
 }
 
 pub struct C411 {
@@ -763,189 +659,9 @@ pub fn release_of(item: &Value, now: f64) -> Result<Release, String> {
     })
 }
 
-pub fn parse_torznab(xml: &[u8], now: f64) -> Result<Vec<Release>, String> {
-    let text = String::from_utf8_lossy(xml);
-    let document = roxmltree::Document::parse(&text).map_err(|error| error.to_string())?;
-    let mut releases = vec![];
-    for item in document
-        .descendants()
-        .filter(|node| node.has_tag_name("item"))
-    {
-        let child = |name: &str| {
-            item.children()
-                .find(|node| node.has_tag_name(name))
-                .and_then(|node| node.text())
-                .map(str::to_string)
-        };
-        let attr = |name: &str| {
-            item.children()
-                .find(|node| {
-                    node.tag_name().name() == "attr"
-                        && node.tag_name().namespace() == Some(TORZNAB)
-                        && node.attribute("name") == Some(name)
-                })
-                .and_then(|node| node.attribute("value"))
-                .map(str::to_string)
-        };
-        let Some(published) = child("pubDate")
-            .and_then(|date| jiff::fmt::rfc2822::parse(date.trim()).ok())
-            .map(|zoned| zoned.timestamp().as_millisecond() as f64 / 1000.0)
-        else {
-            continue;
-        };
-        let (Some(infohash), Some(link)) = (attr("infohash"), child("link")) else {
-            continue;
-        };
-        let count = |name: &str| attr(name).and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
-        let seeders = count("seeders");
-        releases.push(Release {
-            infohash: infohash.to_lowercase(),
-            title: child("title").unwrap_or_default(),
-            link,
-            page: child("comments")
-                .or_else(|| child("guid"))
-                .unwrap_or_default(),
-            size: child("size").and_then(|s| s.parse().ok()).unwrap_or(0),
-            seeders,
-            leechers: (count("peers") - seeders).max(0),
-            age_hours: (now - published) / 3600.0,
-            free: attr("downloadvolumefactor").as_deref() == Some("0"),
-        });
-    }
-    Ok(releases)
-}
-
-#[derive(Debug, PartialEq)]
-enum Bencode {
-    Int(i64),
-    Bytes(Vec<u8>),
-    List(Vec<Bencode>),
-    Dict(Vec<(Vec<u8>, Bencode)>),
-}
-
-fn bdecode(data: &[u8], start: usize) -> Result<(Bencode, usize), String> {
-    let broken = || "the torrent file is not valid bencode".to_string();
-    match data.get(start) {
-        Some(b'i') => {
-            let end = start
-                + data[start..]
-                    .iter()
-                    .position(|b| *b == b'e')
-                    .ok_or_else(broken)?;
-            let text = std::str::from_utf8(&data[start + 1..end]).map_err(|_| broken())?;
-            Ok((Bencode::Int(text.parse().map_err(|_| broken())?), end + 1))
-        }
-        Some(b'l') | Some(b'd') => {
-            let mut items = vec![];
-            let mut position = start + 1;
-            while data.get(position) != Some(&b'e') {
-                if position >= data.len() {
-                    return Err(broken());
-                }
-                let (item, next) = bdecode(data, position)?;
-                items.push(item);
-                position = next;
-            }
-            if data[start] == b'l' {
-                return Ok((Bencode::List(items), position + 1));
-            }
-            let mut pairs = vec![];
-            let mut items = items.into_iter();
-            while let (Some(Bencode::Bytes(key)), Some(value)) = (items.next(), items.next()) {
-                pairs.push((key, value));
-            }
-            Ok((Bencode::Dict(pairs), position + 1))
-        }
-        Some(_) => {
-            let colon = start
-                + data[start..]
-                    .iter()
-                    .position(|b| *b == b':')
-                    .ok_or_else(broken)?;
-            let length: usize = std::str::from_utf8(&data[start..colon])
-                .map_err(|_| broken())?
-                .parse()
-                .map_err(|_| broken())?;
-            let end = colon + 1 + length;
-            let bytes = data.get(colon + 1..end).ok_or_else(broken)?;
-            Ok((Bencode::Bytes(bytes.to_vec()), end))
-        }
-        None => Err(broken()),
-    }
-}
-
-fn field<'a>(value: &'a Bencode, name: &str) -> Option<&'a Bencode> {
-    match value {
-        Bencode::Dict(pairs) => pairs
-            .iter()
-            .find(|(key, _)| key == name.as_bytes())
-            .map(|(_, value)| value),
-        _ => None,
-    }
-}
-
-pub fn file_lengths(torrent: &[u8]) -> Result<Vec<i64>, String> {
-    let (root, _) = bdecode(torrent, 0)?;
-    let info = field(&root, "info").ok_or("the torrent file has no info")?;
-    let length = |value: &Bencode| match field(value, "length") {
-        Some(Bencode::Int(length)) => Ok(*length),
-        _ => Err("a file of the torrent has no length".to_string()),
-    };
-    let mut lengths = match field(info, "files") {
-        Some(Bencode::List(files)) => files.iter().map(length).collect::<Result<Vec<_>, _>>()?,
-        _ => vec![length(info)?],
-    };
-    lengths.sort();
-    Ok(lengths)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_multi_file_torrent_gives_its_sorted_lengths() {
-        let torrent =
-            b"d4:infod5:filesld6:lengthi30e4:pathl1:aeed6:lengthi10e4:pathl1:beee4:name1:xee";
-        assert_eq!(Ok(vec![10, 30]), file_lengths(torrent));
-    }
-
-    #[test]
-    fn a_single_file_torrent_gives_its_length() {
-        assert_eq!(
-            Ok(vec![42]),
-            file_lengths(b"d4:infod6:lengthi42e4:name1:xee")
-        );
-    }
-
-    #[test]
-    fn a_broken_torrent_is_refused() {
-        assert!(file_lengths(b"d4:infod6:length").is_err());
-    }
-
-    #[test]
-    fn torznab_items_become_releases() {
-        let xml = br#"<?xml version="1.0"?><rss xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel>
-            <item><title>Show S01E02 VOSTFR-Group</title><link>http://prowlarr:9696/1/download?x</link>
-            <comments>https://nyaa.si/view/123</comments><size>1000</size>
-            <pubDate>Sun, 22 Nov 2026 10:00:00 +0000</pubDate>
-            <torznab:attr name="infohash" value="ABC"/><torznab:attr name="seeders" value="4"/>
-            <torznab:attr name="peers" value="10"/><torznab:attr name="downloadvolumefactor" value="0"/></item>
-            <item><title>No hash</title><link>x</link><pubDate>Sun, 22 Nov 2026 10:00:00 +0000</pubDate></item>
-            </channel></rss>"#;
-        let now = "2026-11-22T12:00:00Z"
-            .parse::<jiff::Timestamp>()
-            .unwrap()
-            .as_second() as f64;
-        let releases = parse_torznab(xml, now).unwrap();
-        assert_eq!(1, releases.len());
-        let release = &releases[0];
-        assert_eq!("abc", release.infohash);
-        assert_eq!(6, release.leechers);
-        assert_eq!(2.0, release.age_hours);
-        assert!(release.free);
-        assert_eq!(Some("123"), nyaa_view(&release.page));
-    }
 
     #[test]
     fn a_c411_profile_becomes_an_account() {

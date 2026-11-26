@@ -1,7 +1,7 @@
-use crate::clients::{Fail, Indexers, Qbt, Release, Torrent, Tracker, file_lengths, match_files};
+use crate::clients::{Fail, Indexers, Qbt, Release, Torrent, Tracker};
 use crate::state::{GB, Settings, Snapshot, State};
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 
 pub const DAY: f64 = 86400.0;
 pub const WEEK: f64 = 7.0 * DAY;
@@ -30,12 +30,6 @@ const ADOPT_AFTER: i64 = 6 * 3600;
 const PUBLIC_SEEDING: i64 = 7 * 86400;
 const PUBLIC_SETTLE: i64 = 3600;
 pub const C411_CALLS: u32 = 30;
-const TWIN_LOOKUPS: u32 = 30;
-const TWIN_MAX_AGE_HOURS: f64 = 8.0;
-const TWIN_MIN_LEECHERS: i64 = 1;
-const TWIN_SIZE_SLACK: f64 = 0.05;
-const TWIN_ATTEMPTS: u32 = 3;
-const TWIN_RETRY: f64 = 600.0;
 
 pub type Torrents = BTreeMap<String, Torrent>;
 
@@ -125,16 +119,10 @@ pub fn prepare(qbt: &dyn Qbt, settings: &Settings) -> Result<(), String> {
 
 pub fn use_prowlarr(
     state: &mut State,
-    now: f64,
-    always: bool,
     step: impl FnOnce(&mut State) -> Result<(), Fail>,
 ) -> Result<(), Fail> {
-    if now < state.backoff_until && !always {
-        return Ok(());
-    }
     match step(state) {
         Err(Fail::Throttled { wait, disabled }) => {
-            state.backoff_until = now + wait;
             let why = if disabled {
                 "has disabled the indexer after failures"
             } else {
@@ -241,34 +229,10 @@ pub fn adopt(
     Ok(())
 }
 
-pub fn mind_twins(qbt: &dyn Qbt, state: &mut State, torrents: &Torrents) -> Result<(), String> {
-    for (twin, (original, ..)) in state.twins.clone() {
-        if !torrents.contains_key(&twin) {
-            state.twins.remove(&twin);
-            continue;
-        }
-        if let Some(copy) = torrents.get(&original)
-            && copy.progress >= 1.0
-            && copy.state.starts_with("stopped")
-        {
-            qbt.start(std::slice::from_ref(&original))?;
-            println!("{} now seeds on C411", copy.name);
-        }
-    }
-    Ok(())
-}
-
 fn shares_its_folder(t: &Torrent, torrents: &Torrents) -> bool {
     torrents
         .values()
         .any(|o| o.hash != t.hash && o.save_path == t.save_path && o.size == t.size)
-}
-
-fn waits_for_its_copy(state: &State, t: &Torrent, torrents: &Torrents) -> bool {
-    state
-        .twins
-        .get(&t.hash)
-        .is_some_and(|(original, ..)| !torrents.get(original).is_some_and(is_seeding))
 }
 
 pub fn clean_public(
@@ -280,7 +244,6 @@ pub fn clean_public(
     let done: Vec<(String, &'static str)> = torrents
         .values()
         .filter(|t| is_owned(t) && is_public(state, settings, t) && t.progress >= 1.0)
-        .filter(|t| !waits_for_its_copy(state, t, torrents))
         .filter_map(|t| {
             if t.uploaded >= t.size && t.size > 0 && t.seeding_time >= PUBLIC_SETTLE {
                 Some((t.hash.clone(), "reached ratio 1"))
@@ -338,143 +301,6 @@ pub fn tag(qbt: &dyn Qbt, torrents: &Torrents) -> Result<(), String> {
     Ok(())
 }
 
-fn squeeze(text: &str) -> String {
-    text.chars()
-        .filter(char::is_ascii_alphanumeric)
-        .collect::<String>()
-        .to_lowercase()
-}
-
-fn group_of(title: &str) -> String {
-    title
-        .rsplit_once('-')
-        .map(|(_, group)| squeeze(group))
-        .unwrap_or_default()
-}
-
-fn language_of(title: &str) -> Option<&'static str> {
-    let upper = title.to_uppercase();
-    ["VOSTFR", "MULTI", "FRENCH"]
-        .into_iter()
-        .find(|language| upper.contains(language))
-}
-
-fn two_digits(bytes: &[u8], at: usize) -> bool {
-    bytes.get(at).is_some_and(u8::is_ascii_digit)
-        && bytes.get(at + 1).is_some_and(u8::is_ascii_digit)
-}
-
-pub fn marker_of(title: &str) -> Option<String> {
-    let upper = title.to_uppercase();
-    let bytes = upper.as_bytes();
-    let mut season = None;
-    for at in 0..bytes.len() {
-        if bytes[at] != b'S' || !two_digits(bytes, at + 1) {
-            continue;
-        }
-        if bytes.get(at + 3) == Some(&b'E') && two_digits(bytes, at + 4) {
-            return Some(upper[at..at + 6].into());
-        }
-        let before = at == 0 || !bytes[at - 1].is_ascii_alphanumeric();
-        let after = !bytes.get(at + 3).is_some_and(u8::is_ascii_alphanumeric);
-        if season.is_none() && before && after {
-            season = Some(upper[at..at + 3].to_string());
-        }
-    }
-    if season.is_some() {
-        return season;
-    }
-    (0..bytes.len().saturating_sub(3))
-        .find(|&at| {
-            let before = at == 0 || !bytes[at - 1].is_ascii_digit();
-            let after = !bytes.get(at + 4).is_some_and(u8::is_ascii_digit);
-            before
-                && after
-                && (bytes[at..at + 2] == *b"19" || bytes[at..at + 2] == *b"20")
-                && two_digits(bytes, at + 2)
-        })
-        .map(|at| upper[at..at + 4].to_string())
-}
-
-fn may_be_twin(release: &Release, candidate: &Release) -> bool {
-    let group = group_of(&release.title);
-    !group.is_empty()
-        && squeeze(&candidate.title).contains(&group)
-        && marker_of(&candidate.title) == marker_of(&release.title)
-        && (candidate.size - release.size).abs() as f64 <= TWIN_SIZE_SLACK * release.size as f64
-        && candidate.seeders >= 1
-}
-
-pub fn twin_due(release: &Release, checked: Option<f64>, now: f64) -> bool {
-    if release.age_hours > TWIN_MAX_AGE_HOURS || release.leechers < TWIN_MIN_LEECHERS {
-        return false;
-    }
-    let every = if release.age_hours < 1.0 {
-        600.0
-    } else {
-        1800.0
-    };
-    checked.is_none_or(|at| now - at >= every)
-}
-
-#[derive(Default)]
-pub struct Cache {
-    searches: HashMap<String, Vec<Release>>,
-    files: HashMap<String, Vec<u8>>,
-}
-
-pub struct Twin {
-    pub release: Release,
-    pub torrent: Vec<u8>,
-}
-
-fn find_twin(
-    prowlarr: &dyn Indexers,
-    c411: &dyn Tracker,
-    settings: &Settings,
-    release: &Release,
-    now: f64,
-    cache: &mut Cache,
-) -> Result<Option<Twin>, Fail> {
-    let (Some(marker), Some(language)) = (marker_of(&release.title), language_of(&release.title))
-    else {
-        return Ok(None);
-    };
-    for indexer in &settings.twin_indexers {
-        let query = format!("{marker} {language}");
-        let key = format!("{indexer} {query}");
-        if !cache.searches.contains_key(&key) {
-            let found = prowlarr.search(indexer, &query, now)?;
-            cache.searches.insert(key.clone(), found);
-        }
-        let candidates: Vec<Release> = cache.searches[&key]
-            .iter()
-            .filter(|candidate| may_be_twin(release, candidate))
-            .cloned()
-            .collect();
-        for candidate in candidates {
-            let public_key = format!("public {}", candidate.infohash);
-            if !cache.files.contains_key(&public_key) {
-                let torrent = prowlarr.torrent(&candidate)?;
-                cache.files.insert(public_key.clone(), torrent);
-            }
-            let private_key = format!("c411 {}", release.infohash);
-            if !cache.files.contains_key(&private_key) {
-                let torrent = c411.download(&release.infohash)?;
-                cache.files.insert(private_key.clone(), torrent);
-            }
-            if file_lengths(&cache.files[&public_key])? == file_lengths(&cache.files[&private_key])?
-            {
-                return Ok(Some(Twin {
-                    torrent: cache.files[&public_key].clone(),
-                    release: candidate,
-                }));
-            }
-        }
-    }
-    Ok(None)
-}
-
 pub struct Budget {
     pub farm: f64,
 }
@@ -497,59 +323,6 @@ fn take(
         release.leechers,
         release.size as f64 / GB
     );
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn grab_twins(
-    qbt: &dyn Qbt,
-    prowlarr: &dyn Indexers,
-    c411: &dyn Tracker,
-    settings: &Settings,
-    state: &mut State,
-    releases: &[Release],
-    known: &mut BTreeSet<String>,
-    budget: &mut Budget,
-    now: f64,
-) -> Result<(), Fail> {
-    let mut cache = Cache::default();
-    let mut lookups = TWIN_LOOKUPS;
-    let mut wanted: Vec<&Release> = releases
-        .iter()
-        .filter(|r| {
-            !known.contains(&r.infohash)
-                && marker_of(&r.title).is_some()
-                && twin_due(r, state.checked.get(&r.infohash).copied(), now)
-        })
-        .collect();
-    wanted.sort_by_key(|r| -r.leechers);
-    for release in wanted {
-        if lookups == 0 {
-            return Ok(());
-        }
-        if release.size as f64 > budget.farm {
-            continue;
-        }
-        lookups -= 1;
-        state.checked.insert(release.infohash.clone(), now);
-        match find_twin(prowlarr, c411, settings, release, now, &mut cache) {
-            Ok(Some(twin)) => {
-                let via = format!("its public twin {}", twin.release.title);
-                match take(qbt, budget, known, release, &twin.torrent, &via) {
-                    Ok(()) => {
-                        state.twins.insert(
-                            twin.release.infohash.clone(),
-                            (release.infohash.clone(), FARM.into(), now, String::new()),
-                        );
-                    }
-                    Err(error) => println!("Cannot grab the twin of {}: {error}", release.title),
-                }
-            }
-            Ok(None) => {}
-            Err(stop @ (Fail::Throttled { .. } | Fail::OutOfCalls)) => return Err(stop),
-            Err(error) => println!("Cannot look for a twin of {}: {error}", release.title),
-        }
-    }
     Ok(())
 }
 
@@ -599,10 +372,8 @@ pub fn grab_free(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn grab(
     qbt: &dyn Qbt,
-    prowlarr: &dyn Indexers,
     c411: &dyn Tracker,
     settings: &Settings,
     switches: &Snapshot,
@@ -613,114 +384,35 @@ pub fn grab(
     let mut budget = Budget {
         farm: settings.farm_size - size_of(torrents, FARM),
     };
-    if budget.farm <= 0.0 || !(switches.on("twins") || switches.on("free")) {
+    if budget.farm <= 0.0 || !switches.on("free") {
         return Ok(());
     }
     let mut known: BTreeSet<String> = torrents.keys().cloned().collect();
-    known.extend(state.twins.values().map(|(original, ..)| original.clone()));
     known.extend(state.given_up.keys().cloned());
     let releases = c411.catalog(now)?;
-    if switches.on("twins") && !settings.twin_indexers.is_empty() {
-        use_prowlarr(state, now, false, |state| {
-            grab_twins(
-                qbt,
-                prowlarr,
-                c411,
-                settings,
-                state,
-                &releases,
-                &mut known,
-                &mut budget,
-                now,
-            )
-        })?;
-    }
-    if switches.on("free") {
-        grab_free(
-            qbt,
-            c411,
-            settings,
-            state,
-            &releases,
-            &mut known,
-            &mut budget,
-            now,
-        )?;
-    }
-    Ok(())
-}
-
-pub fn seed_twins(
-    qbt: &dyn Qbt,
-    c411: &dyn Tracker,
-    state: &mut State,
-    torrents: &Torrents,
-    now: f64,
-) -> Result<(), Fail> {
-    state.stuck.retain(|twin, _| state.twins.contains_key(twin));
-    for (twin, (original, ..)) in state.twins.clone() {
-        let Some(public) = torrents.get(&twin) else {
-            continue;
-        };
-        if torrents.contains_key(&original) || public.progress < 1.0 {
-            continue;
-        }
-        let (attempts, next_at) = state.stuck.get(&twin).copied().unwrap_or((0, 0.0));
-        if now < next_at {
-            continue;
-        }
-        let mut added = false;
-        let tried = c411.download(&original).and_then(|torrent| {
-            qbt.add(&torrent, FARM, Some(&public.save_path))?;
-            added = true;
-            match_files(qbt, &original, &qbt.files(&twin)?)?;
-            Ok(())
-        });
-        match tried {
-            Ok(()) => {
-                state.stuck.remove(&twin);
-                println!("The C411 copy of {} now checks the same files", public.name);
-            }
-            Err(Fail::OutOfCalls) => return Err(Fail::OutOfCalls),
-            Err(error) => {
-                let refused = matches!(error, Fail::Refused(_));
-                if refused || attempts + 1 >= TWIN_ATTEMPTS {
-                    if added {
-                        qbt.delete(std::slice::from_ref(&original), false)?;
-                    }
-                    state.twins.remove(&twin);
-                    state.stuck.remove(&twin);
-                    state.given_up.insert(original.clone(), now);
-                    println!(
-                        "Gave up the C411 copy of {}, its public copy seeds alone until it leaves: {error}",
-                        public.name
-                    );
-                    continue;
-                }
-                let wait = TWIN_RETRY * 2f64.powi(attempts as i32);
-                state.stuck.insert(twin.clone(), (attempts + 1, now + wait));
-                println!(
-                    "Cannot seed the C411 copy of {}, next try in {} minutes: {error}",
-                    public.name,
-                    wait / 60.0
-                );
-            }
-        }
-    }
-    Ok(())
+    grab_free(
+        qbt,
+        c411,
+        settings,
+        state,
+        &releases,
+        &mut known,
+        &mut budget,
+        now,
+    )
 }
 
 #[cfg(test)]
 pub mod fakes {
     use super::*;
-    use crate::clients::{Account, TorrentFile};
+    use crate::clients::Account;
     use std::cell::RefCell;
+    use std::collections::HashMap;
 
     #[derive(Default)]
     pub struct FakeQbt {
         pub torrents: RefCell<Vec<Torrent>>,
         pub calls: RefCell<Vec<String>>,
-        pub files: RefCell<HashMap<String, Vec<TorrentFile>>>,
         pub preferences: RefCell<Value>,
         pub tags: RefCell<Vec<String>>,
         pub refuse_add: bool,
@@ -758,15 +450,6 @@ pub mod fakes {
         }
         fn delete(&self, hashes: &[String], delete_files: bool) -> Result<(), String> {
             self.note(format!("delete {} {delete_files}", hashes.join("|")))
-        }
-        fn files(&self, hash: &str) -> Result<Vec<TorrentFile>, String> {
-            Ok(self.files.borrow().get(hash).cloned().unwrap_or_default())
-        }
-        fn rename_file(&self, hash: &str, old: &str, new: &str) -> Result<(), String> {
-            self.note(format!("rename {hash} {old} {new}"))
-        }
-        fn recheck(&self, hash: &str) -> Result<(), String> {
-            self.note(format!("recheck {hash}"))
         }
         fn start(&self, hashes: &[String]) -> Result<(), String> {
             self.note(format!("start {}", hashes.join("|")))
@@ -811,32 +494,11 @@ pub mod fakes {
 
     #[derive(Default)]
     pub struct FakeProwlarr {
-        pub results: Vec<Release>,
-        pub torrents: HashMap<String, Vec<u8>>,
-        pub searches: RefCell<Vec<String>>,
         pub throttle: bool,
         pub holds: RefCell<Vec<(String, bool, Option<i64>)>>,
     }
 
     impl Indexers for FakeProwlarr {
-        fn search(&self, indexer: &str, query: &str, _now: f64) -> Result<Vec<Release>, Fail> {
-            if self.throttle {
-                return Err(Fail::Throttled {
-                    wait: 120.0,
-                    disabled: false,
-                });
-            }
-            self.searches
-                .borrow_mut()
-                .push(format!("{indexer} {query}"));
-            Ok(self.results.clone())
-        }
-        fn torrent(&self, release: &Release) -> Result<Vec<u8>, Fail> {
-            self.torrents
-                .get(&release.infohash)
-                .cloned()
-                .ok_or(Fail::Other("no torrent".into()))
-        }
         fn hold(
             &self,
             indexer: &str,
@@ -844,6 +506,12 @@ pub mod fakes {
             _profile: &str,
             restore: Option<i64>,
         ) -> Result<Option<i64>, Fail> {
+            if self.throttle {
+                return Err(Fail::Throttled {
+                    wait: 120.0,
+                    disabled: false,
+                });
+            }
             self.holds
                 .borrow_mut()
                 .push((indexer.into(), paused, restore));
@@ -884,7 +552,6 @@ pub mod fakes {
         Settings {
             tracker: "c411".into(),
             hold_indexers: vec!["3".into()],
-            twin_indexers: vec!["1".into()],
             cross_seed_key: "key".into(),
             farm_size: 100.0 * GB,
             floor: 2.0,
@@ -923,6 +590,7 @@ pub mod fakes {
 mod tests {
     use super::fakes::*;
     use super::*;
+    use std::collections::HashMap;
 
     fn by_hash(list: Vec<Torrent>) -> Torrents {
         list.into_iter().map(|t| (t.hash.clone(), t)).collect()
@@ -935,161 +603,21 @@ mod tests {
         }
     }
 
-    const ONE_FILE: &[u8] = b"d4:infod6:lengthi1000e4:name1:xee";
-    const OTHER_FILE: &[u8] = b"d4:infod6:lengthi999e4:name1:xee";
-
     #[test]
-    fn the_marker_is_the_episode_then_the_season_then_the_year() {
-        assert_eq!(
-            Some("S01E02".into()),
-            marker_of("Show.s01e02.VOSTFR.1080p-Grp")
-        );
-        assert_eq!(Some("S02".into()), marker_of("Show S02 MULTi 1080p-Grp"));
-        assert_eq!(
-            Some("2023".into()),
-            marker_of("Movie.2023.FRENCH.1080p-Grp")
-        );
-        assert_eq!(None, marker_of("Show.MULTi.1080p-Grp"));
-        assert_eq!(None, marker_of("Movie.12023.1080p-Grp"));
-    }
-
-    #[test]
-    fn a_release_is_searched_every_ten_minutes_then_every_half_hour_until_eight_hours() {
-        let mut young = release("a", "x");
-        young.age_hours = 0.5;
-        assert!(twin_due(&young, None, 1000.0));
-        assert!(!twin_due(&young, Some(500.0), 1000.0));
-        assert!(twin_due(&young, Some(400.0), 1000.0));
-        let mut older = release("a", "x");
-        older.age_hours = 3.0;
-        assert!(!twin_due(&older, Some(0.0), 1000.0));
-        assert!(twin_due(&older, Some(0.0), 1800.0));
-        older.age_hours = 8.5;
-        assert!(!twin_due(&older, None, 1000.0));
-        older.age_hours = 2.0;
-        older.leechers = 0;
-        assert!(!twin_due(&older, None, 1000.0));
-    }
-
-    #[test]
-    fn a_twin_with_the_same_files_is_grabbed_from_the_public_tracker() {
-        let qbt = FakeQbt::default();
-        let mut public = release("pub", "[Grp] Show S01E02 VOSTFR 1080p-Grp");
-        public.size = 1010;
-        let prowlarr = FakeProwlarr {
-            results: vec![public],
-            torrents: HashMap::from([("pub".to_string(), ONE_FILE.to_vec())]),
-            ..FakeProwlarr::default()
-        };
-        let c411 = FakeC411 {
-            torrents: HashMap::from([("c".to_string(), ONE_FILE.to_vec())]),
-            ..FakeC411::default()
-        };
-        let mut state = State::default();
-        let releases = vec![release("c", "Show.S01E02.VOSTFR.1080p-Grp")];
-        let mut known = BTreeSet::new();
-        let mut budget = Budget { farm: 1e12 };
-        grab_twins(
-            &qbt,
-            &prowlarr,
-            &c411,
-            &settings(),
-            &mut state,
-            &releases,
-            &mut known,
-            &mut budget,
-            100.0,
-        )
-        .unwrap();
-        assert_eq!(vec!["1 S01E02 VOSTFR"], *prowlarr.searches.borrow());
-        assert_eq!(1, qbt.calls().len());
-        assert!(qbt.calls()[0].starts_with("add d4:info"));
-        assert_eq!("c", state.twins["pub"].0);
-        assert_eq!(Some(&100.0), state.checked.get("c"));
-    }
-
-    #[test]
-    fn a_movie_or_a_season_pack_is_searched_by_its_year_or_season() {
-        let qbt = FakeQbt::default();
-        let prowlarr = FakeProwlarr::default();
-        let c411 = FakeC411::default();
-        let mut state = State::default();
-        let releases = vec![
-            release("m", "Movie.2024.MULTi.1080p-Grp"),
-            release("s", "Show.S03.VOSTFR.1080p-Grp"),
-        ];
-        grab_twins(
-            &qbt,
-            &prowlarr,
-            &c411,
-            &settings(),
-            &mut state,
-            &releases,
-            &mut BTreeSet::new(),
-            &mut Budget { farm: 1e12 },
-            0.0,
-        )
-        .unwrap();
-        let mut searched = prowlarr.searches.borrow().clone();
-        searched.sort();
-        assert_eq!(vec!["1 2024 MULTI", "1 S03 VOSTFR"], searched);
-    }
-
-    #[test]
-    fn a_twin_whose_files_differ_is_left_alone() {
-        let qbt = FakeQbt::default();
-        let prowlarr = FakeProwlarr {
-            results: vec![release("pub", "Show S01E02 VOSTFR-Grp")],
-            torrents: HashMap::from([("pub".to_string(), OTHER_FILE.to_vec())]),
-            ..FakeProwlarr::default()
-        };
-        let c411 = FakeC411 {
-            torrents: HashMap::from([("c".to_string(), ONE_FILE.to_vec())]),
-            ..FakeC411::default()
-        };
-        let mut state = State::default();
-        let releases = vec![release("c", "Show.S01E02.VOSTFR-Grp")];
-        grab_twins(
-            &qbt,
-            &prowlarr,
-            &c411,
-            &settings(),
-            &mut state,
-            &releases,
-            &mut BTreeSet::new(),
-            &mut Budget { farm: 1e12 },
-            0.0,
-        )
-        .unwrap();
-        assert!(qbt.calls().is_empty());
-        assert!(state.twins.is_empty());
-    }
-
-    #[test]
-    fn a_throttled_prowlarr_backs_off() {
-        let qbt = FakeQbt::default();
+    fn a_throttled_prowlarr_is_left_alone() {
         let prowlarr = FakeProwlarr {
             throttle: true,
             ..FakeProwlarr::default()
         };
-        let c411 = FakeC411 {
-            catalog: vec![release("c", "Show.S01E02.VOSTFR-Grp")],
-            ..FakeC411::default()
+        let mut state = State {
+            paused: true,
+            ..State::default()
         };
-        let mut state = State::default();
-        let torrents = Torrents::new();
-        grab(
-            &qbt,
-            &prowlarr,
-            &c411,
-            &settings(),
-            &snapshot(&["twins"]),
-            &mut state,
-            &torrents,
-            50.0,
-        )
+        use_prowlarr(&mut state, |state| {
+            hold_c411(&prowlarr, &settings(), state, true)
+        })
         .unwrap();
-        assert_eq!(170.0, state.backoff_until);
+        assert!(prowlarr.holds.borrow().is_empty());
     }
 
     #[test]
@@ -1108,7 +636,6 @@ mod tests {
         let mut state = State::default();
         grab(
             &qbt,
-            &FakeProwlarr::default(),
             &c411,
             &settings(),
             &snapshot(&["free"]),
@@ -1134,7 +661,6 @@ mod tests {
         };
         grab(
             &qbt,
-            &FakeProwlarr::default(),
             &c411,
             &settings(),
             &snapshot(&["free"]),
@@ -1168,21 +694,14 @@ mod tests {
     }
 
     #[test]
-    fn a_public_torrent_at_ratio_one_waits_for_its_import_and_its_c411_copy() {
+    fn a_public_torrent_at_ratio_one_waits_for_its_import() {
         let qbt = FakeQbt::default();
         let mut fresh = torrent("fresh", "shows");
         fresh.uploaded = fresh.size * 2;
         fresh.seeding_time = 60;
         fresh.save_path = "/data/torrents/shows/fresh".into();
-        let mut twin = torrent("twin", FARM);
-        twin.uploaded = twin.size * 2;
-        twin.seeding_time = 7200;
-        twin.save_path = "/data/torrents/farm/twin".into();
-        let mut state = State::default();
-        state
-            .twins
-            .insert("twin".into(), ("c".into(), FARM.into(), 0.0, String::new()));
-        let mut torrents = by_hash(vec![fresh, twin]);
+        let state = State::default();
+        let mut torrents = by_hash(vec![fresh]);
         clean_public(&qbt, &settings(), &state, &mut torrents).unwrap();
         assert!(qbt.calls().is_empty());
     }
@@ -1199,103 +718,6 @@ mod tests {
         let mut torrents = by_hash(vec![private, c411]);
         clean_public(&qbt, &settings(), &State::default(), &mut torrents).unwrap();
         assert!(qbt.calls().is_empty());
-    }
-
-    #[test]
-    fn the_c411_copy_of_a_finished_twin_is_added_on_its_files_at_once() {
-        let qbt = FakeQbt::default();
-        qbt.files.borrow_mut().insert(
-            "pub".into(),
-            vec![crate::clients::TorrentFile {
-                name: "nyaa.mkv".into(),
-                size: 1000,
-            }],
-        );
-        qbt.files.borrow_mut().insert(
-            "c".into(),
-            vec![crate::clients::TorrentFile {
-                name: "c411.mkv".into(),
-                size: 1000,
-            }],
-        );
-        let c411 = FakeC411 {
-            torrents: HashMap::from([("c".to_string(), b"t".to_vec())]),
-            ..FakeC411::default()
-        };
-        let mut state = State::default();
-        state
-            .twins
-            .insert("pub".into(), ("c".into(), FARM.into(), 0.0, String::new()));
-        let mut public = torrent("pub", FARM);
-        public.save_path = "/data/torrents/farm".into();
-        seed_twins(&qbt, &c411, &mut state, &by_hash(vec![public]), 60.0).unwrap();
-        assert_eq!(
-            vec![
-                "add t farm /data/torrents/farm",
-                "rename c c411.mkv nyaa.mkv",
-                "recheck c"
-            ],
-            qbt.calls()
-        );
-    }
-
-    #[test]
-    fn the_c411_copy_is_retried_twice_then_given_up() {
-        let qbt = FakeQbt::default();
-        let c411 = FakeC411::default();
-        let mut state = State::default();
-        state
-            .twins
-            .insert("pub".into(), ("c".into(), FARM.into(), 0.0, String::new()));
-        let torrents = by_hash(vec![torrent("pub", FARM)]);
-        seed_twins(&qbt, &c411, &mut state, &torrents, 0.0).unwrap();
-        assert_eq!((1, 600.0), state.stuck["pub"]);
-        seed_twins(&qbt, &c411, &mut state, &torrents, 100.0).unwrap();
-        assert_eq!(1, c411.downloads.borrow().len());
-        seed_twins(&qbt, &c411, &mut state, &torrents, 600.0).unwrap();
-        assert_eq!((2, 1800.0), state.stuck["pub"]);
-        seed_twins(&qbt, &c411, &mut state, &torrents, 1800.0).unwrap();
-        assert!(state.twins.is_empty());
-        assert!(state.given_up.contains_key("c"));
-    }
-
-    #[test]
-    fn a_refused_c411_copy_is_given_up_at_once() {
-        let qbt = FakeQbt::default();
-        let c411 = FakeC411 {
-            refuse: true,
-            ..FakeC411::default()
-        };
-        let mut state = State::default();
-        state
-            .twins
-            .insert("pub".into(), ("c".into(), FARM.into(), 0.0, String::new()));
-        seed_twins(
-            &qbt,
-            &c411,
-            &mut state,
-            &by_hash(vec![torrent("pub", FARM)]),
-            0.0,
-        )
-        .unwrap();
-        assert!(state.twins.is_empty());
-    }
-
-    #[test]
-    fn a_checked_c411_copy_starts_and_a_gone_twin_is_forgotten() {
-        let qbt = FakeQbt::default();
-        let mut state = State::default();
-        state
-            .twins
-            .insert("pub".into(), ("c".into(), FARM.into(), 0.0, String::new()));
-        state
-            .twins
-            .insert("gone".into(), ("d".into(), FARM.into(), 0.0, String::new()));
-        let mut copy = torrent("c", FARM);
-        copy.state = "stoppedUP".into();
-        mind_twins(&qbt, &mut state, &by_hash(vec![torrent("pub", FARM), copy])).unwrap();
-        assert_eq!(vec!["start c"], qbt.calls());
-        assert!(!state.twins.contains_key("gone"));
     }
 
     #[test]

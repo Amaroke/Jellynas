@@ -2033,12 +2033,12 @@ and [Sonarr](#sonarr).
 The Admin keeps a good ratio on C411, a French private tracker, with torrents
 grabbed only to seed, without touching the Library. The Account ratio comes
 first: the Farm spends download only over the Ratio floor, and leans on what
-costs nothing on C411, cross-seeds, Twins and freeleech. The Zen comes on its
+costs nothing on C411, cross-seeds and freeleech. The Zen comes on its
 own with the rest:
 
 - ratio, `services/ratio`, runs the Farm through the API of C411. It grabs
-  Twins and freeleech releases, each behind its switch, and never spends a paid
-  download for the Farm.
+  freeleech releases behind their switch, and never spends a paid download for
+  the Farm.
 - The Dashboard draws the board of the Farm with its switches, and posts it to
   Discord, see [Farm board](#farm-board).
 - cross-seed finds the torrents of qBittorrent on C411 and seeds them there too,
@@ -2058,8 +2058,8 @@ folder at all, cross-seed sees only the torrents tree.
   torrent of the Farm.
 - Ratio faking tools, which report uploads that never happened, get accounts
   banned and are detected by every private tracker. Never use one.
-- Read the rules page of each tracker before enabling autobrr, cross-seed or
-  Twins on it. Some forbid automated grabbing, or cross-seeding from a public
+- Read the rules page of each tracker before enabling autobrr or cross-seed on
+  it. Some forbid automated grabbing, or cross-seeding from a public
   tracker, or limit how many torrents you may download at once.
 
 ### qBittorrent login for ratio
@@ -2070,11 +2070,11 @@ login. cross-seed and ratio use it. ratio creates the `movies`, `shows`,
 its global share limits and its torrent queueing, so every torrent of the Farm
 seeds.
 
-### Public tracker for Twins
+### Public tracker
 
 A download on a public tracker costs nothing on C411, so Radarr and Sonarr
-prefer it, and ratio looks there for Twins. Nyaa, a public anime tracker, is the
-one used here, since French anime groups post there and on C411 alike.
+prefer it. Nyaa, a public anime tracker, is the one used here, since French
+anime groups post there and on C411 alike.
 
 1. In Prowlarr, Indexers, click "Add Indexer", pick Nyaa.si, set "Indexer
    Priority" to `1`, the highest, leave the tags empty, click "Test", then
@@ -2083,8 +2083,6 @@ one used here, since French anime groups post there and on C411 alike.
    `25`. At equal quality and score, Radarr and Sonarr then take Nyaa. A better
    release on C411 still wins, as the profiles of [Recyclarr](#recyclarr) rank
    them.
-3. Note the id of Nyaa, the number in its Torznab URL
-   `http://prowlarr:9696/<id>/api`, for `RATIO_TWIN_INDEXER_IDS`.
 
 Prowlarr syncs Nyaa to Radarr and Sonarr like any indexer. It returns almost
 only anime, so it costs nothing to search it for the other works.
@@ -2144,8 +2142,8 @@ Every switch and setting below lives in the Farm section of the Dashboard.
    indexer of `RATIO_HOLD_INDEXER_IDS` onto a sync profile named Paused, which
    it creates with RSS, automatic and interactive search off. Prowlarr pushes it
    to Radarr and Sonarr, whose sync level must stay Full Sync, so they stop
-   downloading from C411. Every torrent keeps seeding, and Twins and freeleech
-   go on. Once the Account ratio is back over the floor, ratio puts C411 back on
+   downloading from C411. Every torrent keeps seeding, and freeleech goes
+   on. Once the Account ratio is back over the floor, ratio puts C411 back on
    its former profile.
 3. **Counts.** It keeps the Ledger in `${APPDATA_ROOT}/ratio/state.json`, which
    counts every torrent under its Origin, with its tracker, c411, nyaa or
@@ -2155,25 +2153,19 @@ Every switch and setting below lives in the Farm section of the Dashboard.
    wiped.
 4. **Grabs, only into the Farm.** While the Farm holds less than its budget,
    100 GB by default, it reads the newest releases of C411 and grabs, each
-   behind its switch, Twins and freeleech releases up to the freeleech max size,
-   5 GB by default, the most leechers first. Nothing limits how many download at
-   once. Every grab switch starts off, so a new NAS grabs nothing for the Farm
+   behind its switch, freeleech releases up to the freeleech max size, 5 GB by
+   default, the most leechers first. Nothing limits how many download at once.
+   The grab switch starts off, so a new NAS grabs nothing for the Farm
    until the Admin turns one on in the Dashboard. cross-seed still adds the C411
    copy of what qBittorrent already holds, without downloading it.
 5. **Never removes a torrent of the Farm** that seeds on C411. Once the Farm
    holds its budget, ratio grabs nothing more.
-6. **Seeds the Twins on C411.** As soon as the Nyaa copy of a Twin finishes,
-   ratio downloads the C411 copy with `C411_TORZNAB_API_KEY`, adds it stopped in
-   the folder of the Nyaa copy, gives its files the Nyaa names, checks it and
-   starts it once complete. When that fails, it tries again 10 minutes later,
-   then twice longer, and gives up after the third failure, or at once when
-   C411 refuses the torrent file.
-7. **Cleans the public torrents.** While its switch is on, a public torrent of
+6. **Cleans the public torrents.** While its switch is on, a public torrent of
    one of the five categories leaves after 7 days of seeding, or once it
    uploaded its own size, at least one hour after it finished so Radarr and
-   Sonarr can import it, whether a C411 copy exists or not. The Nyaa copy of a
-   Twin stays until its C411 copy seeds, and its files stay with that copy.
-8. **Files every torrent.** qBittorrent holds five categories: `movies`,
+   Sonarr can import it, whether a C411 copy exists or not. Its files stay
+   while a C411 copy seeds them.
+7. **Files every torrent.** qBittorrent holds five categories: `movies`,
    `shows` and `books` for Radarr, Sonarr and LazyLibrarian, `music`,
    which nothing uses since Aurral downloads from Soulseek, and `farm` for the
    grabs of ratio and the cross-seeds. The Library stays in its categories. The
@@ -2184,18 +2176,8 @@ Every switch and setting below lives in the Farm section of the Dashboard.
    and `farm` for the rest of the Farm. It removes every other tag, and deletes
    it from qBittorrent.
 
-The Twins come from `RATIO_TWIN_INDEXER_IDS`, through Prowlarr. A Twin is the
-same release on a public tracker, so its download costs nothing on C411, then
-its C411 copy seeds the same files. For each release of C411 at most 8 hours old
-with at least one leecher, an episode, a season pack or a movie, ratio searches
-its episode, season or year with its language, for example `S03E06 VOSTFR`, and
-keeps a result of the same release group whose size is within 5 %, since Nyaa
-rounds its sizes. It then downloads both torrent files and compares the length
-of every file. A release is checked every 10 minutes during its first hour,
-then every 30 minutes until it is 8 hours old, up to 30 lookups per run.
 Prowlarr answers 429 when it is queried too often, and ratio then leaves it
-alone for as long as it asks, an hour when it does not say. Holding or releasing
-C411 at the floor still goes through meanwhile.
+alone for as long as it asks, an hour when it does not say.
 
 Each Zen is worth 1 GB of upload in the shop of C411, a purchase only the Admin
 makes.
@@ -2205,8 +2187,8 @@ To use it:
 1. On C411, in the Integrations page of the account, create one API key with the
    scope `profile:read` and another with the scope `torznab:read`.
 2. In `.env`, set `C411_PROFILE_API_KEY` and `C411_TORZNAB_API_KEY` to them,
-   `RATIO_HOLD_INDEXER_IDS` to the id of C411 in Prowlarr and
-   `RATIO_TWIN_INDEXER_IDS` to the id of Nyaa, then restart doco-cd. Its logs
+   `RATIO_HOLD_INDEXER_IDS` to the id of C411 in Prowlarr, then restart
+   doco-cd. Its logs
    name each grab, move and removal:
 
    ```sh

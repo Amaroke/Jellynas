@@ -31,15 +31,11 @@ pub struct Report {
     pub origins: Vec<Value>,
 }
 
-pub type Twin = (String, String, f64, String);
-
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub struct State {
     pub transfers: BTreeMap<String, (i64, i64)>,
-    pub twins: BTreeMap<String, Twin>,
     pub free: BTreeMap<String, f64>,
-    pub checked: BTreeMap<String, f64>,
     pub paused: bool,
     pub origins: BTreeMap<String, (String, String)>,
     pub history: BTreeMap<String, Vec<(f64, i64, i64)>>,
@@ -49,8 +45,6 @@ pub struct State {
     pub received: Vec<(f64, f64)>,
     pub sent: Vec<(f64, f64)>,
     pub held: Option<bool>,
-    pub backoff_until: f64,
-    pub stuck: BTreeMap<String, (u32, f64)>,
     pub given_up: BTreeMap<String, f64>,
     pub restore: BTreeMap<String, i64>,
     pub daily: Vec<Day>,
@@ -81,9 +75,8 @@ pub struct Number {
     pub high: f64,
 }
 
-pub const SWITCHES: [(&str, bool); 5] = [
+pub const SWITCHES: [(&str, bool); 4] = [
     ("free", false),
-    ("twins", false),
     ("clean_public", true),
     ("hold", true),
     ("adopt", false),
@@ -114,7 +107,6 @@ pub const NUMBERS: [Number; 3] = [
 pub struct Settings {
     pub tracker: String,
     pub hold_indexers: Vec<String>,
-    pub twin_indexers: Vec<String>,
     pub cross_seed_key: String,
     pub farm_size: f64,
     pub floor: f64,
@@ -276,7 +268,6 @@ mod tests {
         Settings {
             tracker: "c411".into(),
             hold_indexers: vec![],
-            twin_indexers: vec![],
             cross_seed_key: String::new(),
             farm_size: 100.0 * GB,
             floor: 2.0,
@@ -299,7 +290,6 @@ mod tests {
         .unwrap();
         let state = load_state(&path).unwrap();
         assert_eq!((10, 20), state.transfers["a"]);
-        assert_eq!("c", state.twins["n"].0);
         assert_eq!(Some(1.4), state.daily[0].ratio);
         assert_eq!(1, state.restore["3"]);
     }
@@ -327,19 +317,20 @@ mod tests {
         let path = folder.path().join("controls.json");
         fs::write(
             &path,
-            r#"{"switches": {"twins": true, "paid": true, "volume:gps": false, "quantity_seed": false}, "numbers": {"floor": 1.0, "daily_gb": 5}}"#,
+            r#"{"switches": {"free": true, "twins": true, "paid": true, "volume:gps": false, "quantity_seed": false}, "numbers": {"floor": 1.0, "daily_gb": 5}}"#,
         )
         .unwrap();
         let controls = Controls::load(&path);
         let snapshot = controls.snapshot(&settings());
-        assert!(snapshot.on("twins"));
+        assert!(snapshot.on("free"));
+        assert!(!snapshot.switches.contains_key("twins"));
         assert!(!snapshot.switches.contains_key("paid"));
         assert_eq!(1.0, snapshot.numbers["floor"]);
         assert_eq!(100.0, snapshot.numbers["farm_size_gb"]);
         assert_eq!(5.0, snapshot.numbers["free_max_gb"]);
         let saved: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert_eq!(
-            json!({"switches": {"twins": true}, "numbers": {"floor": 1.0}}),
+            json!({"switches": {"free": true}, "numbers": {"floor": 1.0}}),
             saved
         );
     }

@@ -62,7 +62,6 @@ fn settings_from_env() -> Settings {
             tracker
         },
         hold_indexers: ids("RATIO_HOLD_INDEXER_IDS"),
-        twin_indexers: ids("RATIO_TWIN_INDEXER_IDS"),
         cross_seed_key: read("CROSS_SEED_API_KEY"),
         farm_size: positive("RATIO_MAX_SIZE_GB", 100.0) * GB,
         floor: positive("RATIO_FLOOR", 2.0),
@@ -118,7 +117,7 @@ fn run_once(
     ledger::record(qbt, state, &torrents, &settings, now);
     ledger::report(state, now);
     let hold = state.paused && controls.on("hold");
-    if let Err(error) = farm::use_prowlarr(state, now, true, |state| {
+    if let Err(error) = farm::use_prowlarr(state, |state| {
         farm::hold_c411(prowlarr, &settings, state, hold)
     }) {
         println!("Cannot reach Prowlarr: {error}");
@@ -126,20 +125,13 @@ fn run_once(
     if controls.on("adopt") {
         farm::adopt(qbt, &settings, state, &mut torrents)?;
     }
-    farm::mind_twins(qbt, state, &torrents)?;
     if controls.on("clean_public") {
         farm::clean_public(qbt, &settings, state, &mut torrents)?;
     }
     farm::tag(qbt, &torrents)?;
-    let seeded = farm::use_prowlarr(state, now, false, |state| {
-        farm::seed_twins(qbt, c411, state, &torrents, now)
-    });
-    if spent(seeded) {
-        let grabbed = farm::grab(
-            qbt, prowlarr, c411, &settings, controls, state, &torrents, now,
-        );
-        spent(grabbed);
-    }
+    spent(farm::grab(
+        qbt, c411, &settings, controls, state, &torrents, now,
+    ));
     let torrents = listed(qbt)?;
     let seeds = ledger::seeded_on_c411(state, &settings, &torrents);
     ledger::record_day(state, &settings, seeds, account.as_ref(), now);
