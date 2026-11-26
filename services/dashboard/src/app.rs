@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::watch;
 
 fn now() -> u64 {
@@ -38,7 +38,9 @@ fn latest_deploy(containers: &Value) -> u64 {
 
 pub type Snapshot = Arc<Vec<Service>>;
 
-const POLL: Duration = Duration::from_secs(20);
+const POLL: Duration = Duration::from_secs(2);
+const FEEDS: Duration = Duration::from_secs(120);
+const SAMPLE: Duration = Duration::from_secs(20);
 const POINTS: usize = 90;
 const ARCHIVES: &str = "/backup";
 
@@ -91,6 +93,7 @@ pub struct App {
     answers: AtomicU64,
     samples: Mutex<HashMap<String, (String, Sample)>>,
     history: Mutex<History>,
+    recorded: Mutex<Option<Instant>>,
 }
 
 impl App {
@@ -115,6 +118,7 @@ impl App {
             answers: AtomicU64::new(0),
             samples: Mutex::new(HashMap::new()),
             history: Mutex::new(History::default()),
+            recorded: Mutex::new(None),
         }
     }
 
@@ -127,6 +131,40 @@ impl App {
             } else {
                 POLL
             });
+        }
+    }
+
+    pub fn poll_feeds(&self) {
+        loop {
+            let changes = self.farm_changes.load(Ordering::SeqCst);
+            let (farm, pulls) = thread::scope(|scope| {
+                let farm = scope.spawn(|| self.feed("RATIO", "/board", "the Farm"));
+                let pulls =
+                    scope.spawn(|| self.feed("PR_RADAR", "/pulls.json", "the Pull requests"));
+                let failed = || Err("the reading crashed".to_string());
+                (
+                    farm.join().unwrap_or_else(|_| failed()),
+                    pulls.join().unwrap_or_else(|_| failed()),
+                )
+            });
+            let now = now();
+            let mut crossed = false;
+            self.board.send_modify(|board| {
+                let mut changed = (**board).clone();
+                if self.farm_changes.load(Ordering::SeqCst) == changes {
+                    let tier_before = Self::farm_tier(changed.farm.as_ref());
+                    changed.farm = Some(widgets::settle(changed.farm.as_ref(), farm, now));
+                    crossed =
+                        farm_post::crossed(tier_before, Self::farm_tier(changed.farm.as_ref()));
+                }
+                changed.pulls = Some(widgets::settle(changed.pulls.as_ref(), pulls, now));
+                *board = Arc::new(changed);
+            });
+            if crossed {
+                println!("The Account ratio crossed a tier, the Farm board goes to Discord");
+                self.wake_farm();
+            }
+            thread::sleep(FEEDS);
         }
     }
 
@@ -159,7 +197,6 @@ impl App {
     fn collect(&self) {
         let services = self.snapshot.borrow().clone();
         let previous = self.board.borrow().clone();
-        let changes = self.farm_changes.load(Ordering::SeqCst);
         let answered = self.answers.load(Ordering::SeqCst);
         let now = now();
         let watched = services.iter().filter(|service| {
@@ -172,7 +209,7 @@ impl App {
                 .join()
                 .unwrap_or_else(|_| Err("the reading crashed".to_string()))
         }
-        let (host, readings, farm, pulls, usage, uptime) = thread::scope(|scope| {
+        let (host, readings, usage, uptime) = thread::scope(|scope| {
             let uptime = scope.spawn(|| self.client.uptime());
             let measured: Vec<_> = services
                 .iter()
@@ -196,8 +233,6 @@ impl App {
                 })
                 .collect();
             let host = scope.spawn(|| self.client.host());
-            let farm = scope.spawn(|| self.feed("RATIO", "/board", "the Farm"));
-            let pulls = scope.spawn(|| self.feed("PR_RADAR", "/pulls.json", "the Pull requests"));
             let pending: Vec<_> = watched
                 .map(|service| {
                     let name = service.card.service.clone();
@@ -212,23 +247,9 @@ impl App {
                 .into_iter()
                 .map(|(name, id, stats)| (name, id, joined(stats)))
                 .collect();
-            (
-                joined(host),
-                readings,
-                joined(farm),
-                joined(pulls),
-                usage,
-                joined(uptime),
-            )
+            (joined(host), readings, usage, joined(uptime))
         });
         let history = self.remember(&usage, &readings);
-        let tier_before = Self::farm_tier(previous.farm.as_ref());
-        let farm = Some(widgets::settle(previous.farm.as_ref(), farm, now));
-        if farm_post::crossed(tier_before, Self::farm_tier(farm.as_ref())) {
-            println!("The Account ratio crossed a tier, the Farm board goes to Discord");
-            self.wake_farm();
-        }
-        let pulls = Some(widgets::settle(previous.pulls.as_ref(), pulls, now));
         let mut widgets: BTreeMap<String, Panel> = readings
             .into_iter()
             .map(|(name, reading)| {
@@ -258,11 +279,6 @@ impl App {
             previous.uptime.clone()
         });
         self.board.send_modify(|board| {
-            let farm = if self.farm_changes.load(Ordering::SeqCst) == changes {
-                farm
-            } else {
-                board.farm.clone()
-            };
             let mut widgets = widgets;
             if self.answers.load(Ordering::SeqCst) != answered {
                 for service in services.iter() {
@@ -279,8 +295,8 @@ impl App {
             *board = Arc::new(Board {
                 host,
                 widgets,
-                farm,
-                pulls,
+                farm: board.farm.clone(),
+                pulls: board.pulls.clone(),
                 history,
                 uptime,
             });
@@ -300,6 +316,17 @@ impl App {
             .history
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let due = {
+            let mut recorded = self
+                .recorded
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let due = recorded.is_none_or(|at| at.elapsed() >= SAMPLE);
+            if due {
+                *recorded = Some(Instant::now());
+            }
+            due
+        };
         for (name, id, found) in usage {
             let Some(sample) = found.as_ref().ok().and_then(stats::sample) else {
                 continue;
@@ -321,11 +348,13 @@ impl App {
                 metrics.push(("received", received));
                 metrics.push(("sent", sent));
             }
-            history.record(name, &metrics, POINTS);
+            if due {
+                history.record(name, &metrics, POINTS);
+            }
             samples.insert(name.clone(), (id.clone(), sample));
         }
         for (name, reading) in readings {
-            if let Ok(reading) = reading {
+            if due && let Ok(reading) = reading {
                 history.record(name, &reading.metrics, POINTS);
             }
         }
@@ -543,10 +572,11 @@ impl App {
     }
 
     fn enforced(&self) -> BTreeSet<String> {
+        let listed = self.shutdown().services().clone();
         self.snapshot
             .borrow()
             .iter()
-            .filter(|service| service.shutdown)
+            .filter(|service| service.card.switchable && listed.contains(&service.card.service))
             .map(|service| service.card.service.clone())
             .collect()
     }

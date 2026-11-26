@@ -71,6 +71,8 @@ async fn main() {
     }
     let poller = app.clone();
     thread::spawn(move || poller.poll());
+    let feeds = app.clone();
+    thread::spawn(move || feeds.poll_feeds());
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", PORT))
         .await
         .unwrap_or_else(|error| {
