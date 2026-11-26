@@ -592,7 +592,10 @@ subtitles, stay theirs to set.
 The web client wears [ElegantFin](https://github.com/lscambo13/ElegantFin), a
 sober dark theme. [policy](#policy) keeps its Custom CSS, pinned to a release in
 `THEME` of `services/policy/src/jellyfin.rs`, and shows again the buttons the
-theme hides on each card, such as the one that marks an item as played.
+theme hides on each card, such as the one that marks an item as played. It also
+shows again the name of the show on the page of a season or an episode, which
+the theme hides behind the logo of the show, so that name links back to the
+show.
 
 The header of the web client shows three links after the libraries: "Livres"
 opens Kavita, "Musiques" opens Aurral and "Faire une requête" opens Seerr. They
