@@ -1424,16 +1424,16 @@ in the Library on its own, from the indexers through qBittorrent, and Kavita
 reads it. It sees the books and manga folders, under `/data/media/books`
 and `/data/media/manga`, and the torrents tree, under `/data/torrents`. Readarr
 is retired, and no other maintained open source tool finds and files books this
-way. The private libraries are mounted read-only under `/data/media/private`:
-at each pass, [policy](#policy) scans the `books` folder of every Account, so
-LazyLibrarian lists the private books without moving or adding a file. A
-wanted book still lands in the public folders, and a private one is filed by
-hand.
+way. The private libraries are mounted read-only under `/data/media/private`,
+so a private book can be linked to its file without moving it. A wanted book
+still lands in the public folders, and a private one is filed by hand.
 
-A scan only lists a book that the book source of LazyLibrarian, Hardcover,
-also knows. A found author brings all their books, so the books of that author
-can match. The manga scan covers `/data/media/manga` only, and matches a
-volume through the ComicVine website as long as no ComicVine key is set.
+A library scan only lists a book that the book source of LazyLibrarian,
+Hardcover, also knows. A found author brings all their books, so the books of
+that author can match. Nothing scans the private libraries: their folders are
+named after series, so a scan of them adds one author per series folder. The
+manga scan covers `/data/media/manga` only, and matches a volume through the
+ComicVine website as long as no ComicVine key is set.
 
 ### Login of LazyLibrarian
 
