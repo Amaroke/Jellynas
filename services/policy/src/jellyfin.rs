@@ -7,7 +7,7 @@ const TEST_ACCOUNT: &str = "test";
 const IDLE: SignedDuration = SignedDuration::from_hours(30 * 24);
 const LDAP_PLUGIN: &str = "/Plugins/958aad6637844d2ab89aa7b6fab6e25c/Configuration";
 const INJECTOR_PLUGIN: &str = "/Plugins/f5a34f7b2e8a4e6aa7223a216a81b374/Configuration";
-const THEME: &str = "@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/ElegantFin-theme-v26.09.05.css\");\n:root { --extraCardButtonsVisibility: block; }\n.MuiToolbar-root > .MuiStack-root > a[target=\"_blank\"] { order: 1; }\n.MuiToolbar-root > .MuiStack-root > button { order: 2; }\n";
+const THEME: &str = "@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/ElegantFin-theme-v26.09.05.css\");\n:root { --extraCardButtonsVisibility: block; }\n.MuiToolbar-root > .MuiStack-root > a[target=\"_blank\"] { order: 1; }\n.MuiToolbar-root > .MuiStack-root > button { order: 2; }\n.detailLogo:not(.hide) ~ .detailPageWrapperContainer .nameContainer h1.parentName { display: block; }\n";
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Shelves {

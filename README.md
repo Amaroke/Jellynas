@@ -602,7 +602,10 @@ subtitles, stay theirs to set.
 The web client wears [ElegantFin](https://github.com/lscambo13/ElegantFin), a
 sober dark theme. [policy](#policy) keeps its Custom CSS, pinned to a release in
 `THEME` of `services/policy/src/jellyfin.rs`, and shows again the buttons the
-theme hides on each card, such as the one that marks an item as played.
+theme hides on each card, such as the one that marks an item as played. It also
+shows again the name of the show on the page of a season or an episode, which
+the theme hides behind the logo of the show, so that name links back to the
+show.
 
 The header of the web client shows three links after the libraries: "Livres"
 opens Kavita, "Musiques" opens Aurral and "Faire une requête" opens Seerr. They
@@ -1404,12 +1407,18 @@ Jellyfin reads books poorly.
 | Provision Accounts       | On                                   |
 | Require verified email   | Off, the Accounts have no real email |
 | Sync user settings       | Off                                  |
+| Auto login               | On                                   |
+| Disable password login   | On, except for the admins            |
 | Provider name            | Authelia                             |
 | Default roles            | Login, Download, Bookmark            |
 | Default libraries        | The public libraries                 |
 | Default age rating       | None, unknown ratings included       |
 | OPDS                     | On                                   |
 | Cover image size         | Extra large                          |
+
+Kavita sends every visitor straight to Authelia, and refuses a password from
+anyone but an admin. To sign in as `admin`, open
+`https://kavita.lan.<DOMAIN>:<CADDY_HTTPS_PORT>/login?skipAutoLogin=true`.
 
 Kavita creates the user of a Friend at their first sign-in, named after their
 Account. policy keeps these libraries, and adds the missing ones at each pass:
