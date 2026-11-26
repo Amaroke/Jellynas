@@ -830,7 +830,8 @@ address, never your home address. Gluetun then turns healthy.
 
 Gluetun also serves an HTTP proxy at `gluetun:8888`, on the Compose network
 only. ratio and the indexers of Prowlarr send their requests to the trackers
-through it, see [VPN of the indexers](#vpn-of-the-indexers).
+through it, except the searches on Nyaa, see
+[VPN of the indexers](#vpn-of-the-indexers).
 
 ### Example: AirVPN
 
@@ -979,8 +980,13 @@ proxy, and its requests leave through the VPN only.
 In Indexers, click "Add Indexer", pick a tracker and fill in what it asks for,
 an account for a private one. For an indexer behind Cloudflare, add the
 `flaresolverr` tag so its requests go through FlareSolverr. Add the `vpn` tag to
-every tracker, so its searches and torrent files go through the VPN. Click
-"Test", then "Save".
+every tracker but Nyaa, so its searches and torrent files go through the VPN.
+Click "Test", then "Save".
+
+Nyaa stays without the `vpn` tag. It answers most requests from the VPN servers
+with a 504, so Prowlarr counted it as down and paused it for hours. Its searches
+leave from the home address, and the torrents still download through the VPN in
+qBittorrent.
 
 ### Seeding of the indexers
 
@@ -2068,7 +2074,8 @@ prefer it, and ratio looks there for Twins. Nyaa, a public anime tracker, is the
 one used here, since French anime groups post there and on C411 alike.
 
 1. In Prowlarr, Indexers, click "Add Indexer", pick Nyaa.si, set "Indexer
-   Priority" to `1`, the highest, click "Test", then "Save".
+   Priority" to `1`, the highest, leave the tags empty, click "Test", then
+   "Save".
 2. Edit the C411 indexer, click "Show Advanced", and set "Indexer Priority" to
    `25`. At equal quality and score, Radarr and Sonarr then take Nyaa. A better
    release on C411 still wins, as the profiles of [Recyclarr](#recyclarr) rank
