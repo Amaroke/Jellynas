@@ -93,6 +93,7 @@ Radarr, `POST /api/v3/command` with one of these bodies:
 Sonarr, `POST /api/v3/command` with one of these bodies:
 
 ```text
+{"name": "EpisodeSearch", "episodeIds": [1, 2]}
 {"name": "SeriesSearch", "seriesId": 1}
 {"name": "MissingEpisodeSearch"}
 {"name": "CutoffUnmetEpisodeSearch"}
@@ -112,7 +113,10 @@ ssh jellynas "sudo sh /mnt/tank/jellynas/scripts/check.sh \
   api radarr POST /api/v3/command '{\"name\":\"MissingMoviesSearch\"}'"
 ```
 
-Searching every missing item at once fires many queries. Nyaa has a query limit
+Sonarr searches an anime series episode by episode, so to fetch a few
+episodes search their ids (`GET /api/v3/episode?seriesId=<id>` lists them)
+rather than the whole series. Searching every missing item at once fires many
+queries. Nyaa has a query limit
 in Prowlarr, and the app disables an indexer that hits it for hours. Prefer a
 few items, or one bulk search, never several bulk searches in a row.
 

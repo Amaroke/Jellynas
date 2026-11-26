@@ -199,40 +199,40 @@ sonarr:
       preferred_ratio: 0
       qualities:
         - name: HDTV-720p
-          min: 10
+          min: 0
           max: 30
         - name: WEBDL-720p
-          min: 10
+          min: 0
           max: 30
         - name: WEBRip-720p
-          min: 10
+          min: 0
           max: 30
         - name: Bluray-720p
-          min: 10
+          min: 0
           max: 30
         - name: HDTV-1080p
-          min: 15
+          min: 0
           max: 30
         - name: WEBDL-1080p
-          min: 15
+          min: 0
           max: 30
         - name: WEBRip-1080p
-          min: 15
+          min: 0
           max: 30
         - name: Bluray-1080p
-          min: 15
+          min: 0
           max: 30
         - name: HDTV-2160p
-          min: 25
+          min: 0
           max: 30
         - name: WEBDL-2160p
-          min: 25
+          min: 0
           max: 30
         - name: WEBRip-2160p
-          min: 25
+          min: 0
           max: 30
         - name: Bluray-2160p
-          min: 15
+          min: 0
           max: 30
 
     quality_profiles:
