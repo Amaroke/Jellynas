@@ -1034,7 +1034,9 @@ hand:
 - Root folder `/data/media/movies`, added again if it is missing.
 - "Rename Movies" on, with both the movie file and folder named
   `{Movie Title} ({Release Year}) [tmdbid-{TmdbId}]`, so Jellyfin always
-  matches the right movie, even a remake with the same title.
+  matches the right movie, even a remake with the same title. Each night policy
+  also renames any file whose name no longer matches the movie, like after a
+  fix of its title on TMDb.
 - "Use Hardlinks instead of Copy" on. Each import is a hardlink, so the torrent
   keeps seeding from the torrents tree and the movie takes its space once.
 - Recycling bin `/data/media/movies/.recycle`, emptied after 30 days. A deleted
@@ -1146,7 +1148,11 @@ policy keeps the same settings as in Radarr, with these values:
 
 - Root folders `/data/media/shows` and `/data/media/anime`.
 - "Rename Episodes" on, with the folder of a show named
-  `{Series TitleYear} [tvdbid-{TvdbId}]`.
+  `{Series TitleYear} [tvdbid-{TvdbId}]`. Each night policy also renames any
+  episode whose name no longer matches TheTVDB, so an episode imported before
+  its title was known loses its `TBA`.
+- "Episode Title Required" set to "Never", so an episode that aired before
+  TheTVDB has its title is imported at once instead of waiting.
 - Recycling bin `/data/media/shows/.recycle`, for both shows and anime.
 - "Unmonitor Deleted Episodes" on, so an episode deleted from the disk is not
   downloaded again.
