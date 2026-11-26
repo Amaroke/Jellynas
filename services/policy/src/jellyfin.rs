@@ -7,9 +7,35 @@ const TEST_ACCOUNT: &str = "test";
 const IDLE: SignedDuration = SignedDuration::from_hours(30 * 24);
 const LDAP_PLUGIN: &str = "/Plugins/958aad6637844d2ab89aa7b6fab6e25c/Configuration";
 const INJECTOR_PLUGIN: &str = "/Plugins/f5a34f7b2e8a4e6aa7223a216a81b374/Configuration";
+const BACK_TO_SHOW: &str = r##"new MutationObserver(() => {
+  for (const page of document.querySelectorAll("#itemDetailPage:not(.hide)")) {
+    const buttons = page.querySelector(".mainDetailButtons");
+    const model = buttons && buttons.querySelector(".btnShuffle");
+    if (!model) continue;
+    let back = buttons.querySelector(".btnBackToShow");
+    if (!back) {
+      back = model.cloneNode(true);
+      back.classList.replace("btnShuffle", "btnBackToShow");
+      back.title = "Retour à la série";
+      const content = back.querySelector(".detailButton-content");
+      content.querySelector(".material-icons").className = "material-icons detailButton-icon arrow_back";
+      const label = document.createElement("span");
+      label.className = "backToShowLabel";
+      label.textContent = "Retour à la série";
+      content.append(label);
+      back.addEventListener("click", () => {
+        const show = page.querySelector(".nameContainer a[data-type='Series']");
+        if (show) location.hash = `#/details?id=${show.dataset.id}&serverId=${show.dataset.serverid}`;
+      });
+      buttons.prepend(back);
+    }
+    back.classList.toggle("hide", !page.querySelector(".nameContainer a[data-type='Series']"));
+  }
+}).observe(document.body, { childList: true, subtree: true });
+"##;
 const SKIPPER_PLUGIN: &str = "/Plugins/c83d86bba1e04c35a113e2101cf4ee6b/Configuration";
 const SKIPPER_TASK: &str = "IntroSkipperDetectSegmentsTask";
-const THEME: &str = "@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/ElegantFin-theme-v26.09.05.css\");\n:root { --extraCardButtonsVisibility: block; }\n.MuiToolbar-root > .MuiStack-root > a[target=\"_blank\"] { order: 1; }\n.MuiToolbar-root > .MuiStack-root > button { order: 2; }\n.detailLogo:not(.hide) ~ .detailPageWrapperContainer .nameContainer h1.parentName { display: block; }\n";
+const THEME: &str = "@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/ElegantFin-theme-v26.09.05.css\");\n:root { --extraCardButtonsVisibility: block; --itemOriginalTitleVisibility: none; }\n.MuiToolbar-root > .MuiStack-root > a[target=\"_blank\"] { order: 1; }\n.MuiToolbar-root > .MuiStack-root > button { order: 2; }\n#itemDetailPage .detailSection:has(> .nextUpSection:not(.hide)) { grid-template-columns: auto 1fr 1fr 1fr; }\n.detailLogo:not(.hide) ~ .detailPageWrapperContainer .nameContainer > h3.itemName:not(:has(a[data-type=\"Season\"])) { display: none; }\n.btnBackToShow { width: auto !important; border-radius: 2em !important; }\n.btnBackToShow .detailButton-content { display: flex; align-items: center; gap: 0.4em; padding: 0 0.8em; white-space: nowrap; }\n.layout-mobile .btnBackToShow .detailButton-content { padding: 0; }\n.layout-mobile .backToShowLabel { display: none; }\n@media (max-width: 50em) { .btnBackToShow .detailButton-content { padding: 0; } .backToShowLabel { display: none; } }\n";
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Shelves {
@@ -290,7 +316,14 @@ pub fn server() -> Vec<(&'static str, &'static str, Map<String, Value>)> {
             "scripts",
             INJECTOR_PLUGIN,
             rules(json!({
-                "CustomJavaScripts": [],
+                "CustomJavaScripts": [{
+                    "Name": "Back to show",
+                    "Script": BACK_TO_SHOW,
+                    "Src": "",
+                    "Module": false,
+                    "Enabled": true,
+                    "RequiresAuthentication": true,
+                }],
             })),
         ),
     ]
@@ -790,12 +823,15 @@ mod tests {
     #[test]
     fn a_script_added_by_hand_goes_away() {
         let mut pages = in_line();
-        pages.get_mut(INJECTOR_PLUGIN).unwrap()["CustomJavaScripts"] =
-            json!([{"Name": "Request button"}]);
+        let scripts = pages.get_mut(INJECTOR_PLUGIN).unwrap()["CustomJavaScripts"].clone();
+        let mut added = scripts.as_array().unwrap().clone();
+        added.push(json!({"Name": "Request button"}));
+        pages.get_mut(INJECTOR_PLUGIN).unwrap()["CustomJavaScripts"] = json!(added);
         let fake = Fake::new(pages);
         assert_eq!(Ok(1), pass(&fake, now(), &[]));
         assert_eq!(vec![format!("POST {INJECTOR_PLUGIN}")], fake.paths());
-        assert_eq!(json!([]), fake.body(0)["CustomJavaScripts"]);
+        assert_eq!(scripts, fake.body(0)["CustomJavaScripts"]);
+        assert_eq!(json!(BACK_TO_SHOW), scripts[0]["Script"]);
     }
 
     #[test]
