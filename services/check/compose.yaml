@@ -1,0 +1,25 @@
+---
+name: jellynas-check
+
+services:
+  check:
+    build: .
+    networks:
+      - internal-zone
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    user: ${PUID}:${PGID}
+    read_only: true
+    mem_limit: 64m
+    environment:
+      RADARR_API_KEY: ${RADARR_API_KEY}
+      SONARR_API_KEY: ${SONARR_API_KEY}
+      PROWLARR_API_KEY: ${PROWLARR_API_KEY}
+      LAZYLIBRARIAN_API_KEY: ${LAZYLIBRARIAN_API_KEY:-}
+
+networks:
+  internal-zone:
+    external: true
+    name: jellynas_internal-zone
