@@ -1397,12 +1397,18 @@ Jellyfin reads books poorly.
 | Provision Accounts       | On                                   |
 | Require verified email   | Off, the Accounts have no real email |
 | Sync user settings       | Off                                  |
+| Auto login               | On                                   |
+| Disable password login   | On, except for the admins            |
 | Provider name            | Authelia                             |
 | Default roles            | Login, Download, Bookmark            |
 | Default libraries        | The public libraries                 |
 | Default age rating       | None, unknown ratings included       |
 | OPDS                     | On                                   |
 | Cover image size         | Extra large                          |
+
+Kavita sends every visitor straight to Authelia, and refuses a password from
+anyone but an admin. To sign in as `admin`, open
+`https://kavita.lan.<DOMAIN>:<CADDY_HTTPS_PORT>/login?skipAutoLogin=true`.
 
 Kavita creates the user of a Friend at their first sign-in, named after their
 Account. policy keeps these libraries, and adds the missing ones at each pass:
