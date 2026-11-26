@@ -13,8 +13,12 @@ const LISTS: [(&str, &str); 7] = [
     ("stats", "cmd=showStats&json=1"),
 ];
 
-const KEPT: [&str; 11] = [
+const KEPT: [&str; 15] = [
+    "AuthorID",
     "AuthorName",
+    "HaveBooks",
+    "TotalBooks",
+    "UnignoredBooks",
     "BookName",
     "BookID",
     "Status",
@@ -71,6 +75,28 @@ fn slim(value: &Value) -> Value {
         .collect()
 }
 
+fn secret(key: &str) -> bool {
+    let key = key.to_ascii_uppercase();
+    key == "API" || key.ends_with("_API") || key.ends_with("PASS") || key.ends_with("KEY")
+}
+
+fn redact(value: &Value) -> Value {
+    match value {
+        Value::Object(fields) => fields
+            .iter()
+            .map(|(key, value)| {
+                let hidden = secret(key) && value.as_str().is_some_and(|text| !text.is_empty());
+                (
+                    key.clone(),
+                    if hidden { json!("***") } else { redact(value) },
+                )
+            })
+            .collect(),
+        Value::Array(items) => items.iter().map(redact).collect(),
+        other => other.clone(),
+    }
+}
+
 fn failures(history: &Value) -> usize {
     history
         .as_array()
@@ -96,7 +122,7 @@ pub fn check(report: &mut Report, api: &impl Api, input: &Input) {
                     );
                 }
             }
-            report.fact(key, trimmed(&slim(&value), 40));
+            report.fact(key, trimmed(&slim(&redact(&value)), 300));
         }
     }
     let mounts = input.mounts.get("lazylibrarian");
@@ -187,6 +213,17 @@ mod tests {
     fn book_lists_keep_only_the_telling_fields() {
         let out = slim(&json!([{"BookName": "A", "BookDesc": "long", "Status": "Wanted"}, 3]));
         assert_eq!(out, json!([{"BookName": "A", "Status": "Wanted"}, 3]));
+    }
+
+    #[test]
+    fn provider_keys_and_passwords_are_hidden() {
+        let out = redact(
+            &json!({"torznab": [{"API": "0000aaaa1111bbbb2222cccc3333dddd", "APICOUNT": "0", "HOST": "h"}], "direct": [{"BOK_PASS": "p", "BOK_USER": ""}]}),
+        );
+        assert_eq!(
+            out,
+            json!({"torznab": [{"API": "***", "APICOUNT": "0", "HOST": "h"}], "direct": [{"BOK_PASS": "***", "BOK_USER": ""}]})
+        );
     }
 
     #[test]

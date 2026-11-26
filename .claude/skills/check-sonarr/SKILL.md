@@ -1,6 +1,6 @@
 ---
 name: check-sonarr
-description: Check Sonarr on the NAS and trace each problem upstream to Prowlarr, ratio, Gluetun or qBittorrent. Use when asked for the state, health or a check of Sonarr, the shows or the anime.
+description: Show the shows and anime of Sonarr on the NAS as tables, what is missing and why, and launch searches. Use when asked for the state, the library, a check or a search of Sonarr, the shows or the anime.
 ---
 
 # Check Sonarr

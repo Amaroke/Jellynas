@@ -13,7 +13,7 @@ use report::Report;
 use std::io::Read;
 use std::{env, io, process};
 
-const USAGE: &str = "Usage: check radarr|sonarr|lazylibrarian < facts\n       check api radarr|sonarr|prowlarr|lazylibrarian METHOD PATH [JSON]";
+const USAGE: &str = "Usage: check radarr|sonarr|lazylibrarian < facts\n       check api radarr|sonarr|prowlarr|lazylibrarian METHOD PATH [JSON|-]";
 const QBITTORRENT: &str = "http://gluetun:8080/api/v2/app/version";
 
 fn http(app: &str) -> Result<Http, String> {
@@ -49,8 +49,15 @@ fn check(app: &str) -> Result<(), String> {
     let names = [app, "prowlarr", "gluetun", "qbittorrent", "ratio"];
     upstream::containers(&mut report, &input, &names);
     match app {
-        "radarr" => arr::check(&mut report, &http(app)?, Kind::Radarr, now),
-        "sonarr" => arr::check(&mut report, &http(app)?, Kind::Sonarr, now),
+        "radarr" | "sonarr" => {
+            let kind = if app == "radarr" {
+                Kind::Radarr
+            } else {
+                Kind::Sonarr
+            };
+            let statuses = input.indexers.get(app).cloned().unwrap_or_default();
+            arr::check(&mut report, &http(app)?, kind, now, &statuses);
+        }
         _ => lazylibrarian::check(&mut report, &http(app)?, &input),
     }
     upstream::prowlarr(&mut report, &http("prowlarr")?, now);
@@ -72,8 +79,15 @@ fn call(args: &[String]) -> Result<(), String> {
     let [app, method, path, rest @ ..] = args else {
         return Err(USAGE.into());
     };
-    let body = rest.first().map(String::as_str);
-    let (status, text) = http(app)?.call(method, path, body)?;
+    let mut body = rest.first().cloned();
+    if body.as_deref() == Some("-") {
+        let mut text = String::new();
+        io::stdin()
+            .read_to_string(&mut text)
+            .map_err(|error| error.to_string())?;
+        body = Some(text);
+    }
+    let (status, text) = http(app)?.call(method, path, body.as_deref())?;
     eprintln!("HTTP {status}");
     println!("{}", logs::mask(&text).0);
     if (200..300).contains(&status) {

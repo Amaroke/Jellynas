@@ -27,6 +27,16 @@ fn records(value: &Value) -> Vec<Value> {
     value["records"].as_array().cloned().unwrap_or_default()
 }
 
+fn gigabytes(value: &Value) -> Value {
+    value.as_f64().map_or(Value::Null, |bytes| {
+        json!((bytes / GB * 10.0).round() / 10.0)
+    })
+}
+
+fn by_title(items: &mut [Value]) {
+    items.sort_by_key(|item| item["title"].as_str().unwrap_or("").to_lowercase());
+}
+
 fn library(report: &mut Report, api: &impl Api, kind: Kind) {
     let path = match kind {
         Kind::Radarr => "/api/v3/movie",
@@ -40,6 +50,45 @@ fn library(report: &mut Report, api: &impl Api, kind: Kind) {
         .iter()
         .filter(|item| item["monitored"] == json!(true))
         .count();
+    let mut rows: Vec<Value> = match kind {
+        Kind::Radarr => items
+            .iter()
+            .map(|movie| {
+                json!({
+                    "id": movie["id"],
+                    "title": movie["title"],
+                    "year": movie["year"],
+                    "monitored": movie["monitored"],
+                    "status": movie["status"],
+                    "isAvailable": movie["isAvailable"],
+                    "hasFile": movie["hasFile"],
+                    "quality": movie["movieFile"]["quality"]["quality"]["name"],
+                    "sizeGB": gigabytes(&movie["sizeOnDisk"]),
+                    "rootFolder": movie["rootFolderPath"],
+                })
+            })
+            .collect(),
+        Kind::Sonarr => items
+            .iter()
+            .map(|series| {
+                let statistics = &series["statistics"];
+                json!({
+                    "id": series["id"],
+                    "title": series["title"],
+                    "year": series["year"],
+                    "monitored": series["monitored"],
+                    "status": series["status"],
+                    "seriesType": series["seriesType"],
+                    "episodeFiles": statistics["episodeFileCount"],
+                    "episodesWanted": statistics["episodeCount"],
+                    "episodesTotal": statistics["totalEpisodeCount"],
+                    "sizeGB": gigabytes(&statistics["sizeOnDisk"]),
+                    "rootFolder": series["rootFolderPath"],
+                })
+            })
+            .collect(),
+    };
+    by_title(&mut rows);
     let facts = match kind {
         Kind::Radarr => json!({
             "movies": items.len(),
@@ -53,6 +102,13 @@ fn library(report: &mut Report, api: &impl Api, kind: Kind) {
         }),
     };
     report.fact("library", facts);
+    report.fact(
+        match kind {
+            Kind::Radarr => "movies",
+            Kind::Sonarr => "series",
+        },
+        json!(rows),
+    );
 }
 
 fn missing(report: &mut Report, api: &impl Api, kind: Kind) {
@@ -70,6 +126,7 @@ fn missing(report: &mut Report, api: &impl Api, kind: Kind) {
             .iter()
             .map(|movie| {
                 json!({
+                    "id": movie["id"],
                     "title": movie["title"],
                     "year": movie["year"],
                     "status": movie["status"],
@@ -188,22 +245,28 @@ fn failed(report: &mut Report, api: &impl Api, kind: Kind, now: Timestamp) {
     report.fact("failedLast7Days", trimmed(&json!(items), 30));
 }
 
-fn indexers(report: &mut Report, api: &impl Api, kind: Kind, now: Timestamp) {
+fn disabled(statuses: &[String], id: &Value) -> Value {
+    statuses
+        .iter()
+        .filter_map(|line| line.split_once('|'))
+        .find(|(provider, _)| {
+            id.as_u64()
+                .is_some_and(|id| provider.trim() == id.to_string())
+        })
+        .map_or(
+            Value::Null,
+            |(_, till)| json!({"disabledTill": till.trim().replacen(' ', "T", 1)}),
+        )
+}
+
+fn indexers(report: &mut Report, api: &impl Api, kind: Kind, now: Timestamp, statuses: &[String]) {
     let Some(indexers) = fetch(report, api, "/api/v3/indexer") else {
         return;
     };
-    let statuses = api.get("/api/v3/indexerstatus").unwrap_or(json!([]));
     let mut usable = 0;
     let mut facts = vec![];
     for indexer in indexers.as_array().into_iter().flatten() {
-        let status = statuses
-            .as_array()
-            .and_then(|list| {
-                list.iter()
-                    .find(|status| status["indexerId"] == indexer["id"])
-            })
-            .cloned()
-            .unwrap_or(Value::Null);
+        let status = disabled(statuses, &indexer["id"]);
         let till = disabled_till(&status, now);
         let rss = indexer["enableRss"] == json!(true);
         if rss && till.is_none() {
@@ -270,7 +333,7 @@ fn roots(report: &mut Report, api: &impl Api, kind: Kind) {
     report.fact("rootFolders", json!(facts));
 }
 
-pub fn check(report: &mut Report, api: &impl Api, kind: Kind, now: Timestamp) {
+pub fn check(report: &mut Report, api: &impl Api, kind: Kind, now: Timestamp, statuses: &[String]) {
     if let Some(status) = fetch(report, api, "/api/v3/system/status") {
         report.fact("version", status["version"].clone());
     }
@@ -288,7 +351,7 @@ pub fn check(report: &mut Report, api: &impl Api, kind: Kind, now: Timestamp) {
     );
     queue(report, api, kind);
     failed(report, api, kind, now);
-    indexers(report, api, kind, now);
+    indexers(report, api, kind, now, statuses);
     clients(report, api, kind);
     roots(report, api, kind);
     total(
@@ -314,7 +377,10 @@ mod tests {
             ("/api/v3/health", json!([])),
             (
                 "/api/v3/series",
-                json!([{"monitored": true, "statistics": {"episodeFileCount": 10}}]),
+                json!([
+                    {"id": 2, "title": "VisionQuest", "monitored": true, "statistics": {"episodeFileCount": 10, "episodeCount": 12, "sizeOnDisk": 2.5e9}},
+                    {"id": 1, "title": "Arcane", "monitored": true, "statistics": {"episodeFileCount": 9}},
+                ]),
             ),
             (
                 "/api/v3/wanted/missing?page=1&pageSize=200&monitored=true&includeSeries=true",
@@ -339,7 +405,6 @@ mod tests {
                     {"id": 3, "name": "C411 (Prowlarr)", "enableRss": false},
                 ]),
             ),
-            ("/api/v3/indexerstatus", json!([])),
             (
                 "/api/v3/downloadclient",
                 json!([{"name": "qBittorrent", "enable": true}]),
@@ -360,22 +425,29 @@ mod tests {
     #[test]
     fn a_healthy_sonarr_has_no_finding() {
         let mut report = Report::default();
-        check(&mut report, &sonarr(&[]), Kind::Sonarr, now());
+        check(&mut report, &sonarr(&[]), Kind::Sonarr, now(), &[]);
         assert_eq!(report.findings, vec![]);
         assert!(report.errors.is_empty());
         assert_eq!(report.facts["missing"]["items"]["VisionQuest"], 2);
         assert_eq!(report.facts["cutoffUnmet"], 4);
+        assert_eq!(report.facts["series"][0]["title"], "Arcane");
+        assert_eq!(report.facts["series"][1]["episodesWanted"], 12);
+        assert_eq!(report.facts["series"][1]["sizeGB"], 2.5);
     }
 
     #[test]
     fn no_indexer_left_for_rss_is_flagged() {
-        let api = sonarr(&[(
-            "/api/v3/indexerstatus",
-            json!([{"indexerId": 1, "disabledTill": "2026-11-26T19:06:09.4211604Z"}]),
-        )]);
+        let statuses = vec![
+            "1|2026-11-26 19:06:09.4211604Z".to_string(),
+            "3|".to_string(),
+        ];
         let mut report = Report::default();
-        check(&mut report, &api, Kind::Sonarr, now());
+        check(&mut report, &sonarr(&[]), Kind::Sonarr, now(), &statuses);
         assert!(report.flagged(Severity::High, "No indexer can be used for RSS"));
+        assert_eq!(
+            report.facts["indexers"][0]["disabledTill"],
+            "2026-11-26T19:06:09.4211604Z"
+        );
     }
 
     #[test]
@@ -390,7 +462,7 @@ mod tests {
             }]}),
         )]);
         let mut report = Report::default();
-        check(&mut report, &api, Kind::Sonarr, now());
+        check(&mut report, &api, Kind::Sonarr, now(), &[]);
         assert!(report.flagged(Severity::Medium, "No files found are eligible for import"));
     }
 
@@ -406,7 +478,7 @@ mod tests {
             ]}),
         )]);
         let mut report = Report::default();
-        check(&mut report, &api, Kind::Sonarr, now());
+        check(&mut report, &api, Kind::Sonarr, now(), &[]);
         assert_eq!(report.findings.len(), 1);
         assert!(report.flagged(Severity::Low, "Download of B failed: Disk full"));
         assert_eq!(report.facts["failedLast7Days"]["count"], 2);
@@ -423,7 +495,7 @@ mod tests {
             ]),
         )]);
         let mut report = Report::default();
-        check(&mut report, &api, Kind::Sonarr, now());
+        check(&mut report, &api, Kind::Sonarr, now(), &[]);
         assert!(report.flagged(Severity::High, "Root folder /a is not accessible"));
         assert!(report.flagged(Severity::Medium, "Root folder /b has only 50 GB free"));
     }
@@ -433,7 +505,7 @@ mod tests {
         let mut api = sonarr(&[]);
         api.0.remove("/api/v3/health");
         let mut report = Report::default();
-        check(&mut report, &api, Kind::Sonarr, now());
+        check(&mut report, &api, Kind::Sonarr, now(), &[]);
         assert!(report.errors[0].starts_with("/api/v3/health"));
         assert!(report.facts.contains_key("rootFolders"));
     }
