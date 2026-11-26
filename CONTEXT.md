@@ -120,18 +120,13 @@ _Avoid_: real ratio, tracker ratio
 
 **Ratio floor**:
 The Account ratio of 1.2 under which the NAS spends no download on C411, not
-even for the Library, freeleech and Twins aside.
+even for the Library, freeleech aside.
 _Avoid_: margin, buffer
 
 **Ratio tier**:
 An Account ratio the board marks: 0.8 where C411 blocks downloads, 1, the
 Ratio floor and 2.
 _Avoid_: threshold, level
-
-**Twin**:
-The same release, byte for byte, on a public tracker, downloaded there so that
-its C411 copy costs no download on C411.
-_Avoid_: mirror, duplicate
 
 **Origin**:
 What added a torrent to qBittorrent, radarr, sonarr or lazylibrarian for the

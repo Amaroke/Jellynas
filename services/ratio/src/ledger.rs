@@ -163,7 +163,6 @@ pub fn record(
         .free
         .retain(|hash, _| torrents.contains_key(hash) || !transfers.contains_key(hash));
     state.given_up.retain(|_, at| *at >= now - WEEK);
-    state.checked.retain(|_, at| *at >= now - 2.0 * DAY);
     if !torrents.is_empty() {
         state
             .transfers
