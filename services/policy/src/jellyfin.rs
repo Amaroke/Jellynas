@@ -1,5 +1,5 @@
 use crate::accounts::{Account, PRIVATE_ROOT, owner};
-use crate::api::{Api, encode, merged, report, rules, settle};
+use crate::api::{Api, encode, keys, merged, report, rules, settle};
 use jiff::{SignedDuration, Timestamp};
 use serde_json::{Map, Value, json};
 
@@ -7,6 +7,8 @@ const TEST_ACCOUNT: &str = "test";
 const IDLE: SignedDuration = SignedDuration::from_hours(30 * 24);
 const LDAP_PLUGIN: &str = "/Plugins/958aad6637844d2ab89aa7b6fab6e25c/Configuration";
 const INJECTOR_PLUGIN: &str = "/Plugins/f5a34f7b2e8a4e6aa7223a216a81b374/Configuration";
+const SKIPPER_PLUGIN: &str = "/Plugins/c83d86bba1e04c35a113e2101cf4ee6b/Configuration";
+const SKIPPER_TASK: &str = "IntroSkipperDetectSegmentsTask";
 const THEME: &str = "@import url(\"https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@v26.09.05/Theme/ElegantFin-theme-v26.09.05.css\");\n:root { --extraCardButtonsVisibility: block; }\n.MuiToolbar-root > .MuiStack-root > a[target=\"_blank\"] { order: 1; }\n.MuiToolbar-root > .MuiStack-root > button { order: 2; }\n.detailLogo:not(.hide) ~ .detailPageWrapperContainer .nameContainer h1.parentName { display: block; }\n";
 
 #[derive(Debug, Default, PartialEq)]
@@ -294,6 +296,52 @@ pub fn server() -> Vec<(&'static str, &'static str, Map<String, Value>)> {
     ]
 }
 
+pub fn skipper() -> Map<String, Value> {
+    rules(json!({
+        "AutoDetectIntros": true,
+        "UpdateMediaSegments": true,
+        "ScanIntroduction": true,
+        "ScanCredits": true,
+        "ScanRecap": true,
+        "ScanPreview": true,
+        "ScanCommercial": true,
+        "AnalyzeSeasonZero": true,
+        "EnableSubtitleRecapDetection": true,
+        "EnableSubtitlePreviewDetection": true,
+    }))
+}
+
+fn skip(api: &impl Api) -> Result<usize, String> {
+    let changes = settle(
+        api,
+        "POST",
+        SKIPPER_PLUGIN,
+        &api.get(SKIPPER_PLUGIN)?,
+        &skipper(),
+    )?;
+    if changes.is_empty() {
+        return Ok(0);
+    }
+    let tasks = api.get("/ScheduledTasks")?;
+    let id = tasks
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|task| task["Key"] == json!(SKIPPER_TASK))
+        .and_then(|task| task["Id"].as_str())
+        .ok_or("Jellyfin has no task to analyse the media segments")?;
+    api.send(
+        "POST",
+        &format!("/ScheduledTasks/Running/{id}"),
+        &Value::Null,
+    )?;
+    println!(
+        "Jellyfin intro skipper: set {} and started the analysis",
+        keys(&[&changes])
+    );
+    Ok(1)
+}
+
 pub fn policy() -> Map<String, Value> {
     rules(json!({
         "EnableLiveTvAccess": false,
@@ -344,6 +392,7 @@ fn pass(api: &impl Api, now: Timestamp, accounts: &[Account]) -> Result<usize, S
         let changes = settle(api, "POST", path, &api.get(path)?, &wanted)?;
         changed += report("Jellyfin", page, &[&changes]);
     }
+    changed += skip(api)?;
     changed += shelve(api, accounts)?;
     let folders = api.get("/Library/VirtualFolders")?;
     changed += fetch(api, &folders)?;
@@ -441,6 +490,13 @@ mod tests {
                 (path.to_string(), Value::Object(page))
             })
             .collect();
+        let mut skipper = skipper();
+        skipper.insert("Untouched".into(), json!("kept"));
+        pages.insert(SKIPPER_PLUGIN.into(), Value::Object(skipper));
+        pages.insert(
+            "/ScheduledTasks".into(),
+            json!([{"Id": "other", "Key": "RefreshLibrary"}, {"Id": "segments", "Key": SKIPPER_TASK}]),
+        );
         pages.insert("/Library/VirtualFolders".into(), libraries());
         pages.insert(
             LDAP_PLUGIN.into(),
@@ -785,5 +841,31 @@ mod tests {
     #[test]
     fn the_collections_library_is_left_alone() {
         assert_eq!(json!([]), type_options(&Value::Null, "boxsets"));
+    }
+
+    #[test]
+    fn intro_skipper_set_back_to_analyse_everything_starts_the_analysis() {
+        let mut pages = in_line();
+        pages.get_mut(SKIPPER_PLUGIN).unwrap()["AnalyzeSeasonZero"] = json!(false);
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), pass(&fake, now(), &[]));
+        assert_eq!(
+            vec![
+                format!("POST {SKIPPER_PLUGIN}"),
+                "POST /ScheduledTasks/Running/segments".to_string(),
+            ],
+            fake.paths()
+        );
+        assert_eq!(json!(true), fake.body(0)["AnalyzeSeasonZero"]);
+        assert_eq!(json!("kept"), fake.body(0)["Untouched"]);
+    }
+
+    #[test]
+    fn intro_skipper_without_its_task_is_an_error() {
+        let mut pages = in_line();
+        pages.get_mut(SKIPPER_PLUGIN).unwrap()["ScanRecap"] = json!(false);
+        pages.insert("/ScheduledTasks".into(), json!([]));
+        let fake = Fake::new(pages);
+        assert!(pass(&fake, now(), &[]).is_err());
     }
 }
