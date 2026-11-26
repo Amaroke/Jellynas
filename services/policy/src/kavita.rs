@@ -46,7 +46,7 @@ fn private(account: &Account) -> Shelf {
         kind: BOOK,
         provider: HARDCOVER,
         folder: account.books(),
-        groups: vec![ARCHIVE, EPUB],
+        groups: vec![ARCHIVE, EPUB, PDF],
     }
 }
 
@@ -368,7 +368,7 @@ mod tests {
         let nima = fake.body(0);
         assert_eq!(json!("Nima"), nima["name"]);
         assert_eq!(json!(["/data/media/private/nima/books"]), nima["folders"]);
-        assert_eq!(json!([ARCHIVE, EPUB]), nima["fileGroupTypes"]);
+        assert_eq!(json!([ARCHIVE, EPUB, PDF]), nima["fileGroupTypes"]);
         assert_eq!(json!("Livres (niixe)"), fake.body(1)["name"]);
     }
 

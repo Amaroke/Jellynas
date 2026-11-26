@@ -1390,11 +1390,11 @@ Jellyfin reads books poorly.
 Kavita creates the user of a Friend at their first sign-in, named after their
 Account. policy keeps these libraries, and adds the missing ones at each pass:
 
-| Library         | Type  | Folder                     | Files         |
-| --------------- | ----- | -------------------------- | ------------- |
-| Livres          | Book  | `/data/media/books`        | EPUB, PDF     |
-| Mangas          | Manga | `/data/media/manga`        | Archive       |
-| Name of Account | Book  | `private/<username>/books` | Archive, EPUB |
+| Library         | Type  | Folder                     | Files              |
+| --------------- | ----- | -------------------------- | ------------------ |
+| Livres          | Book  | `/data/media/books`        | EPUB, PDF          |
+| Mangas          | Manga | `/data/media/manga`        | Archive            |
+| Name of Account | Book  | `private/<username>/books` | Archive, EPUB, PDF |
 
 It grants every Account the public libraries and its own Private library, and
 takes away any other, like in Jellyfin. It also lifts any age rating on an
@@ -1424,16 +1424,16 @@ in the Library on its own, from the indexers through qBittorrent, and Kavita
 reads it. It sees the books and manga folders, under `/data/media/books`
 and `/data/media/manga`, and the torrents tree, under `/data/torrents`. Readarr
 is retired, and no other maintained open source tool finds and files books this
-way. The private libraries are mounted read-only under `/data/media/private`:
-at each pass, [policy](#policy) scans the `books` folder of every Account, so
-LazyLibrarian lists the private books without moving or adding a file. A
-wanted book still lands in the public folders, and a private one is filed by
-hand.
+way. The private libraries are mounted read-only under `/data/media/private`,
+so a private book can be linked to its file without moving it. A wanted book
+still lands in the public folders, and a private one is filed by hand.
 
-A scan only lists a book that the book source of LazyLibrarian, Hardcover,
-also knows. A found author brings all their books, so the books of that author
-can match. The manga scan covers `/data/media/manga` only, and matches a
-volume through the ComicVine website as long as no ComicVine key is set.
+A library scan only lists a book that the book source of LazyLibrarian,
+Hardcover, also knows. A found author brings all their books, so the books of
+that author can match. Nothing scans the private libraries: their folders are
+named after series, so a scan of them adds one author per series folder. The
+manga scan covers `/data/media/manga` only, and matches a volume through the
+ComicVine website as long as no ComicVine key is set.
 
 ### Login of LazyLibrarian
 
