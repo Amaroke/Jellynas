@@ -520,6 +520,21 @@ changes the sources of a library, it refreshes the metadata of that whole
 library, replacing it, and keeps the images already there. The plugin is
 installed by hand from the Catalog of the Dashboard.
 
+### Intro Skipper
+
+The Intro Skipper plugin finds the intros, credits, recaps, previews and
+commercials of every episode and movie, specials included, and hands them to
+Jellyfin as media segments. policy keeps every one of those scans on, and when
+it turns one back on it starts the task "Detect and Analyze Media Segments" at
+once. The task runs again every night at midnight for the new episodes. The
+plugin is installed by hand from its own repository,
+`https://intro-skipper.org/manifest.json`, in Dashboard > Plugins > Repositories.
+
+What a client does with a segment is a setting of each device, kept in the
+browser or the app, not on the server, so policy cannot set it. The web client
+asks to skip the intros and credits by default. Each Friend chooses the rest in
+Settings > Playback > Media segments.
+
 ### Friend Accounts
 
 Each Friend gets their own Account, so their watch history and progress are
