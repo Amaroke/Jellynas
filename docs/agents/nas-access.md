@@ -51,6 +51,14 @@ ssh jellynas "sudo sh /mnt/tank/jellynas/scripts/check.sh \
   api radarr PUT /api/v3/indexer/1 '{\"id\":1}'"
 ```
 
+A long body, like a whole indexer, does not fit in the arguments of `sudo` on
+the NAS. Pass `-` instead and send the body on the standard input:
+
+```sh
+ssh jellynas "sudo sh /mnt/tank/jellynas/scripts/check.sh \
+  api prowlarr PUT /api/v1/indexer/1 -" < indexer.json
+```
+
 The apps are `radarr`, `sonarr`, `prowlarr` and `lazylibrarian`. Radarr and
 Sonarr answer under `/api/v3`, Prowlarr under `/api/v1`. For LazyLibrarian the
 path is the query after the key, starting with `cmd=`. A `GET` reads, anything
