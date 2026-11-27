@@ -6,7 +6,10 @@ COPY services/dashboard/Cargo.toml services/dashboard/
 COPY services/policy/Cargo.toml services/policy/
 COPY services/ratio/Cargo.toml services/ratio/
 COPY services/ups/Cargo.toml services/ups/
-RUN for manifest in services/*/Cargo.toml; do \
+COPY tests/repo/Cargo.toml tests/repo/
+RUN mkdir -p tests/repo/src && \
+    touch tests/repo/src/lib.rs && \
+    for manifest in services/*/Cargo.toml; do \
         mkdir -p "${manifest%/Cargo.toml}/src" && \
         echo 'fn main() {}' > "${manifest%/Cargo.toml}/src/main.rs"; \
     done && \
