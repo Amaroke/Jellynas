@@ -22,7 +22,7 @@ module.exports = {
 	flatLinking: false,
 	matchMode: "flexible",
 	skipRecheck: true,
-	includeSingleEpisodes: false,
+	includeSingleEpisodes: true,
 	includeNonVideos: true,
 	seasonFromEpisodes: 1,
 	excludeOlder: "15 days",
