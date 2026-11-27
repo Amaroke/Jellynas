@@ -140,3 +140,13 @@ fn uptime_kuma_stops_with_the_services_it_watches() {
     let uptime_kuma = all_services().remove("uptime-kuma").unwrap();
     assert_eq!(Some("true".to_string()), setting(&uptime_kuma, STOP_LABEL));
 }
+
+#[test]
+fn authelia_waits_for_lldap_when_the_backup_restarts_them() {
+    let mut services = all_services();
+    let lldap = services.remove("lldap").unwrap();
+    assert_eq!(Some("true".to_string()), setting(&lldap, STOP_LABEL));
+    let authelia = services.remove("authelia").unwrap().join(" ");
+    assert!(authelia.contains("until wget -q --spider http://lldap:17170/health"));
+    assert!(authelia.contains("exec /app/entrypoint.sh \"$$@\""));
+}

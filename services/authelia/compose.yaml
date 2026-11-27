@@ -39,6 +39,13 @@ services:
     volumes:
       - ./configuration.yml:/config/configuration.yml:ro
       - ${APPDATA_ROOT}/authelia:/var/lib/authelia
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        until wget -q --spider http://lldap:17170/health; do sleep 2; done;
+        exec /app/entrypoint.sh "$$@"
+      - authelia
     depends_on:
       lldap:
         condition: service_healthy
