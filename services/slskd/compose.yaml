@@ -42,6 +42,8 @@ services:
     healthcheck:
       test:
         - "CMD-SHELL"
-        - "wget --quiet --output-document /dev/null http://localhost:5030/health && getent hosts vps.slsknet.org"
+        - >-
+          wget --quiet --output-document /dev/null http://localhost:5030/health
+          && getent hosts vps.slsknet.org
       timeout: 10s
       start_period: 30s
