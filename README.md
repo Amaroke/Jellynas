@@ -64,7 +64,8 @@ guide is written so that an AI agent can follow it as well as a person.
   or dynv6 does the same job, or the NAS stays on the local network only.
 - **Optional**: a Discord server, where the NAS posts through webhooks: the
   alerts of Beszel, Uptime Kuma and the backup, the Requests of Seerr, the news
-  and links for the Friends, the Farm board and the pull requests of the repo.
+  and links for the Friends, the Patch notes, the Farm board and the pull
+  requests of the repo.
   The Music bot plays in its voice channels. ntfy, Gotify, Telegram or Matrix
   can carry the alerts and the Requests instead, since Seerr, Uptime Kuma,
   Beszel and the backup speak them too. The news and links, the Farm board, the
@@ -2045,6 +2046,42 @@ of news, add a new file, such as `discord-posts/2026-11-new-folder.md`, and
 publish it with `news` as the channel. Any channel works the same way once
 `.env` holds `DISCORD_<CHANNEL>_WEBHOOK_ID` and
 `DISCORD_<CHANNEL>_WEBHOOK_TOKEN`.
+
+### Patch notes
+
+The patch notes channel of the Discord server of the Friends holds the Patch
+notes, one Markdown file per note in `discord-posts/patch-notes/`, named after
+its date, such as `2026-11-27.md`, so the names sort oldest first. A note starts
+with a header that records the last merged pull request it covers, which the
+next note starts after:
+
+```markdown
+---
+covers: #507
+---
+
+# 📝 Patch note du 27/11/2026
+```
+
+The header stays off Discord, the rest follows the rules of the other
+messages. The `discord-posts` service publishes the notes after the other
+messages, oldest first: a note not yet posted is posted, a note changed in git
+is edited in place. `python3 -m unittest` fails on a note without its header or
+longer than Discord takes. Without the webhook, the service skips the notes
+silently.
+
+1. In Discord, in the server of the Friends, create a text channel for the
+   Patch notes. In its settings, Integrations > Webhooks, click "New Webhook",
+   name it `Jellynas`, and copy its URL,
+   `https://discord.com/api/webhooks/<id>/<token>`.
+2. In `.env`, set `DISCORD_PATCH_WEBHOOK_ID` and `DISCORD_PATCH_WEBHOOK_TOKEN`
+   to both parts of the URL.
+3. To publish without waiting for the night, click "Messages Discord" in the
+   quick actions of the Dashboard, or publish a single note from the Clone:
+
+   ```sh
+   python3 scripts/discord_post.py patch discord-posts/patch-notes/2026-11-27.md
+   ```
 
 ## PR radar
 

@@ -17,7 +17,7 @@ USER_AGENT = "DiscordBot (https://github.com/Amaroke/Jellynas, 1.0)"
 MAX_LENGTH = 4096
 TITLE_LENGTH = 256
 COLOR = 0xA78BFA
-COLORS = {"news": 0x34D399, "links": 0x60A5FA, "tutos": 0xF472B6}
+COLORS = {"news": 0x34D399, "links": 0x60A5FA, "tutos": 0xF472B6, "patch": 0xFBBF24}
 ROOT = Path(__file__).resolve().parent.parent
 POSTS = (
     ("links", "links.md"),
@@ -26,9 +26,11 @@ POSTS = (
     ("tutos", "aurral.md"),
     ("tutos", "tempus.md"),
 )
+PATCH_CHANNEL = "patch"
+PATCH_NOTES = "patch-notes"
 FAILURES = (OSError, ValueError, KeyError, http.client.HTTPException, SystemExit)
 ACTIONS = (
-    ("discord", "Messages Discord", "Liens et bienvenue"),
+    ("discord", "Messages Discord", "Liens, tutos et patch notes"),
 )
 ACTION_RUNNING = "Publication en cours"
 ACTIONS_PAGE = """<!doctype html>
@@ -60,6 +62,8 @@ button:focus-visible {{ outline: 2px solid var(--accent); outline-offset: 1px; }
 <main>{cards}</main>
 """
 VIDEO = re.compile(r"^📺 .*\n?", re.MULTILINE)
+HEADER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
+COVERS = re.compile(r"^covers: #(\d+)$", re.MULTILINE)
 BLOCK = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|-#|#|>|\||```)")
 
 
@@ -74,9 +78,14 @@ def read_env(path):
     return values
 
 
+def webhook_parts(env, channel):
+    name = channel.upper().replace("-", "_")
+    return [env.get(f"DISCORD_{name}_WEBHOOK_{part}", "").strip() for part in ("ID", "TOKEN")]
+
+
 def webhook(env, channel):
     name = channel.upper().replace("-", "_")
-    parts = [env.get(f"DISCORD_{name}_WEBHOOK_{part}", "").strip() for part in ("ID", "TOKEN")]
+    parts = webhook_parts(env, channel)
     if not all(parts):
         sys.exit(f"DISCORD_{name}_WEBHOOK_ID and DISCORD_{name}_WEBHOOK_TOKEN must be set in .env")
     return "/".join(parts)
@@ -97,9 +106,18 @@ def unwrap(text):
     return "\n".join(lines)
 
 
+def covers(path):
+    header = HEADER.match(Path(path).read_text(encoding="utf-8"))
+    found = header and COVERS.search(header[1])
+    if not found:
+        sys.exit(f"{path} must start with a header that gives the last pull request it covers, covers: #<number>")
+    return int(found[1])
+
+
 def render(path, env):
+    source = HEADER.sub("", Path(path).read_text(encoding="utf-8"), count=1)
     try:
-        text = unwrap(string.Template(Path(path).read_text(encoding="utf-8")).substitute(env).strip())
+        text = unwrap(string.Template(source).substitute(env).strip())
     except KeyError as error:
         sys.exit(f"{path} uses ${error.args[0]}, which .env does not set")
     content = re.sub(r"<(https?://[^>]+)>", r"\1", "\n".join(line.strip() for line in VIDEO.findall(text)))
@@ -155,12 +173,22 @@ def publish(channel, path, env, api=API, now=None):
     return f"Posted {path} in {channel}"
 
 
+def posts(folder):
+    folder = Path(folder)
+    notes = sorted((folder / PATCH_NOTES).glob("*.md"))
+    return [(channel, folder / name) for channel, name in POSTS] + [(PATCH_CHANNEL, path) for path in notes]
+
+
 def publish_all(env, folder=ROOT / "discord-posts", api=API):
-    for channel, name in POSTS:
+    for channel, path in posts(folder):
+        if channel == PATCH_CHANNEL and not all(webhook_parts(env, channel)):
+            continue
         try:
-            print(publish(channel, Path(folder) / name, env, api))
+            if channel == PATCH_CHANNEL:
+                covers(path)
+            print(publish(channel, path, env, api))
         except FAILURES as error:
-            print(f"Cannot publish {name} in {channel}: {error}")
+            print(f"Cannot publish {path.name} in {channel}: {error}")
 
 
 def action_card(key, label, hint, done):

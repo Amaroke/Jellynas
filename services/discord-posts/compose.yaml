@@ -24,6 +24,8 @@ services:
       DISCORD_NEWS_WEBHOOK_TOKEN: ${DISCORD_NEWS_WEBHOOK_TOKEN}
       DISCORD_TUTOS_WEBHOOK_ID: ${DISCORD_TUTOS_WEBHOOK_ID}
       DISCORD_TUTOS_WEBHOOK_TOKEN: ${DISCORD_TUTOS_WEBHOOK_TOKEN}
+      DISCORD_PATCH_WEBHOOK_ID: ${DISCORD_PATCH_WEBHOOK_ID}
+      DISCORD_PATCH_WEBHOOK_TOKEN: ${DISCORD_PATCH_WEBHOOK_TOKEN}
     labels:
       kuma.discord-posts.docker.name: Discord posts
       docker-volume-backup.stop-during-backup: "true"

@@ -14,6 +14,8 @@ from discord_post import (
     MAX_LENGTH,
     next_run,
     publish,
+    covers,
+    posts,
     publish_all,
     read_env,
     render,
@@ -185,6 +187,79 @@ class DailyTest(unittest.TestCase):
         self.assertIn("Cannot publish welcome.md", out.getvalue())
 
 
+class PatchNotesTest(unittest.TestCase):
+    def setUp(self):
+        self.discord = Discord()
+        self.addCleanup(self.discord.server_close)
+        self.addCleanup(self.discord.shutdown)
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.folder = Path(folder.name)
+        (self.folder / "patch-notes").mkdir()
+        self.env = {
+            "APPDATA_ROOT": str(self.folder / "appdata"),
+            "DISCORD_PATCH_WEBHOOK_ID": "1234",
+            "DISCORD_PATCH_WEBHOOK_TOKEN": "abcd",
+        }
+
+    def note(self, name, pull, text):
+        path = self.folder / "patch-notes" / name
+        path.write_text(f"---\ncovers: #{pull}\n---\n\n# Patch note\n\n{text}\n", encoding="utf-8")
+        return path
+
+    def publish_all(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            publish_all(self.env, self.folder, self.discord.url)
+        return out.getvalue()
+
+    def test_a_note_is_posted_in_the_patch_channel_without_its_header(self):
+        self.note("2026-11-02.md", 30, "Nouveau.")
+        self.publish_all()
+        method, path, body = self.discord.calls[0]
+        self.assertEqual(("POST", "/1234/abcd?wait=true"), (method, path))
+        self.assertEqual("Patch note", body["embeds"][0]["title"])
+        self.assertEqual("Nouveau.", body["embeds"][0]["description"])
+
+    def test_notes_are_posted_oldest_first(self):
+        self.note("2026-11-16.md", 60, "Troisième.")
+        self.note("2026-11-02.md", 30, "Première.")
+        self.note("2026-11-09.md", 45, "Deuxième.")
+        self.publish_all()
+        found = [call[2]["embeds"][0]["description"] for call in self.discord.calls]
+        self.assertEqual(["Première.", "Deuxième.", "Troisième."], found)
+
+    def test_a_changed_note_is_edited_in_place(self):
+        path = self.note("2026-11-02.md", 30, "Première.")
+        self.publish_all()
+        path.write_text(path.read_text(encoding="utf-8").replace("Première.", "Corrigée."), encoding="utf-8")
+        self.publish_all()
+        self.assertEqual(["POST", "PATCH"], [call[0] for call in self.discord.calls])
+        self.assertEqual({"1": "Corrigée."}, self.discord.messages)
+
+    def test_a_note_records_the_last_pull_request_it_covers(self):
+        self.assertEqual(507, covers(self.note("2026-11-27.md", 507, "Fin.")))
+
+    def test_a_note_without_its_last_pull_request_is_refused(self):
+        path = self.folder / "patch-notes" / "2026-11-02.md"
+        path.write_text("# Patch note\n\nRien.\n", encoding="utf-8")
+        with self.assertRaisesRegex(SystemExit, "covers"):
+            covers(path)
+
+    def test_the_patch_notes_follow_the_other_messages(self):
+        self.note("2026-11-02.md", 30, "Première.")
+        found = [(channel, Path(path).name) for channel, path in posts(self.folder)]
+        self.assertEqual(("links", "links.md"), found[0])
+        self.assertEqual(("patch", "2026-11-02.md"), found[-1])
+
+    def test_without_the_webhook_the_notes_are_skipped_silently(self):
+        self.note("2026-11-02.md", 30, "Première.")
+        del self.env["DISCORD_PATCH_WEBHOOK_ID"], self.env["DISCORD_PATCH_WEBHOOK_TOKEN"]
+        out = self.publish_all()
+        self.assertEqual([], self.discord.calls)
+        self.assertNotIn("2026-11-02.md", out)
+
+
 class ActionsTest(unittest.TestCase):
     def start(self):
         self.wake = threading.Event()
@@ -241,11 +316,16 @@ class ActionsTest(unittest.TestCase):
 class MessagesTest(unittest.TestCase):
     def test_every_message_fits_in_discord(self):
         env = {**read_env(ROOT / ".env.example"), "DOMAIN": "example.com", "CADDY_HTTPS_PORT": "50000"}
-        for path in sorted((ROOT / "discord-posts").glob("*.md")):
+        for path in sorted((ROOT / "discord-posts").glob("**/*.md")):
             with self.subTest(path.name):
                 _, embed = render(path, env)
                 self.assertTrue(embed.get("title"))
                 self.assertLessEqual(len(embed["description"]), MAX_LENGTH)
+
+    def test_every_patch_note_records_the_last_pull_request_it_covers(self):
+        for path in sorted((ROOT / "discord-posts" / "patch-notes").glob("*.md")):
+            with self.subTest(path.name):
+                self.assertGreater(covers(path), 0)
 
     def test_joins_the_lines_wrapped_in_the_file(self):
         text = "# Title\n\nA long\nparagraph.\n-# A long\nsubtext.\n\n- An item\n  wrapped\n- Another\n\n```\nkept\nas is\n```"
