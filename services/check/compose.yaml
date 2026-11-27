@@ -5,7 +5,7 @@ services:
   check:
     build:
       context: ../..
-      dockerfile: services/check/Dockerfile
+      target: check
     networks:
       - internal-zone
     security_opt:

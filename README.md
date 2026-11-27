@@ -359,9 +359,9 @@ docker compose -f services/doco-cd/compose.yaml up -d
 Each deploy runs from a copy of the merged revision, kept in the data volume of
 doco-cd. It recreates the services whose compose definition or image changed,
 and those that mount a file of the repo that changed, such as
-`services/cross-seed/config.js`. It rebuilds the services built from their
-Dockerfile, such as Caddy, policy, ratio and the Dashboard,
-and removes the services commented out in `compose.yaml`. A failed deploy is
+`services/cross-seed/config.js`. It rebuilds the services built from a
+Dockerfile, such as Caddy and the Rust services of the root `Dockerfile`, and
+removes the services commented out in `compose.yaml`. A failed deploy is
 retried at the next poll, a minute later.
 
 doco-cd reaches Docker through its socket, which gives it full control of the
@@ -406,7 +406,7 @@ and the Dependency Dashboard issue lists every pending update.
 - The Python packages of `services/music-bot/requirements.txt`
 - The Rust crates of the Cargo workspace, locked once in `Cargo.lock`
 - The Rust version of `rust-toolchain.toml`, in the same pull request as the
-  `rust` images of the Dockerfiles
+  `rust` image of the root `Dockerfile`
 - The GitHub Actions and the pre-commit hook
 - The tools pinned in `.github/workflows/ci.yml`: gitleaks, hadolint,
   actionlint, yamllint, ruff, zizmor, markdownlint-cli2 and
@@ -2175,11 +2175,12 @@ shows the `curl` command it ran. cross-seed then names the torrent in its logs.
 
 ### ratio
 
-ratio, `services/ratio`, is written in Rust and built from its Dockerfile. It
-runs every minute, and at once when a switch or a setting of the Farm changes.
-It works for C411 only and reads it through its own API, ten calls a minute at
-most and 30 per run, the rest waiting for the next run. Every HTTPS call of
-ratio goes through the proxy of Gluetun, so C411 only sees the VPN address.
+ratio, `services/ratio`, is written in Rust and built from the root
+`Dockerfile`. It runs every minute, and at once when a switch or a setting of
+the Farm changes. It works for C411 only and reads it through its own API, ten
+calls a minute at most and 30 per run, the rest waiting for the next run.
+Every HTTPS call of ratio goes through the proxy of Gluetun, so C411 only sees
+the VPN address.
 Every switch and setting below lives in the Farm section of the Dashboard.
 
 1. **Reads the account.** It reads the profile of C411 once per run with

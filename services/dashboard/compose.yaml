@@ -3,7 +3,7 @@ services:
   dashboard:
     build:
       context: ../..
-      dockerfile: services/dashboard/Dockerfile
+      target: dashboard
     container_name: dashboard
     restart: unless-stopped
     depends_on:
