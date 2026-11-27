@@ -204,7 +204,7 @@ or Authelia at the same address a Friend uses.
 
 Jellyfin, Seerr, Aurral, Kavita and Authelia face the internet, so a flaw in one
 of them must not land next to the rest of the NAS. The services sit in six
-Docker networks:
+Docker networks, apart from the Docker socket proxies:
 
 | Zone            | Services                                                   |
 | --------------- | ---------------------------------------------------------- |
@@ -214,6 +214,9 @@ Docker networks:
 | `kavita-zone`   | Caddy, Kavita                                              |
 | `identity-zone` | Caddy, Authelia, lldap, policy                             |
 | `internal-zone` | every other service, plus Caddy, Radarr, Sonarr, Gluetun   |
+
+Each Docker socket proxy sits apart, in a zone with its readers only, so no
+other service reaches it. [Observation](#observation) lists them.
 
 qBittorrent and slskd share the network of Gluetun, in the internal zone, and
 the Beszel agent the network of the Host. A service that needs Jellyfin, Seerr,
@@ -2309,15 +2312,33 @@ container. All three are reached from the local network only, behind their own
 login.
 
 None of them can start, stop or change a container: git stays the only way to
-change the NAS. Dozzle, Uptime Kuma, AutoKuma and the Beszel agent reach Docker
-through the socket proxy, a [read-only
-proxy](https://docs.linuxserver.io/images/docker-socket-proxy/) that lets
-through the list of the containers, their logs, stats and events, and the
-version and info of Docker, and refuses every write. A read-only mount of the
-socket would not do: the Docker API stays writable through it. The proxy listens
-in the internal zone, and on the loopback of the Host for the Beszel agent. Only
-the proxy, backup and doco-cd mount the socket, which `python3 -m unittest`
-checks, and `./scripts/verify.sh` checks that the proxy refuses a write.
+change the NAS. They reach Docker through [read-only
+proxies](https://docs.linuxserver.io/images/docker-socket-proxy/) that refuse
+every write. A read-only mount of the socket would not do: the Docker API stays
+writable through it. The inspect of a container returns its whole environment,
+secrets included, so every proxy runs `services/socket-proxy/haproxy.cfg`, the
+template of the image with two more rules: one refuses an inspect unless
+`ALLOW_INSPECT` is on, the other refuses an attach, which would read the output
+of a container around the logs. A new image of the proxy fails `python3 -m
+unittest` until its template is copied again. Each proxy sits in a zone of its
+own with its readers:
+
+- `socket-proxy`, in `autokuma-docker-zone`, for AutoKuma and the Beszel agent:
+  the list and the stats of the containers, and the version and info of Docker.
+- `uptime-kuma-socket-proxy`, in `uptime-kuma-docker-zone`, for Uptime Kuma: the
+  same, plus the inspect.
+- `dozzle-socket-proxy`, in `dozzle-docker-zone`, for Dozzle: the same as Uptime
+  Kuma, plus the logs and the events.
+- `dashboard-socket-proxy`, in `dashboard-docker-zone`, for the
+  [Dashboard](#dashboard).
+
+The Docker monitors of Uptime Kuma read the state of a container from its
+inspect, and Dozzle its details, so each gets a proxy no other service reaches.
+The Beszel agent runs in the network of the Host, so `socket-proxy` also listens
+on `127.0.0.1:2375` of the Host, where it serves no inspect. Only the proxies,
+backup and doco-cd mount the socket, which `python3 -m unittest` checks, and
+`./scripts/verify.sh` checks that `socket-proxy` refuses a write and an
+inspect.
 
 ### Discord alerts
 
@@ -2353,7 +2374,7 @@ Beszel shows the processor, the memory, the disks, the network and the
 temperatures of the Host and of every container, over time. Its agent runs in
 the network of the Host to see its interfaces, and opens no port: the hub
 reaches it through a socket that both containers share. The agent reads Docker
-through the socket proxy, on the loopback of the Host. Container details are off
+through `socket-proxy`, on the loopback of the Host. Container details are off
 in Beszel, since they show the environment of each container, secrets included.
 Dozzle shows the logs instead. Netdata, or Prometheus with Grafana, can replace
 it, with far more to set up.
@@ -2413,7 +2434,7 @@ creates and updates the monitors of Uptime Kuma to match the running containers.
 It never deletes one, so a container that stops stays down in Uptime Kuma and on
 its status page: delete the monitor of a service commented out in `compose.yaml`
 by hand. AutoKuma also creates the Discord notification and the Docker host
-`NAS`, which reads Docker through the socket proxy, from the labels of its own
+`NAS`, which reads Docker through its own socket proxy, from the labels of its own
 service. Gatus can replace both with checks kept in a file.
 
 ### Account

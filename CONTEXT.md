@@ -174,8 +174,8 @@ _Avoid_: local URL, internal address
 **Network zone**:
 A Docker network that groups the services one exposed service may reach:
 Jellyfin with Caddy and lldap, Seerr with Caddy, Radarr and Sonarr, Aurral with
-Caddy and Lidarr, Authelia with Caddy and lldap, the Dashboard with its own
-Docker socket proxy, every other service in the internal zone. A zone only opens
+Caddy and Lidarr, Authelia with Caddy and lldap, each Docker socket proxy with
+its readers only, every other service in the internal zone. A zone only opens
 towards the exposed services, through their Public names.
 _Avoid_: VLAN, segment, subnet
 

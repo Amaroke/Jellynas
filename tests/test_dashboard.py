@@ -18,6 +18,7 @@ ESSENTIAL = {
     "lldap",
     "socket-proxy",
     "dashboard-socket-proxy",
+    "uptime-kuma-socket-proxy",
     "doco-cd",
     "gluetun",
     "ups",
