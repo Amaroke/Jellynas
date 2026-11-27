@@ -67,6 +67,10 @@ identity_providers:
           - name
           - email
           - groups
+    lifespans:
+      custom:
+        kavita:
+          refresh_token: 8d
     authorization_policies:
       admin_two_factor:
         default_policy: one_factor
@@ -95,6 +99,7 @@ identity_providers:
         client_secret: '{{ secret "/var/lib/authelia/kavita.digest" }}'
         public: false
         authorization_policy: admin_two_factor
+        lifespan: kavita
         consent_mode: implicit
         claims_policy: id_token_claims
         redirect_uris:
@@ -105,6 +110,8 @@ identity_providers:
           - profile
           - email
           - offline_access
+        response_types:
+          - code
         grant_types:
           - authorization_code
           - refresh_token
