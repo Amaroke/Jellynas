@@ -2046,24 +2046,38 @@ its file.
 
 The patch notes channel of the Discord server of the Friends holds the Patch
 notes, one Markdown file per note in `discord-posts/patch-notes/`, named after
-its date, such as `2026-11-27.md`, so the names sort oldest first. A note starts
-with a header that records the last merged pull request it covers, which the
-next note starts after:
+its date, such as `2026-11-27.md`, so the names sort oldest first. A note is a
+header that records the last merged pull request it covers, which the next note
+starts after, then the list of what changed:
 
 ```markdown
 ---
 covers: #507
 ---
 
-# 📝 Patch note du 27/11/2026
+- 📚 Les livres en français arrivent dans LazyLibrarian.
+- 🔑 La connexion à Kavita tient plus longtemps.
 ```
 
-The header stays off Discord, the rest follows the rules of the other
-messages. The `discord-posts` service publishes the notes after the other
-messages, oldest first: a note not yet posted is posted, a note changed in git
-is edited in place. `cargo test -p discord-posts` fails on a note without its
-header or longer than Discord takes. Without the webhook, the service skips
-the notes silently.
+Each note becomes an embed titled by its date, "Patch note du 27 novembre
+2026", and dated to that day on Discord, whatever the day it is posted. The
+header stays off Discord, and the list follows the rules of the other messages.
+A note never gives its own `#` heading.
+
+The `discord-posts` service publishes the notes after the other messages,
+oldest first: a note not yet posted is posted, a note changed in git is edited
+in place. Discord shows messages in the order they are posted, so the service
+refuses to post a note out of order:
+
+- a note waits until every older note is posted,
+- a note older than one already posted is refused, as is a deleted note posted
+  again after a newer one. Delete the newer messages in Discord and their ids in
+  `${APPDATA_ROOT}/discord-posts/state.json` to post them again in order,
+- a note must cover later pull requests than the note before it.
+
+`cargo test -p discord-posts` fails on a note that breaks these rules, has no
+header, is no list or is longer than Discord takes. Without the webhook, the
+service skips the notes silently.
 
 1. In Discord, in the server of the Friends, create a text channel for the
    Patch notes. In its settings, Integrations > Webhooks, click "New Webhook",

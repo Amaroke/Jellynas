@@ -54,4 +54,6 @@ The reply gives each message an `outcome`: `posted`, `edited`, `skipped` (a
 Patch note without its webhook in `.env`) or `failed` with its `error`. Show
 the outcomes as a table. For a failure, name the cause: a webhook missing from
 `.env` is for the Admin to set, a placeholder missing from `.env` or a message
-too long is a fix in the repo.
+too long is a fix in the repo. A Patch note refused for its order stays
+unposted: say which note blocks it, and never work around the order, since
+Discord would show the notes out of order for good.

@@ -1,5 +1,6 @@
 use crate::message::{self, Message};
 use jiff::ZonedDateTime;
+use jiff::civil::Date;
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::fs;
@@ -14,6 +15,21 @@ const POSTS: [(&str, &str); 5] = [
     ("tutos", "aurral-video.md"),
     ("tutos", "aurral.md"),
     ("tutos", "tempus.md"),
+];
+
+const MONTHS: [&str; 12] = [
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
 ];
 
 pub trait Discord {
@@ -129,12 +145,85 @@ impl Publisher<'_> {
 
     pub fn render(&self, post: &Post) -> Result<Message, String> {
         let source = self.read(post)?;
-        if post.channel == PATCH_CHANNEL && message::covers(&source).is_none() {
+        let mut rendered = message::render(&source, &self.env)?;
+        if post.channel != PATCH_CHANNEL {
+            return Ok(rendered);
+        }
+        let date = note_date(post)?;
+        if message::covers(&source).is_none() {
             return Err(
                 "it must start with a header that gives the last pull request it covers, covers: #<number>".into(),
             );
         }
-        message::render(&source, &self.env)
+        if rendered.embed.contains_key("title") {
+            return Err("a Patch note takes its title from its date, drop its # heading".into());
+        }
+        let description = rendered.embed["description"].as_str().unwrap_or_default();
+        if !description.starts_with("- ") {
+            return Err("a Patch note is the list of what changed, it starts with a - item".into());
+        }
+        let month = MONTHS[usize::try_from(date.month() - 1).unwrap_or_default()];
+        rendered.embed.insert(
+            "title".into(),
+            json!(format!(
+                "Patch note du {} {month} {}",
+                date.day(),
+                date.year()
+            )),
+        );
+        rendered
+            .embed
+            .insert("timestamp".into(), json!(format!("{date}T12:00:00Z")));
+        Ok(rendered)
+    }
+
+    fn notes(&self) -> Vec<Post> {
+        self.posts()
+            .into_iter()
+            .filter(|post| post.channel == PATCH_CHANNEL)
+            .collect()
+    }
+
+    pub fn check_notes(&self) -> Result<(), String> {
+        let mut last: Option<(String, u64)> = None;
+        for note in self.notes() {
+            note_date(&note)?;
+            let covers = message::covers(&self.read(&note)?)
+                .ok_or_else(|| format!("{} gives no covers: #<number> header", note.file))?;
+            if let Some((file, previous)) = &last
+                && covers <= *previous
+            {
+                return Err(format!(
+                    "{} covers up to #{covers}, which is not after #{previous} of {file}",
+                    note.file
+                ));
+            }
+            last = Some((note.file.clone(), covers));
+        }
+        Ok(())
+    }
+
+    fn out_of_order(&self, post: &Post) -> Option<String> {
+        let notes = self.notes();
+        let at = notes.iter().position(|note| note == post)?;
+        if let Some(earlier) = notes[..at]
+            .iter()
+            .find(|note| self.message_id(note).is_none())
+        {
+            return Some(format!(
+                "{} is not posted yet, and Discord shows the Patch notes in the order they are posted",
+                earlier.file
+            ));
+        }
+        notes[at + 1..]
+            .iter()
+            .find(|note| self.message_id(note).is_some())
+            .map(|later| {
+                format!(
+                    "{} is already posted, so this older note would show after it. Delete the later messages and their ids in the state to post them again in order",
+                    later.file
+                )
+            })
     }
 
     pub fn publish(&self, post: &Post, now: &ZonedDateTime) -> Outcome {
@@ -156,12 +245,18 @@ impl Publisher<'_> {
     }
 
     fn send(&self, post: &Post, hook: &str, now: &ZonedDateTime) -> Result<Outcome, String> {
+        let patch = post.channel == PATCH_CHANNEL;
+        if patch {
+            self.check_notes()?;
+        }
         let Message { content, mut embed } = self.render(post)?;
         embed.insert("color".into(), json!(color(&post.channel)));
-        embed.insert(
-            "footer".into(),
-            json!({"text": format!("Dernière mise à jour : {} à {}", now.strftime("%d/%m/%Y"), now.strftime("%H:%M"))}),
-        );
+        if !patch {
+            embed.insert(
+                "footer".into(),
+                json!({"text": format!("Dernière mise à jour : {} à {}", now.strftime("%d/%m/%Y"), now.strftime("%H:%M"))}),
+            );
+        }
         let body =
             json!({"content": content, "embeds": [embed], "allowed_mentions": {"parse": []}});
         if let Some(id) = self.message_id(post) {
@@ -173,6 +268,9 @@ impl Publisher<'_> {
                 404 => {}
                 _ => return Err(format!("Discord answered {status} to the edit: {reply}")),
             }
+        }
+        if patch && let Some(problem) = self.out_of_order(post) {
+            return Err(problem);
         }
         let (status, reply) = self
             .discord
@@ -201,6 +299,19 @@ impl Publisher<'_> {
             })
             .collect()
     }
+}
+
+fn note_date(post: &Post) -> Result<Date, String> {
+    Path::new(&post.file)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .and_then(|stem| stem.parse::<Date>().ok())
+        .ok_or_else(|| {
+            format!(
+                "{} must be named after its date, such as 2026-11-27.md",
+                post.file
+            )
+        })
 }
 
 #[cfg(test)]
@@ -293,7 +404,7 @@ mod tests {
         fn note(&self, name: &str, pull: u64, text: &str) {
             self.write(
                 &format!("{PATCH_NOTES}/{name}"),
-                &format!("---\ncovers: #{pull}\n---\n\n# Patch note\n\n{text}\n"),
+                &format!("---\ncovers: #{pull}\n---\n\n- {text}\n"),
             );
         }
 
@@ -411,15 +522,30 @@ mod tests {
         );
     }
 
+    fn outcome(results: &[(Post, Outcome)], file: &str) -> String {
+        let (_, outcome) = results.iter().find(|(post, _)| post.file == file).unwrap();
+        match outcome {
+            Outcome::Failed(error) => format!("failed: {error}"),
+            other => format!("{other:?}"),
+        }
+    }
+
     #[test]
-    fn a_note_is_posted_in_the_patch_channel_without_its_header() {
+    fn a_note_is_an_embed_titled_by_its_date_and_dated_on_discord() {
         let setup = Setup::new();
         setup.note("2026-11-02.md", 30, "Nouveau.");
         setup.publish_all();
         let (_, url, body) = setup.fake.calls.borrow()[0].clone();
         assert_eq!("https://discord/5678/efgh?wait=true", url);
-        assert_eq!("Patch note", body["embeds"][0]["title"]);
-        assert_eq!(json!(0xFBBF24), body["embeds"][0]["color"]);
+        assert_eq!(
+            json!([{
+                "title": "Patch note du 2 novembre 2026",
+                "description": "- Nouveau.",
+                "color": 0xFBBF24,
+                "timestamp": "2026-11-02T12:00:00Z",
+            }]),
+            body["embeds"]
+        );
     }
 
     #[test]
@@ -431,7 +557,7 @@ mod tests {
         setup.note("2026-11-09.md", 45, "Deuxième.");
         setup.publish_all();
         assert_eq!(
-            vec!["links", "Première.", "Deuxième.", "Troisième."],
+            vec!["links", "- Première.", "- Deuxième.", "- Troisième."],
             setup.fake.descriptions()
         );
     }
@@ -443,16 +569,9 @@ mod tests {
         setup.publish_all();
         setup.note("2026-11-02.md", 30, "Corrigée.");
         setup.publish_all();
-        let patch: Vec<String> = setup
-            .fake
-            .calls
-            .borrow()
-            .iter()
-            .map(|call| call.0.clone())
-            .collect();
-        assert_eq!(vec!["POST", "PATCH"], patch);
+        assert_eq!(vec!["POST", "PATCH"], setup.fake.methods());
         assert_eq!(
-            vec![Some("Corrigée.".to_string())],
+            vec![Some("- Corrigée.".to_string())],
             *setup.fake.messages.borrow()
         );
     }
@@ -460,15 +579,92 @@ mod tests {
     #[test]
     fn a_note_without_its_last_pull_request_is_refused() {
         let setup = Setup::new();
-        setup.write(
-            &format!("{PATCH_NOTES}/2026-11-02.md"),
-            "# Patch note\n\nRien.\n",
-        );
+        setup.write(&format!("{PATCH_NOTES}/2026-11-02.md"), "- Rien.\n");
         let results = setup.publish_all();
         assert!(setup.fake.calls.borrow().is_empty());
-        assert!(
-            matches!(&results.last().unwrap().1, Outcome::Failed(error) if error.contains("covers"))
+        assert!(outcome(&results, "patch-notes/2026-11-02.md").contains("covers"));
+    }
+
+    #[test]
+    fn a_note_takes_no_heading_of_its_own() {
+        let setup = Setup::new();
+        setup.write(
+            &format!("{PATCH_NOTES}/2026-11-02.md"),
+            "---\ncovers: #30\n---\n\n# Titre\n\n- Rien.\n",
         );
+        let results = setup.publish_all();
+        assert!(outcome(&results, "patch-notes/2026-11-02.md").contains("heading"));
+    }
+
+    #[test]
+    fn a_note_is_a_list() {
+        let setup = Setup::new();
+        setup.write(
+            &format!("{PATCH_NOTES}/2026-11-02.md"),
+            "---\ncovers: #30\n---\n\nUn paragraphe.\n",
+        );
+        let results = setup.publish_all();
+        assert!(outcome(&results, "patch-notes/2026-11-02.md").contains("list"));
+    }
+
+    #[test]
+    fn a_note_is_named_after_its_date() {
+        let setup = Setup::new();
+        setup.note("novembre.md", 30, "Rien.");
+        let results = setup.publish_all();
+        assert!(outcome(&results, "patch-notes/novembre.md").contains("named after its date"));
+    }
+
+    #[test]
+    fn a_later_note_must_cover_later_pull_requests() {
+        let setup = Setup::new();
+        setup.note("2026-11-02.md", 45, "Première.");
+        setup.note("2026-11-09.md", 30, "Deuxième.");
+        let results = setup.publish_all();
+        assert!(setup.fake.calls.borrow().is_empty());
+        assert!(outcome(&results, "patch-notes/2026-11-02.md").contains("not after #45"));
+    }
+
+    #[test]
+    fn a_note_waits_for_the_older_ones() {
+        let setup = Setup::new();
+        setup.note("2026-11-02.md", 30, "Première.");
+        setup.note("2026-11-09.md", 45, "Deuxième.");
+        let results = setup
+            .publisher()
+            .publish_all(Some("patch-notes/2026-11-09.md"), &now());
+        assert!(setup.fake.calls.borrow().is_empty());
+        assert!(
+            outcome(&results, "patch-notes/2026-11-09.md")
+                .contains("2026-11-02.md is not posted yet")
+        );
+    }
+
+    #[test]
+    fn an_older_note_is_never_posted_after_a_newer_one() {
+        let setup = Setup::new();
+        setup.note("2026-11-02.md", 30, "Première.");
+        setup.note("2026-11-16.md", 60, "Troisième.");
+        setup.publish_all();
+        setup.note("2026-11-09.md", 45, "Deuxième.");
+        let results = setup.publish_all();
+        assert_eq!(vec!["POST", "POST", "PATCH", "PATCH"], setup.fake.methods());
+        assert!(
+            outcome(&results, "patch-notes/2026-11-09.md")
+                .contains("2026-11-16.md is already posted")
+        );
+    }
+
+    #[test]
+    fn a_deleted_note_is_not_posted_again_after_a_newer_one() {
+        let setup = Setup::new();
+        setup.note("2026-11-02.md", 30, "Première.");
+        setup.note("2026-11-09.md", 45, "Deuxième.");
+        setup.publish_all();
+        setup.fake.messages.borrow_mut()[0] = None;
+        let results = setup.publish_all();
+        assert_eq!(vec!["POST", "POST", "PATCH", "PATCH"], setup.fake.methods());
+        assert!(outcome(&results, "patch-notes/2026-11-02.md").contains("already posted"));
     }
 
     #[test]
@@ -490,6 +686,6 @@ mod tests {
             .publisher()
             .publish_all(Some("patch-notes/2026-11-02.md"), &now());
         assert_eq!(1, results.len());
-        assert_eq!(vec!["Première."], setup.fake.descriptions());
+        assert_eq!(vec!["- Première."], setup.fake.descriptions());
     }
 }

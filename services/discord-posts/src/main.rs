@@ -395,7 +395,7 @@ mod tests {
         fs::create_dir_all(folder.path().join("patch-notes")).unwrap();
         fs::write(
             folder.path().join("patch-notes/2026-11-02.md"),
-            "---\ncovers: #30\n---\n\n# Patch note\n\nNouveau.\n",
+            "---\ncovers: #30\n---\n\n- Nouveau.\n",
         )
         .unwrap();
         let env = HashMap::from([
@@ -565,6 +565,7 @@ mod tests {
             ]),
             discord: &fake,
         };
+        publisher.check_notes().unwrap();
         for post in publisher.posts() {
             let message = publisher
                 .render(&post)
