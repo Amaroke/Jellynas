@@ -19,6 +19,16 @@ Python or shell only when Rust cannot do the job, and say why in the pull
 request. When you change an existing Python or shell script substantially,
 port it to Rust instead.
 
+## Testing
+
+The `ups` crate builds only on Linux. On another system, run the workspace
+tests with `--exclude ups` and do not mention it to the Admin.
+
+## Front-end changes
+
+When a change touches what a page looks like, attach two screenshots of the
+result as proof: one at desktop width and one at phone width.
+
 ## Finishing a change
 
 Once a change is committed, push its branch, open a pull request whose body
