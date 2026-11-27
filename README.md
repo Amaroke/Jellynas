@@ -2142,7 +2142,9 @@ only anime, so it costs nothing to search it for the other works.
 cross-seed searches the private indexers of Prowlarr for torrents that hold the
 same data as one already in qBittorrent, and adds them seeding from a hardlink,
 without downloading anything. Its config is `services/cross-seed/config.js`,
-which reads every value from `.env`.
+which reads every value from `.env`. Its RSS and its searches skip single
+episodes, which trackers trump in favour of season packs, while the hook of
+qBittorrent still asks it to match each finished episode.
 
 1. In `.env`, set `CROSS_SEED_API_KEY` to a new key, and
    `CROSS_SEED_INDEXER_IDS` to the ids of the private indexers to search, C411
