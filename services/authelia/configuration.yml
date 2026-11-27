@@ -83,6 +83,7 @@ identity_providers:
         claims_policy: id_token_claims
         redirect_uris:
           - '{{ env "AURRAL_URL" }}/sso/callback'
+          - '{{ env "AURRAL_LAN_URL" }}/sso/callback'
         scopes:
           - openid
           - profile
@@ -98,6 +99,7 @@ identity_providers:
         claims_policy: id_token_claims
         redirect_uris:
           - '{{ env "KAVITA_URL" }}/signin-oidc'
+          - '{{ env "KAVITA_LAN_URL" }}/signin-oidc'
         scopes:
           - openid
           - profile
