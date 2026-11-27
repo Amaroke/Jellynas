@@ -269,3 +269,17 @@ fn notification_config_is_json() {
         );
     }
 }
+
+#[test]
+fn every_monitor_retries_twice_before_it_alerts() {
+    for (kind, settings) in default_settings() {
+        assert_eq!(
+            Some("2"),
+            settings.get("max_retries").map(String::as_str),
+            "{kind}"
+        );
+    }
+    for (id, entity) in entities() {
+        assert!(!entity.settings.contains_key("max_retries"), "{id}");
+    }
+}
