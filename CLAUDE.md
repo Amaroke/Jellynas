@@ -17,8 +17,7 @@ When you need a choice or an approval from the Admin, offer buttons
 Write new code in Rust: services, scripts, CLIs and tests alike. Reach for
 Python or shell only when Rust cannot do the job, and say why in the pull
 request. When you change an existing Python or shell script substantially,
-port it to Rust instead. Until the repo tests are ported (#476), new tests of
-existing Python code go in the `unittest` suite under `tests/`.
+port it to Rust instead.
 
 ## Finishing a change
 
