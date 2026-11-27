@@ -1,26 +1,19 @@
 [package]
 name = "dashboard"
 version = "0.1.0"
-edition = "2024"
-publish = false
+edition.workspace = true
+publish.workspace = true
 
 [dependencies]
 axum = "0.8"
 futures-util = { version = "0.3", default-features = false }
-jiff = { version = "1.0", features = ["tzdb-bundle-always"] }
+jiff = { workspace = true, features = ["tzdb-bundle-always"] }
 minijinja = { version = "3.1", features = ["json", "serde"] }
 resvg = { version = "0.50.0", default-features = false, features = ["text"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde.workspace = true
+serde_json.workspace = true
 tokio = { version = "1.54", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
-ureq = { version = "3.0", features = ["json"] }
+ureq = { workspace = true, features = ["json"] }
 
 [dev-dependencies]
-tempfile = "3"
-
-[profile.release]
-codegen-units = 1
-lto = true
-opt-level = "s"
-panic = "abort"
-strip = true
+tempfile.workspace = true

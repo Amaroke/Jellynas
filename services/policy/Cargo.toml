@@ -1,17 +1,10 @@
 [package]
 name = "policy"
 version = "0.1.0"
-edition = "2024"
-publish = false
+edition.workspace = true
+publish.workspace = true
 
 [dependencies]
-jiff = { version = "1.0", features = ["tzdb-bundle-always"] }
-serde_json = "1.0"
-ureq = { version = "3.0", features = ["json"] }
-
-[profile.release]
-codegen-units = 1
-lto = true
-opt-level = "s"
-panic = "abort"
-strip = true
+jiff = { workspace = true, features = ["tzdb-bundle-always"] }
+serde_json.workspace = true
+ureq = { workspace = true, features = ["json"] }

@@ -1,7 +1,9 @@
 ---
 services:
   ups:
-    build: .
+    build:
+      context: ../..
+      target: ups
     container_name: ups
     restart: unless-stopped
     networks:

@@ -1,7 +1,9 @@
 ---
 services:
   ratio:
-    build: .
+    build:
+      context: ../..
+      target: ratio
     container_name: ratio
     restart: unless-stopped
     networks:

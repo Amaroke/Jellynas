@@ -1,7 +1,9 @@
 ---
 services:
   policy:
-    build: .
+    build:
+      context: ../..
+      target: policy
     container_name: policy
     restart: unless-stopped
     networks:

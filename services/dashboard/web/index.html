@@ -53,7 +53,6 @@ section.folded > .native { display: none; }
 .table .group:first-child h3 { border-top: none; border-radius: var(--radius) var(--radius) 0 0; }
 .table h3::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--accent); }
 .table h3 small { color: var(--muted); font-weight: 400; font-size: 12px; }
-.table h3 small.look { color: var(--unhealthy); }
 .service { border-top: 1px solid var(--line); }
 .service .line { display: grid; grid-template-columns: 8px 24px minmax(150px, 1.1fr) minmax(0, 2fr) 92px 92px 120px 132px 92px; align-items: center; gap: 12px; padding: 8px 16px; font-size: 13px; }
 .service[data-state="running"] { --state: var(--running); }
@@ -409,15 +408,6 @@ function linksOf(service) {
   return { links: (reading && reading.links) || [], health: (reading && reading.health) || [] };
 }
 
-function looks(service) {
-  const found = board.widgets[service.service];
-  const broken = found && found.error ? 1 : 0;
-  const { links, health } = linksOf(service);
-  const failing = links.filter(link => link.state === "failing").length;
-  const connections = broken ? 0 : health.length || failing;
-  return broken + connections + (service.shutdown || service.state === "running" ? 0 : 1) + (errors.has(service.service) ? 1 : 0);
-}
-
 async function switchLink(service, link, action) {
   const key = `${service.service} ${link.kind} ${link.id}`;
   switching.set(key, "pending");
@@ -613,8 +603,7 @@ function table(services) {
   for (const section of sections) {
     const own = services.filter(service => service.section === section.slug);
     if (!own.length) continue;
-    const count = own.reduce((sum, service) => sum + looks(service), 0);
-    const summary = element("small", { class: count ? "look" : "" }, count ? `${own.length}, ${count} to look at` : String(own.length));
+    const summary = element("small", {}, String(own.length));
     node.append(element("div", { class: "group", style: `--accent: var(--${section.slug})` },
       element("h3", {}, section.title, summary), ...own.map(row)));
   }

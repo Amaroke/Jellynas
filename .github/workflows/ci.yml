@@ -56,10 +56,33 @@ jobs:
           persist-credentials: false
       - run: >-
           docker run --rm -v "$PWD:/repo" -w /repo hadolint/hadolint:v2.15.1
-          hadolint services/*/Dockerfile
-      - run: |
-          cp .env.example .env
-          docker compose build
+          hadolint Dockerfile services/*/Dockerfile
+      - run: cp .env.example .env
+      - id: cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          {
+            echo 'to<<EOF'
+            echo 'caddy.cache-to=type=gha,mode=max,scope=caddy'
+            echo 'dashboard.cache-to=type=gha,mode=max,scope=rust'
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+      # yamllint disable-line rule:line-length
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4
+      - uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e  # v7
+        with:
+          source: .
+          files: compose.yaml
+          set: |
+            caddy.tags=jellynas-caddy
+            caddy.output=type=docker
+            caddy.cache-from=type=gha,scope=caddy
+            dashboard.cache-from=type=gha,scope=rust
+            policy.cache-from=type=gha,scope=rust
+            ratio.cache-from=type=gha,scope=rust
+            ups.cache-from=type=gha,scope=rust
+            ${{ steps.cache.outputs.to }}
+      - run: docker buildx build --target check .
       - run: |
           docker run --rm \
             -v "$PWD/services/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
@@ -122,15 +145,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
+      - run: |
+          version=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
+          ! grep '^FROM rust:' Dockerfile | grep -v "^FROM rust:$version-"
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0  # v2
+        with:
+          save-if: >-
+            ${{ github.event_name == 'push'
+            && github.ref == 'refs/heads/main' }}
+      - run: cargo fmt --all --check
       - run: >-
-          docker run --rm -v "$PWD:/repo" -w /repo rust:1.100.0-alpine3.24
-          sh -ec 'rustup component add rustfmt clippy;
-          for manifest in services/*/Cargo.toml; do
-          cargo fmt --check --manifest-path "$manifest";
-          cargo clippy --locked --all-targets --manifest-path "$manifest"
-          -- -D warnings;
-          cargo test --locked --manifest-path "$manifest";
-          done'
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
 
   renovate:
     name: Renovate
@@ -141,7 +168,7 @@ jobs:
         with:
           persist-credentials: false
       - run: >-
-          npx --yes --package renovate@45.1.1 --
+          npx --yes --package renovate@45.1.2 --
           renovate-config-validator --strict renovate.json
 
   markdown:

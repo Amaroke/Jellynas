@@ -3,7 +3,9 @@ name: jellynas-check
 
 services:
   check:
-    build: .
+    build:
+      context: ../..
+      target: check
     networks:
       - internal-zone
     security_opt:

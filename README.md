@@ -227,8 +227,8 @@ public services, never from them. lldap speaks LDAP, which Caddy cannot carry,
 so it sits in the zones of Jellyfin and of Authelia, the only two services that
 read the Accounts over LDAP, and has no public name. policy reads the Accounts
 through the API of lldap, from the zone of Authelia. The zones hand out IPv6
-addresses too, and Jellyfin tries them first, so lldap listens on `::`. `python3
--m unittest` checks the members of each zone.
+addresses too, and Jellyfin tries them first, so lldap listens on `::`. `cargo
+test` checks the members of each zone.
 
 Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS
 provider, swap the `caddy-dns/ovh` module in `services/caddy/Dockerfile` for its
@@ -327,7 +327,7 @@ once for `*.lan.<DOMAIN>`.
 Requires [Settings](#settings) and [Domain](#domain).
 
 The NAS follows the `main` branch of GitHub, a change merged into `main` reaches
-the NAS within 10 minutes, and nothing else changes it. The Clone holds `.env`,
+the NAS within a minute, and nothing else changes it. The Clone holds `.env`,
 outside git, and starts doco-cd, but the NAS never runs from it. Edit the repo
 in another folder and go through a pull request. Pull the Clone before running a
 script of the repo:
@@ -346,7 +346,7 @@ in git, so the deploy never touches them. Back up the appdata root to keep them.
 ### doco-cd
 
 [doco-cd](https://doco.cd) is a container, outside the NAS project, that polls
-`main` every 10 minutes and deploys `compose.yaml` with `.env`, as set in
+`main` every minute and deploys `compose.yaml` with `.env`, as set in
 `.doco-cd.yml`. Komodo or Portainer can do the same with a web UI and a
 database. doco-cd pulls, so nothing opens on the router, and no
 workflow of a public pull request can run on the NAS. Start doco-cd once from
@@ -359,10 +359,10 @@ docker compose -f services/doco-cd/compose.yaml up -d
 Each deploy runs from a copy of the merged revision, kept in the data volume of
 doco-cd. It recreates the services whose compose definition or image changed,
 and those that mount a file of the repo that changed, such as
-`services/cross-seed/config.js`. It rebuilds the services built from their
-Dockerfile, such as Caddy, policy, ratio and the Dashboard,
-and removes the services commented out in `compose.yaml`. A failed deploy is
-retried at the next poll.
+`services/cross-seed/config.js`. It rebuilds the services built from a
+Dockerfile, such as Caddy and the Rust services of the root `Dockerfile`, and
+removes the services commented out in `compose.yaml`. A failed deploy is
+retried at the next poll, a minute later.
 
 doco-cd reaches Docker through its socket, which gives it full control of the
 machine, like any tool that runs Compose. Its logs name each deploy, and the
@@ -380,7 +380,8 @@ docker restart doco-cd
 ```
 
 doco-cd never redeploys itself, since it runs outside the NAS project. When
-Renovate merges an update of doco-cd, pull the Clone and recreate it:
+a change of `services/doco-cd/compose.yaml` merges, such as an update by
+Renovate, pull the Clone and recreate it:
 
 ```sh
 git pull --ff-only
@@ -403,10 +404,12 @@ and the Dependency Dashboard issue lists every pending update.
 - The apk and apt packages of the Dockerfiles, through their `_VERSION`
   arguments
 - The Python packages of `services/music-bot/requirements.txt`
-- The Rust crates of `services/policy/Cargo.toml`
+- The Rust crates of the Cargo workspace, locked once in `Cargo.lock`
+- The Rust version of `rust-toolchain.toml`, in the same pull request as the
+  `rust` image of the root `Dockerfile`
 - The GitHub Actions and the pre-commit hook
 - The tools pinned in `.github/workflows/ci.yml`: gitleaks, hadolint,
-  actionlint, the Rust image, yamllint, ruff, zizmor, markdownlint-cli2 and
+  actionlint, yamllint, ruff, zizmor, markdownlint-cli2 and
   Renovate itself
 
 Renovate does not follow `ubuntu-latest`, the tools that runner ships such as
@@ -1912,6 +1915,7 @@ pinned, so Renovate keeps them up to date:
 | YAML | yamllint passes in strict mode |
 | JSON | every tracked `.json` file parses |
 | Python | the `unittest` tests pass |
+| Rust | rustfmt, clippy and the workspace tests pass, `tests/repo` included |
 | Lint | shellcheck passes on the shell scripts and ruff on the Python |
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
@@ -2172,11 +2176,12 @@ shows the `curl` command it ran. cross-seed then names the torrent in its logs.
 
 ### ratio
 
-ratio, `services/ratio`, is written in Rust and built from its Dockerfile. It
-runs every minute, and at once when a switch or a setting of the Farm changes.
-It works for C411 only and reads it through its own API, ten calls a minute at
-most and 30 per run, the rest waiting for the next run. Every HTTPS call of
-ratio goes through the proxy of Gluetun, so C411 only sees the VPN address.
+ratio, `services/ratio`, is written in Rust and built from the root
+`Dockerfile`. It runs every minute, and at once when a switch or a setting of
+the Farm changes. It works for C411 only and reads it through its own API, ten
+calls a minute at most and 30 per run, the rest waiting for the next run.
+Every HTTPS call of ratio goes through the proxy of Gluetun, so C411 only sees
+the VPN address.
 Every switch and setting below lives in the Farm section of the Dashboard.
 
 1. **Reads the account.** It reads the profile of C411 once per run with
@@ -2319,8 +2324,8 @@ writable through it. The inspect of a container returns its whole environment,
 secrets included, so every proxy runs `services/socket-proxy/haproxy.cfg`, the
 template of the image with two more rules: one refuses an inspect unless
 `ALLOW_INSPECT` is on, the other refuses an attach, which would read the output
-of a container around the logs. A new image of the proxy fails `python3 -m
-unittest` until its template is copied again. Each proxy sits in a zone of its
+of a container around the logs. A new image of the proxy fails `cargo
+test` until its template is copied again. Each proxy sits in a zone of its
 own with its readers:
 
 - `socket-proxy`, in `autokuma-docker-zone`, for AutoKuma and the Beszel agent:
@@ -2336,7 +2341,7 @@ The Docker monitors of Uptime Kuma read the state of a container from its
 inspect, and Dozzle its details, so each gets a proxy no other service reaches.
 The Beszel agent runs in the network of the Host, so `socket-proxy` also listens
 on `127.0.0.1:2375` of the Host, where it serves no inspect. Only the proxies,
-backup and doco-cd mount the socket, which `python3 -m unittest` checks, and
+backup and doco-cd mount the socket, which `cargo test` checks, and
 `./scripts/verify.sh` checks that `socket-proxy` refuses a write and an
 inspect.
 
@@ -2474,7 +2479,7 @@ labels:
 
 The defaults of every monitor, its interval of 60 seconds, the Discord
 notification and the Docker host `NAS`, sit in `AUTOKUMA__DEFAULT_SETTINGS` in
-`services/uptime-kuma/compose.yaml`. `python3 -m unittest` checks that every
+`services/uptime-kuma/compose.yaml`. `cargo test` checks that every
 service has a monitor.
 
 The monitors of Jellyfin and Seerr also alert before the certificate expires.
@@ -2625,9 +2630,9 @@ and started again once the archive is written. It carries the label
 `docker-volume-backup.stop-during-backup: "true"` in its `compose.yaml`. Uptime
 Kuma carries it too, so the services stopped for the night send no alert. A
 service slower to start than Uptime Kuma, such as Jellyfin, can still send one
-as it comes back. `python3 -m unittest` checks that every service with an
-appdata folder either carries the label or is listed in `tests/test_backup.py`
-as one that keeps running.
+as it comes back. `cargo test` checks that every service with an appdata
+folder either carries the label or is listed in `tests/repo/src/backup.rs` as
+one that keeps running.
 
 The backup service mounts the appdata root read-only, and the Docker socket,
 without the proxy, to stop and start the services. `./scripts/verify.sh` checks
