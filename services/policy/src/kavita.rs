@@ -250,7 +250,11 @@ fn server(current: &Value, authority: &str, libraries: &[i64]) -> Map<String, Va
         .cloned()
         .unwrap_or_default();
     oidc.extend(sign_in(authority, libraries));
-    let mut wanted = rules(json!({"enableOpds": true, "coverImageSize": LARGEST_COVERS}));
+    let mut wanted = rules(json!({
+        "enableOpds": true,
+        "coverImageSize": LARGEST_COVERS,
+        "allowStatCollection": false,
+    }));
     wanted.insert("oidcConfig".into(), Value::Object(oidc));
     wanted
 }
@@ -314,7 +318,7 @@ mod tests {
         oidc.insert("secret".into(), json!("********"));
         pages.insert(
             "/settings".into(),
-            json!({"enableOpds": true, "coverImageSize": 4, "taskScan": "daily", "oidcConfig": oidc}),
+            json!({"enableOpds": true, "coverImageSize": 4, "allowStatCollection": false, "taskScan": "daily", "oidcConfig": oidc}),
         );
         pages.insert(
             "/users".into(),
@@ -468,5 +472,14 @@ mod tests {
         let fake = Fake::new(pages);
         assert_eq!(Ok(1), enforce(&fake, &accounts(), AUTHORITY));
         assert_eq!(json!(4), fake.body(0)["coverImageSize"]);
+    }
+
+    #[test]
+    fn usage_statistics_turned_on_by_hand_go_off() {
+        let mut pages = in_line();
+        pages.get_mut("/settings").unwrap()["allowStatCollection"] = json!(true);
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), enforce(&fake, &accounts(), AUTHORITY));
+        assert_eq!(json!(false), fake.body(0)["allowStatCollection"]);
     }
 }

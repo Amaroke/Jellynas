@@ -19,6 +19,11 @@ Python or shell only when Rust cannot do the job, and say why in the pull
 request. When you change an existing Python or shell script substantially,
 port it to Rust instead.
 
+## Testing
+
+Before you run the tests, read `docs/agents/testing.md`. When a change touches
+what a page looks like, prove it as `docs/agents/front-end.md` describes.
+
 ## Finishing a change
 
 Once a change is committed, push its branch, open a pull request whose body
