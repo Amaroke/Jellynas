@@ -1,7 +1,8 @@
 # Automation check
 
-The procedure the `check-radarr`, `check-sonarr` and `check-lazylibrarian`
-skills follow. Reaching the NAS is in [nas-access.md](nas-access.md).
+The procedure the `check-radarr`, `check-sonarr`, `check-lazylibrarian` and
+`check-aurral` skills follow. Reaching the NAS is in
+[nas-access.md](nas-access.md).
 
 The Admin wants to see the state of their libraries first and act on it, not a
 technical diagnosis. The report leads with tables of the library and offers
@@ -27,6 +28,9 @@ The `facts` of the report hold the library, row by row:
 - LazyLibrarian: `authors` (AuthorID, AuthorName, Status, HaveBooks,
   TotalBooks, UnignoredBooks), `wanted` (BookID, BookName, Status), `snatched`
   and `stats`.
+- Aurral: `status` (the download worker and the counts of tracks per state),
+  `failed` (id, artist, track, album, error), `lossy` (the tracks kept in MP3
+  or AAC, with their format) and `broken` (the files a browser cannot play).
 
 A root folder under `/data/media/private/<user>` belongs to the Private library
 of that user.
@@ -70,6 +74,8 @@ In the language of the conversation, with these sections:
      folder), then a count of the complete ones by root folder.
    - LazyLibrarian: one row per author (have over total), then the wanted
      books.
+   - Aurral: the broken files, then the failed tracks, then a count of the
+     lossy tracks by format.
    Keep the ids in the rows: they are what a search needs.
 3. **Problems**: only what stops downloads or loses files, each with its cause
    and evidence, most severe first. Say "none" when there is none.

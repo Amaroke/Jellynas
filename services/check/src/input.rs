@@ -6,6 +6,7 @@ pub struct Input {
     pub mounts: BTreeMap<String, Vec<String>>,
     pub indexers: BTreeMap<String, Vec<String>>,
     pub logs: BTreeMap<String, Vec<String>>,
+    pub jobs: Vec<String>,
 }
 
 pub fn parse(text: &str) -> Input {
@@ -24,6 +25,7 @@ pub fn parse(text: &str) -> Input {
             "mount" => input.mounts.entry(name.into()).or_default().push(value),
             "indexer" => input.indexers.entry(name.into()).or_default().push(value),
             "log" => input.logs.entry(name.into()).or_default().push(value),
+            "job" => input.jobs.push(value),
             _ => {}
         }
     }

@@ -1240,6 +1240,11 @@ up each album, and shares the Library of Aurral, mounted read-only under
 `/data/media/aurral`, so nobody can change it through slskd. Nicotine+ can
 replace it, without the API that Aurral needs.
 
+When Gluetun restarts, slskd keeps the network of the old Gluetun and can no
+longer reach Soulseek. Its healthcheck resolves the Soulseek server through the
+DNS of Gluetun, so it fails then, and doco-cd restarts slskd onto the new
+network.
+
 ### Soulseek account
 
 Soulseek has no sign-up page: slskd creates the account at its first connection,

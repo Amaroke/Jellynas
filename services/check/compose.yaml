@@ -20,6 +20,29 @@ services:
       SONARR_API_KEY: ${SONARR_API_KEY}
       PROWLARR_API_KEY: ${PROWLARR_API_KEY}
       LAZYLIBRARIAN_API_KEY: ${LAZYLIBRARIAN_API_KEY:-}
+      AURRAL_API_KEY: ${AURRAL_API_KEY:-}
+      DOMAIN: ${DOMAIN}
+      CADDY_HTTPS_PORT: ${CADDY_HTTPS_PORT:-443}
+    volumes:
+      - ${DATA_ROOT}/media/aurral:/data/media/aurral:ro
+      - ${DATA_ROOT}/torrents/soulseek:/data/torrents/soulseek:ro
+  repair:
+    build:
+      context: ../..
+      target: check
+    profiles:
+      - repair
+    network_mode: none
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    user: ${PUID}:${PGID}
+    read_only: true
+    mem_limit: 512m
+    volumes:
+      - ${DATA_ROOT}/media/aurral:/data/media/aurral
+      - ${DATA_ROOT}/torrents/soulseek:/data/torrents/soulseek
 
 networks:
   internal-zone:
