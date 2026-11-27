@@ -3,7 +3,9 @@ name: jellynas-check
 
 services:
   check:
-    build: .
+    build:
+      context: ../..
+      dockerfile: services/check/Dockerfile
     networks:
       - internal-zone
     security_opt:

@@ -20,7 +20,7 @@
     {
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
-      "matchStrings": ["(?<depName>ghcr\\.io/gitleaks/gitleaks|rhysd/actionlint|hadolint/hadolint|rust):(?<currentValue>v?\\d+\\.\\d+\\.\\d+)"],
+      "matchStrings": ["(?<depName>ghcr\\.io/gitleaks/gitleaks|rhysd/actionlint|hadolint/hadolint):(?<currentValue>v?\\d+\\.\\d+\\.\\d+)"],
       "datasourceTemplate": "docker"
     },
     {
@@ -28,6 +28,13 @@
       "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
       "matchStrings": ["pipx run (?<depName>[a-z-]+)==(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^rust-toolchain\\.toml$/"],
+      "matchStrings": ["channel = \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""],
+      "depNameTemplate": "rust",
+      "datasourceTemplate": "docker"
     },
     {
       "customType": "regex",
@@ -46,6 +53,11 @@
     {
       "matchPackageNames": ["/gitleaks/"],
       "groupName": "gitleaks"
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["rust"],
+      "groupName": "Rust"
     },
     {
       "matchManagers": ["github-actions"],

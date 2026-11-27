@@ -404,10 +404,12 @@ and the Dependency Dashboard issue lists every pending update.
 - The apk and apt packages of the Dockerfiles, through their `_VERSION`
   arguments
 - The Python packages of `services/music-bot/requirements.txt`
-- The Rust crates of `services/policy/Cargo.toml`
+- The Rust crates of the Cargo workspace, locked once in `Cargo.lock`
+- The Rust version of `rust-toolchain.toml`, in the same pull request as the
+  `rust` images of the Dockerfiles
 - The GitHub Actions and the pre-commit hook
 - The tools pinned in `.github/workflows/ci.yml`: gitleaks, hadolint,
-  actionlint, the Rust image, yamllint, ruff, zizmor, markdownlint-cli2 and
+  actionlint, yamllint, ruff, zizmor, markdownlint-cli2 and
   Renovate itself
 
 Renovate does not follow `ubuntu-latest`, the tools that runner ships such as

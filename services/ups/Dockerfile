@@ -1,8 +1,11 @@
 FROM rust:1.100.0-alpine3.24 AS builder
 WORKDIR /src
-COPY Cargo.toml Cargo.lock ./
-COPY src ./src
-RUN cargo build --release --locked
+COPY . .
+RUN for manifest in services/*/Cargo.toml; do \
+        mkdir -p "${manifest%/Cargo.toml}/src" && \
+        touch -a "${manifest%/Cargo.toml}/src/main.rs"; \
+    done && \
+    cargo build --release --locked --package ups
 
 FROM scratch
 COPY --from=builder /src/target/release/ups /ups
