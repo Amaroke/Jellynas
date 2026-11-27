@@ -1,12 +1,17 @@
 use crate::api::{Api, encode, report};
 use serde_json::{Map, Value};
 
-const SETTINGS: [(&str, &str, &str); 22] = [
+const SETTINGS: [(&str, &str, &str); 23] = [
     ("General", "AUTH_TYPE", "BASIC"),
     ("General", "USER_ACCOUNTS", ""),
     ("General", "EBOOK_DIR", "/data/media/books"),
     ("General", "DOWNLOAD_DIR", "/data/torrents/books"),
     ("General", "DESTINATION_COPY", "1"),
+    (
+        "General",
+        "IMP_PREFLANG",
+        "en, en-GB, English, en-US, eng, fr, fre, fra, French",
+    ),
     ("PostProcess", "EBOOK_DEST_FOLDER", "{$SerName|$Title}"),
     (
         "PostProcess",
@@ -156,6 +161,25 @@ mod tests {
                 write_path("LibraryScan", "NEWAUTHOR_BOOKS", "1"),
                 write_path("API", "CV_WEBSEARCH", "1"),
             ],
+            writes(&fake)
+        );
+    }
+
+    #[test]
+    fn books_in_french_are_accepted_at_import() {
+        let mut pages = in_line();
+        pages.insert(
+            read_path("General", "IMP_PREFLANG"),
+            json!("[en, en-GB, English, en-US, eng]"),
+        );
+        let fake = Fake::new(pages);
+        assert_eq!(Ok(1), enforce(&fake));
+        assert_eq!(
+            vec![write_path(
+                "General",
+                "IMP_PREFLANG",
+                "en, en-GB, English, en-US, eng, fr, fre, fra, French"
+            )],
             writes(&fake)
         );
     }
