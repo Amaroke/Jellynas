@@ -3,7 +3,7 @@ services:
   ups:
     build:
       context: ../..
-      dockerfile: services/ups/Dockerfile
+      target: ups
     container_name: ups
     restart: unless-stopped
     networks:

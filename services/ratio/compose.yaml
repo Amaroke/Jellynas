@@ -3,7 +3,7 @@ services:
   ratio:
     build:
       context: ../..
-      dockerfile: services/ratio/Dockerfile
+      target: ratio
     container_name: ratio
     restart: unless-stopped
     networks:

@@ -1,5 +1,0 @@
-*
-!Cargo.toml
-!Cargo.lock
-!services/*/Cargo.toml
-!services/check/src
