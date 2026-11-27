@@ -3,3 +3,4 @@
 !Cargo.lock
 !services/*/Cargo.toml
 !services/*/src
+!tests/repo/Cargo.toml

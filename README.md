@@ -227,8 +227,8 @@ public services, never from them. lldap speaks LDAP, which Caddy cannot carry,
 so it sits in the zones of Jellyfin and of Authelia, the only two services that
 read the Accounts over LDAP, and has no public name. policy reads the Accounts
 through the API of lldap, from the zone of Authelia. The zones hand out IPv6
-addresses too, and Jellyfin tries them first, so lldap listens on `::`. `python3
--m unittest` checks the members of each zone.
+addresses too, and Jellyfin tries them first, so lldap listens on `::`. `cargo
+test` checks the members of each zone.
 
 Traefik or nginx can replace Caddy. The steps below use OVH. With another DNS
 provider, swap the `caddy-dns/ovh` module in `services/caddy/Dockerfile` for its
@@ -1915,6 +1915,7 @@ pinned, so Renovate keeps them up to date:
 | YAML | yamllint passes in strict mode |
 | JSON | every tracked `.json` file parses |
 | Python | the `unittest` tests pass |
+| Rust | rustfmt, clippy and the workspace tests pass, `tests/repo` included |
 | Lint | shellcheck passes on the shell scripts and ruff on the Python |
 | Renovate | `renovate.json` is a valid Renovate config |
 | Markdown | markdownlint passes on every `.md` file |
@@ -2323,8 +2324,8 @@ writable through it. The inspect of a container returns its whole environment,
 secrets included, so every proxy runs `services/socket-proxy/haproxy.cfg`, the
 template of the image with two more rules: one refuses an inspect unless
 `ALLOW_INSPECT` is on, the other refuses an attach, which would read the output
-of a container around the logs. A new image of the proxy fails `python3 -m
-unittest` until its template is copied again. Each proxy sits in a zone of its
+of a container around the logs. A new image of the proxy fails `cargo
+test` until its template is copied again. Each proxy sits in a zone of its
 own with its readers:
 
 - `socket-proxy`, in `autokuma-docker-zone`, for AutoKuma and the Beszel agent:
@@ -2340,7 +2341,7 @@ The Docker monitors of Uptime Kuma read the state of a container from its
 inspect, and Dozzle its details, so each gets a proxy no other service reaches.
 The Beszel agent runs in the network of the Host, so `socket-proxy` also listens
 on `127.0.0.1:2375` of the Host, where it serves no inspect. Only the proxies,
-backup and doco-cd mount the socket, which `python3 -m unittest` checks, and
+backup and doco-cd mount the socket, which `cargo test` checks, and
 `./scripts/verify.sh` checks that `socket-proxy` refuses a write and an
 inspect.
 
@@ -2478,7 +2479,7 @@ labels:
 
 The defaults of every monitor, its interval of 60 seconds, the Discord
 notification and the Docker host `NAS`, sit in `AUTOKUMA__DEFAULT_SETTINGS` in
-`services/uptime-kuma/compose.yaml`. `python3 -m unittest` checks that every
+`services/uptime-kuma/compose.yaml`. `cargo test` checks that every
 service has a monitor.
 
 The monitors of Jellyfin and Seerr also alert before the certificate expires.
@@ -2629,9 +2630,9 @@ and started again once the archive is written. It carries the label
 `docker-volume-backup.stop-during-backup: "true"` in its `compose.yaml`. Uptime
 Kuma carries it too, so the services stopped for the night send no alert. A
 service slower to start than Uptime Kuma, such as Jellyfin, can still send one
-as it comes back. `python3 -m unittest` checks that every service with an
-appdata folder either carries the label or is listed in `tests/test_backup.py`
-as one that keeps running.
+as it comes back. `cargo test` checks that every service with an appdata
+folder either carries the label or is listed in `tests/repo/src/backup.rs` as
+one that keeps running.
 
 The backup service mounts the appdata root read-only, and the Docker socket,
 without the proxy, to stop and start the services. `./scripts/verify.sh` checks
