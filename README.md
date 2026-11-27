@@ -1422,6 +1422,12 @@ Jellyfin reads books poorly.
    docker restart kavita
    ```
 
+Authelia gives the `kavita` client a refresh token of 8 days, against 90
+minutes for the other clients. Kavita keeps a Friend signed in for 7 days and
+retries a dead refresh token on every request without ever giving up, which
+trips the rate limiter of Authelia. A refresh token that outlives the cookie of
+Kavita never dies while Kavita still holds it.
+
 ### Settings of Kavita kept by policy
 
 | Setting                  | Value                                |

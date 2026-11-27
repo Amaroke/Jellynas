@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+mod authelia;
 mod backup;
 mod compose;
 mod dashboard;
