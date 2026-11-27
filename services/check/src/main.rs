@@ -13,7 +13,7 @@ use report::Report;
 use std::io::Read;
 use std::{env, io, process};
 
-const USAGE: &str = "Usage: check radarr|sonarr|lazylibrarian < facts\n       check api radarr|sonarr|prowlarr|lazylibrarian METHOD PATH [JSON|-]";
+const USAGE: &str = "Usage: check radarr|sonarr|lazylibrarian < facts\n       check api radarr|sonarr|prowlarr|lazylibrarian|discord-posts METHOD PATH [JSON|-]";
 const QBITTORRENT: &str = "http://gluetun:8080/api/v2/app/version";
 
 fn http(app: &str) -> Result<Http, String> {
@@ -22,6 +22,12 @@ fn http(app: &str) -> Result<Http, String> {
         "sonarr" => ("http://sonarr:8989", "SONARR_API_KEY"),
         "prowlarr" => ("http://prowlarr:9696", "PROWLARR_API_KEY"),
         "lazylibrarian" => ("http://lazylibrarian:5299", "LAZYLIBRARIAN_API_KEY"),
+        "discord-posts" => {
+            return Ok(Http {
+                base: "http://discord-posts:8000".into(),
+                key: Key::None,
+            });
+        }
         _ => return Err(format!("Unknown app {app}")),
     };
     let key = env::var(variable)

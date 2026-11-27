@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Actions rapides</title>
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: transparent; color: #e2e8f0;
+  font: 13px/1.35 Manrope, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; height: 100vh; padding: 6px; }
+form { margin: 0; min-width: 0; }
+button { position: relative; display: flex; flex-direction: column; justify-content: center; width: 100%; height: 100%;
+  overflow: hidden; padding: 9px 12px 9px 15px; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025));
+  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 10px; transition: border-color 0.15s, background 0.15s;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 6px 18px rgba(0, 0, 0, 0.12); }
+button::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0;
+  background: var(--accent); }
+button:hover { border-color: var(--accent); background: linear-gradient(160deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.05)); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.discord { --accent: #60a5fa; }
+.label { color: #94a3b8; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
+.value { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; }
+.sub { color: #94a3b8; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.running .sub { color: #34d399; }
+</style>
+<main>{cards}</main>

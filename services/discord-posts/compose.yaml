@@ -1,10 +1,11 @@
 ---
 services:
   discord-posts:
-    image: python:3.15.2-slim-trixie
+    build:
+      context: ../..
+      target: discord-posts
     container_name: discord-posts
     restart: unless-stopped
-    command: ["python", "-u", "/app/scripts/discord_post.py", "--daily"]
     networks:
       - internal-zone
     security_opt:
@@ -37,6 +38,5 @@ services:
       dashboard.switchable: "true"
       cd.doco.deployment.autostart: "false"
     volumes:
-      - ../../scripts:/app/scripts:ro
       - ../../discord-posts:/app/discord-posts:ro
       - ${APPDATA_ROOT}/discord-posts:/state/discord-posts

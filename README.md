@@ -1991,13 +1991,13 @@ channel after one minute alone or five minutes without playing.
 The links, news and tutos channels of the Discord server of the Friends hold
 messages written in `discord-posts/`, one Markdown file per message, so they
 live in git like the rest of the NAS. `${DOMAIN}` and `${CADDY_HTTPS_PORT}` in a
-file are filled in from `.env`. `scripts/discord_post.py` publishes a file
+file are filled in from `.env`. The `discord-posts` service publishes each file
 through the webhook of its channel: the first time it posts the message, the
 next times it edits the same message in place, and it posts again if the message
 was deleted. It keeps the id of each message in
 `${APPDATA_ROOT}/discord-posts/state.json`. Each file becomes an embed, its
 first level one heading the title and the rest the description. Discord takes
-4096 characters per description, which `python3 -m unittest` checks.
+4096 characters per description, which `cargo test -p discord-posts` checks.
 
 The messages are in French, for the Friends:
 
@@ -2014,8 +2014,8 @@ The messages are in French, for the Friends:
   install Tempus and sign it in to Aurral. Change them when Aurral or Tempus
   moves a button or a setting.
 
-A file wraps at 80 columns like any Markdown file of the repo, and
-`scripts/discord_post.py` joins the wrapped lines back, since Discord keeps
+A file wraps at 80 columns like any Markdown file of the repo, and the service
+joins the wrapped lines back, since Discord keeps
 every line break. A new list item, heading or `-#` line stays on its own line in
 Discord. `-#` is the small grey text of Discord. A line starting with 📺 goes
 above the embed, in the text of the message, without the angle brackets around
@@ -2027,12 +2027,8 @@ its link, since Discord plays a video only from a bare link there.
    channel.
 2. In `.env`, set `DISCORD_LINKS_WEBHOOK_ID` and `DISCORD_LINKS_WEBHOOK_TOKEN`,
    then the same pair for `NEWS`, to both parts of each URL.
-3. Pull the Clone and publish the messages of links and news:
-
-   ```sh
-   python3 scripts/discord_post.py links discord-posts/links.md
-   python3 scripts/discord_post.py news discord-posts/welcome.md
-   ```
+3. Restart the `discord-posts` service so it reads the new `.env`, then publish
+   as [Publishing on demand](#publishing-on-demand) shows.
 
 The `discord-posts` service republishes these files every day at 00:30, in the
 time zone of `TZ`, from the `main` branch that doco-cd deployed. A message
@@ -2041,11 +2037,10 @@ publication. A failure on one channel leaves the others
 alone and waits for the next night, as `docker compose logs discord-posts`
 shows.
 
-To update a message without waiting, run the same command by hand. For a piece
-of news, add a new file, such as `discord-posts/2026-11-new-folder.md`, and
-publish it with `news` as the channel. Any channel works the same way once
-`.env` holds `DISCORD_<CHANNEL>_WEBHOOK_ID` and
-`DISCORD_<CHANNEL>_WEBHOOK_TOKEN`.
+A channel takes its webhook from `DISCORD_<CHANNEL>_WEBHOOK_ID` and
+`DISCORD_<CHANNEL>_WEBHOOK_TOKEN` in `.env`. A new message joins the list of
+`services/discord-posts/src/publish.rs`, except a Patch note, which only needs
+its file.
 
 ### Patch notes
 
@@ -2066,9 +2061,9 @@ covers: #507
 The header stays off Discord, the rest follows the rules of the other
 messages. The `discord-posts` service publishes the notes after the other
 messages, oldest first: a note not yet posted is posted, a note changed in git
-is edited in place. `python3 -m unittest` fails on a note without its header or
-longer than Discord takes. Without the webhook, the service skips the notes
-silently.
+is edited in place. `cargo test -p discord-posts` fails on a note without its
+header or longer than Discord takes. Without the webhook, the service skips
+the notes silently.
 
 1. In Discord, in the server of the Friends, create a text channel for the
    Patch notes. In its settings, Integrations > Webhooks, click "New Webhook",
@@ -2076,12 +2071,28 @@ silently.
    `https://discord.com/api/webhooks/<id>/<token>`.
 2. In `.env`, set `DISCORD_PATCH_WEBHOOK_ID` and `DISCORD_PATCH_WEBHOOK_TOKEN`
    to both parts of the URL.
-3. To publish without waiting for the night, click "Messages Discord" in the
-   quick actions of the Dashboard, or publish a single note from the Clone:
+3. Restart the `discord-posts` service so it reads the new `.env`.
 
-   ```sh
-   python3 scripts/discord_post.py patch discord-posts/patch-notes/2026-11-27.md
-   ```
+The `publish-discord` skill asks Claude to publish: it lists the messages and
+their state, says what will change, and publishes once the Admin agrees.
+
+### Publishing on demand
+
+To publish without waiting for the night, click "Messages Discord" in the quick
+actions of the Dashboard, or call the API of the service, which answers in the
+internal zone only, through `scripts/check.sh` on the Clone:
+
+```sh
+sudo sh scripts/check.sh api discord-posts GET /api/posts
+sudo sh scripts/check.sh api discord-posts POST /api/publish
+sudo sh scripts/check.sh api discord-posts POST   '/api/publish?file=patch-notes/2026-11-27.md'
+```
+
+`GET /api/posts` lists each message with its channel, its file, the id of its
+Discord message once posted, and for a Patch note the last pull request it
+covers. `POST /api/publish` publishes every message, or only the one of `file`,
+and answers with the outcome of each: `posted`, `edited`, `skipped` for a Patch
+note without its webhook, or `failed` with the reason.
 
 ## PR radar
 
@@ -2796,7 +2807,8 @@ It builds `services/check`, a Rust tool that runs once in the internal zone and
 reads the API keys of `.env`, then feeds it the logs and container states it
 reads through Docker. `sudo sh scripts/check.sh api <app> <METHOD> <path>`
 sends one request to the API of Radarr, Sonarr, Prowlarr or LazyLibrarian with
-its key, and prints the reply with every key masked. doco-cd never deploys the
+its key, or of `discord-posts`, which needs none, and prints the reply with every
+key masked. doco-cd never deploys the
 tool: its compose file stays out of `compose.yaml`.
 
 The Claude Code skills `check-radarr`, `check-sonarr` and `check-lazylibrarian`

@@ -3,7 +3,7 @@ set -eu
 
 usage() {
   echo "Usage: check.sh radarr|sonarr|lazylibrarian" >&2
-  echo "       check.sh api radarr|sonarr|prowlarr|lazylibrarian METHOD PATH [JSON|-]" >&2
+  echo "       check.sh api radarr|sonarr|prowlarr|lazylibrarian|discord-posts METHOD PATH [JSON|-]" >&2
   exit 2
 }
 

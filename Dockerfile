@@ -3,6 +3,7 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY services/check/Cargo.toml services/check/
 COPY services/dashboard/Cargo.toml services/dashboard/
+COPY services/discord-posts/Cargo.toml services/discord-posts/
 COPY services/policy/Cargo.toml services/policy/
 COPY services/ratio/Cargo.toml services/ratio/
 COPY services/ups/Cargo.toml services/ups/
@@ -25,6 +26,10 @@ ENTRYPOINT ["/check"]
 FROM scratch AS dashboard
 COPY --from=builder /src/target/release/dashboard /dashboard
 ENTRYPOINT ["/dashboard"]
+
+FROM scratch AS discord-posts
+COPY --from=builder /src/target/release/discord-posts /discord-posts
+ENTRYPOINT ["/discord-posts"]
 
 FROM scratch AS policy
 COPY --from=builder /src/target/release/policy /policy
