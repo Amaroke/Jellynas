@@ -101,8 +101,8 @@ kind of grab and per cleaning.
 _Avoid_: toggle, flag, button
 
 **Public torrent**:
-A torrent of a public tracker. It seeds two weeks whatever its ratio, and leaves
-sooner once its C411 copy seeds the same files.
+A torrent of a public tracker. It seeds a week whatever its ratio, and leaves
+sooner once it reaches ratio 1.
 _Avoid_: Nyaa torrent, free torrent
 
 **Zen**:
@@ -119,13 +119,13 @@ the upload credit bought with Zen counted as upload.
 _Avoid_: real ratio, tracker ratio
 
 **Ratio floor**:
-The Account ratio of 1.2 under which the NAS spends no download on C411, not
+The Account ratio of 2 under which the NAS spends no download on C411, not
 even for the Library, freeleech aside.
 _Avoid_: margin, buffer
 
 **Ratio tier**:
-An Account ratio the board marks: 0.8 where C411 blocks downloads, 1, the
-Ratio floor and 2.
+An Account ratio the board marks: 0.8 where C411 blocks downloads, 1 and the
+Ratio floor.
 _Avoid_: threshold, level
 
 **Origin**:
