@@ -12,9 +12,16 @@ ZONE_MEMBERS = {
     "aurral-zone": {"caddy", "aurral", "gluetun"},
     "kavita-zone": {"caddy", "kavita"},
     "dashboard-docker-zone": {"dashboard", "dashboard-socket-proxy"},
+    "autokuma-docker-zone": {"autokuma", "socket-proxy"},
+    "uptime-kuma-docker-zone": {"uptime-kuma", "uptime-kuma-socket-proxy"},
+    "dozzle-docker-zone": {"dozzle", "dozzle-socket-proxy"},
 }
-OUTSIDE_INTERNAL_ZONE = {"jellyfin", "seerr", "authelia", "lldap", "aurral", "kavita", "dashboard-socket-proxy"}
-SOCKET_HOLDERS = {"socket-proxy", "dashboard-socket-proxy", "backup", "doco-cd"}
+PROXIES = {"socket-proxy", "dashboard-socket-proxy", "uptime-kuma-socket-proxy", "dozzle-socket-proxy"}
+INSPECTORS = {"uptime-kuma-socket-proxy", "dozzle-socket-proxy"}
+OUTSIDE_INTERNAL_ZONE = {"jellyfin", "seerr", "authelia", "lldap", "aurral", "kavita"} | PROXIES
+SOCKET_HOLDERS = PROXIES | {"backup", "doco-cd"}
+PROXY_TEMPLATE = ROOT / "services" / "socket-proxy" / "haproxy.cfg"
+PROXY_TEMPLATE_IMAGE = "lscr.io/linuxserver/socket-proxy:3.4.8-r0-ls107"
 DIRECT_ADDRESSES = ("jellyfin:8096", "seerr:5055", "authelia:9091", "aurral:3001", "kavita:5000")
 
 
@@ -98,6 +105,10 @@ def mounts_docker_socket(lines):
     return any("/var/run/docker.sock:" in line for line in section(lines, "volumes"))
 
 
+def allowed_flags(lines):
+    return {line.split(":")[0].strip() for line in section(lines, "environment") if line.strip().endswith('"1"')}
+
+
 def zone_members(zone):
     return {service for service, lines in all_services().items() if zone in networks(lines)}
 
@@ -166,16 +177,74 @@ class NetworkZonesTest(unittest.TestCase):
         holders = {service for service, lines in services.items() if mounts_docker_socket(lines)}
         self.assertEqual(SOCKET_HOLDERS, holders)
 
-    def test_the_proxy_reads_the_socket_read_only_and_allows_no_write(self):
-        proxy = all_services()["socket-proxy"]
-        self.assertIn("      - /var/run/docker.sock:/var/run/docker.sock:ro", proxy)
-        self.assertIn('      POST: "0"', proxy)
+    def test_every_proxy_sits_alone_with_its_readers(self):
+        for zone in ("autokuma-docker-zone", "uptime-kuma-docker-zone", "dozzle-docker-zone"):
+            self.assertEqual(ZONE_MEMBERS[zone], zone_members(zone), zone)
+
+    def test_every_proxy_reads_the_socket_read_only_and_allows_no_write(self):
+        for name in PROXIES:
+            proxy = all_services()[name]
+            self.assertIn("      - /var/run/docker.sock:/var/run/docker.sock:ro", proxy, name)
+            self.assertIn('      POST: "0"', proxy, name)
+
+    def test_every_proxy_runs_the_template_that_refuses_an_inspect(self):
+        for path in included_compose_files():
+            for name, lines in service_blocks(path).items():
+                if name in PROXIES:
+                    sources = [found.group(1) for line in section(lines, "volumes") if (found := re.match(r"^      - (\S+):/templates/haproxy\.cfg:ro$", line))]
+                    self.assertEqual([PROXY_TEMPLATE], [(path.parent / source).resolve() for source in sources], name)
+
+    def test_the_template_refuses_an_inspect_before_any_allow(self):
+        text = PROXY_TEMPLATE.read_text(encoding="utf-8")
+        deny = text.index("/containers/+[^/]+/+json } !allow_inspect")
+        self.assertLess(deny, text.index("http-request allow"))
+        self.assertIn("acl allow_inspect env(ALLOW_INSPECT) -m bool", text)
+
+    def test_the_template_refuses_an_attach(self):
+        self.assertIn("/containers/+[^/]+/+attach }", PROXY_TEMPLATE.read_text(encoding="utf-8"))
+
+    def test_every_proxy_runs_the_image_the_template_was_copied_from(self):
+        for name in PROXIES:
+            self.assertIn(
+                f"    image: {PROXY_TEMPLATE_IMAGE}",
+                all_services()[name],
+                f"{name}: copy /templates/haproxy.cfg of the new image into {PROXY_TEMPLATE.name}, keep the inspect and attach denies, then bump PROXY_TEMPLATE_IMAGE",
+            )
+
+    def test_only_uptime_kuma_and_dozzle_may_inspect_a_container(self):
+        inspectors = {name for name in PROXIES if "ALLOW_INSPECT" in allowed_flags(all_services()[name])}
+        self.assertEqual(INSPECTORS, inspectors)
+
+    def test_the_shared_proxy_lists_and_measures_the_containers_only(self):
+        self.assertEqual({"CONTAINERS", "INFO", "PING", "VERSION"}, allowed_flags(all_services()["socket-proxy"]))
+
+    def test_the_uptime_kuma_proxy_reads_the_state_of_a_container(self):
+        self.assertEqual(
+            {"CONTAINERS", "INFO", "PING", "VERSION", "ALLOW_INSPECT"},
+            allowed_flags(all_services()["uptime-kuma-socket-proxy"]),
+        )
+
+    def test_the_dozzle_proxy_reads_the_logs_and_events(self):
+        self.assertEqual(
+            {"CONTAINERS", "EVENTS", "INFO", "PING", "VERSION", "ALLOW_INSPECT", "ALLOW_LOGS"},
+            allowed_flags(all_services()["dozzle-socket-proxy"]),
+        )
+
+    def test_only_the_shared_proxy_publishes_a_port(self):
+        for name in PROXIES - {"socket-proxy"}:
+            self.assertEqual([], ports(all_services()[name]), name)
+
+    def test_every_reader_names_its_own_proxy(self):
+        services = all_services()
+        self.assertIn("      DOCKER_HOST: tcp://dozzle-socket-proxy:2375", services["dozzle"])
+        self.assertIn("      AUTOKUMA__DOCKER__HOSTS: tcp://socket-proxy:2375", services["autokuma"])
+        self.assertIn("      DOCKER_HOST: tcp://127.0.0.1:2375", services["beszel-agent"])
 
     def test_the_dashboard_proxy_only_starts_stops_restarts_and_reads_logs(self):
         proxy = all_services()["dashboard-socket-proxy"]
         self.assertIn("      - /var/run/docker.sock:/var/run/docker.sock:ro", proxy)
         self.assertIn('      POST: "0"', proxy)
-        allowed = {line.split(":")[0].strip() for line in section(proxy, "environment") if line.strip().endswith('"1"')}
+        allowed = allowed_flags(proxy)
         self.assertEqual({"CONTAINERS", "EVENTS", "INFO", "PING", "VERSION", "ALLOW_START", "ALLOW_STOP", "ALLOW_RESTARTS", "ALLOW_LOGS"}, allowed)
         self.assertEqual([], ports(proxy))
 

@@ -141,7 +141,7 @@ class MonitorsTest(unittest.TestCase):
         for entity_id in ids_of("docker_host"):
             settings = entities()[entity_id]["settings"]
             self.assertEqual("tcp", settings["connection_type"], entity_id)
-            self.assertEqual("http://socket-proxy:2375", settings["path"], entity_id)
+            self.assertEqual("http://uptime-kuma-socket-proxy:2375", settings["path"], entity_id)
 
     def test_notification_config_is_json(self):
         for entity_id in ids_of("notification"):

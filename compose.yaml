@@ -44,3 +44,6 @@ networks:
   kavita-zone:
   internal-zone:
   dashboard-docker-zone:
+  autokuma-docker-zone:
+  uptime-kuma-docker-zone:
+  dozzle-docker-zone:

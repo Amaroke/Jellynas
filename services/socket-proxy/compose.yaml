@@ -5,7 +5,7 @@ services:
     container_name: socket-proxy
     restart: unless-stopped
     networks:
-      - internal-zone
+      - autokuma-docker-zone
     security_opt:
       - no-new-privileges
     read_only: true
@@ -13,7 +13,6 @@ services:
       - /run
     environment:
       CONTAINERS: "1"
-      EVENTS: "1"
       INFO: "1"
       PING: "1"
       VERSION: "1"
@@ -25,5 +24,6 @@ services:
       dashboard.icon: docker.svg
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./haproxy.cfg:/templates/haproxy.cfg:ro
     ports:
       - 127.0.0.1:2375:2375
