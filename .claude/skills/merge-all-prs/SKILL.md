@@ -98,10 +98,42 @@ gh pr merge <n> --squash
 A merge refused because the branch went stale sends the pull request back to
 **Update**.
 
-## 3. Report
+## 3. Clean up branches
+
+A branch is dead once its last pull request is merged or closed and no open
+pull request uses it. `main`, `renovate/` branches and branches that never had a
+pull request stay.
+
+On the repo, list the branches and check each one's pull requests:
+
+```sh
+gh api repos/Amaroke/Jellynas/branches --paginate --jq '.[].name'
+gh pr list --head <branch> --state all --json number,state
+```
+
+Delete each dead branch:
+
+```sh
+git push origin --delete <branch>
+```
+
+Locally, drop the throwaway worktrees left by step 2, prune, and delete every
+branch whose upstream is gone. Squash merges leave no ancestry, so delete with
+`-D`. A branch checked out in a worktree stays.
+
+```sh
+git worktree prune
+git fetch --prune origin
+git for-each-ref refs/heads --format='%(refname:short) %(upstream:track)' \
+  | awk '$2 == "[gone]" { print $1 }'
+git branch -D <branch>
+```
+
+## 4. Report
 
 The run is done when every pull request from step 1 is merged or left open
-with a reason. Show one table:
+with a reason and every dead branch is deleted. Show one table of pull
+requests, then the deleted branches, local and remote:
 
 | PR | Title | Result |
 | -- | ----- | ------ |
