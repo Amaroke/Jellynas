@@ -22,3 +22,8 @@ ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
 ### Domain docs
 
 Single-context: CONTEXT.md at the repo root. See `docs/agents/domain.md`.
+
+## Git
+
+Never commit on `main`. Start every piece of work on a new branch cut from
+`main`, and commit there.
