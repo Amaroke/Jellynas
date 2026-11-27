@@ -21,10 +21,11 @@ port it to Rust instead.
 
 ## Finishing a change
 
-Once a change is committed, push its branch, open a pull request that closes its
-issue, and end your reply with the link to the pull request. Never work on
-`main`: if the current branch is `main`, create a branch named after the issue
-first.
+Once a change is committed, push its branch, open a pull request whose body
+holds `Closes #<issue>`, and end your reply with the link to the pull request.
+Leave the issue open: GitHub closes it when the pull request merges. Never work
+on `main`: if the current branch is `main`, create a branch named after the
+issue first.
 
 Merging into `main` is deploying to production: doco-cd deploys `main` on the
 NAS within a minute. Never merge a pull request unless a skill tells you to,
