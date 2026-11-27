@@ -1,7 +1,9 @@
 ---
 services:
   policy:
-    build: .
+    build:
+      context: ../..
+      dockerfile: services/policy/Dockerfile
     container_name: policy
     restart: unless-stopped
     networks:
