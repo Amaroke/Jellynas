@@ -61,5 +61,11 @@ Single-context: CONTEXT.md at the repo root. See `docs/agents/domain.md`.
 
 ## Git
 
-Never commit on `main`. Start every piece of work on a new branch cut from
-`main`, and commit there.
+Never commit on `main`. Start every piece of work this way:
+
+1. Run `git fetch --prune origin` and fast-forward `main` to `origin/main`.
+2. Delete the local branches whose upstream is gone or whose pull request is
+   merged or closed.
+3. Cut a new branch from the up-to-date `main`, and commit there.
+4. Once the work is committed, push the branch and open a pull request to
+   `main`.
