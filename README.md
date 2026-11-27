@@ -327,7 +327,7 @@ once for `*.lan.<DOMAIN>`.
 Requires [Settings](#settings) and [Domain](#domain).
 
 The NAS follows the `main` branch of GitHub, a change merged into `main` reaches
-the NAS within 10 minutes, and nothing else changes it. The Clone holds `.env`,
+the NAS within a minute, and nothing else changes it. The Clone holds `.env`,
 outside git, and starts doco-cd, but the NAS never runs from it. Edit the repo
 in another folder and go through a pull request. Pull the Clone before running a
 script of the repo:
@@ -346,7 +346,7 @@ in git, so the deploy never touches them. Back up the appdata root to keep them.
 ### doco-cd
 
 [doco-cd](https://doco.cd) is a container, outside the NAS project, that polls
-`main` every 10 minutes and deploys `compose.yaml` with `.env`, as set in
+`main` every minute and deploys `compose.yaml` with `.env`, as set in
 `.doco-cd.yml`. Komodo or Portainer can do the same with a web UI and a
 database. doco-cd pulls, so nothing opens on the router, and no
 workflow of a public pull request can run on the NAS. Start doco-cd once from
@@ -362,7 +362,7 @@ and those that mount a file of the repo that changed, such as
 `services/cross-seed/config.js`. It rebuilds the services built from their
 Dockerfile, such as Caddy, policy, ratio and the Dashboard,
 and removes the services commented out in `compose.yaml`. A failed deploy is
-retried at the next poll.
+retried at the next poll, a minute later.
 
 doco-cd reaches Docker through its socket, which gives it full control of the
 machine, like any tool that runs Compose. Its logs name each deploy, and the
@@ -380,7 +380,8 @@ docker restart doco-cd
 ```
 
 doco-cd never redeploys itself, since it runs outside the NAS project. When
-Renovate merges an update of doco-cd, pull the Clone and recreate it:
+a change of `services/doco-cd/compose.yaml` merges, such as an update by
+Renovate, pull the Clone and recreate it:
 
 ```sh
 git pull --ff-only
