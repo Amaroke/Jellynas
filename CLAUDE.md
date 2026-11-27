@@ -7,6 +7,11 @@ commit messages, branch names, issues, pull requests, labels and workflow names.
 This applies even when the conversation with the agent happens in another
 language.
 
+## Asking the Admin
+
+When you need a choice or an approval from the Admin, offer buttons
+(AskUserQuestion) rather than a question in text.
+
 ## Rust first
 
 Write new code in Rust: services, scripts, CLIs and tests alike. Reach for
