@@ -44,8 +44,10 @@ services:
       AUTOKUMA__ON_DELETE: keep
       AUTOKUMA__DEFAULT_SETTINGS: |-
         http.interval: 60
+        http.max_retries: 2
         http.notification_name_list: ["discord"]
         docker.interval: 60
+        docker.max_retries: 2
         docker.docker_container: {{container_name}}
         docker.docker_host_name: nas
         docker.notification_name_list: ["discord"]
