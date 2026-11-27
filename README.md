@@ -1988,67 +1988,82 @@ channel after one minute alone or five minutes without playing.
 
 ## Discord messages
 
-The links, news and tutos channels of the Discord server of the Friends hold
-messages written in `discord-posts/`, one Markdown file per message, so they
-live in git like the rest of the NAS. `${DOMAIN}` and `${CADDY_HTTPS_PORT}` in a
-file are filled in from `.env`. The `discord-posts` service publishes each file
-through the webhook of its channel: the first time it posts the message, the
-next times it edits the same message in place, and it posts again if the message
-was deleted. It keeps the id of each message in
-`${APPDATA_ROOT}/discord-posts/state.json`. Each file becomes an embed, its
-first level one heading the title and the rest the description. Discord takes
-4096 characters per description, which `cargo test -p discord-posts` checks.
+The links, news, tutos and patch notes channels of the Discord server of the
+Friends hold messages written in `discord-posts/`, one Markdown file per
+message, so they live in git like the rest of the NAS. Each folder is a channel,
+`discord-posts/<channel>/`, and each file of it one message of that channel:
 
-The messages are in French, for the Friends:
+- `links/01-links.md` gives the public addresses, the apps to install, how to
+  ask for a book or a manga, and the commands of the music bot. Change it when a
+  public address, an app or a command changes.
+- `news/01-welcome.md` welcomes a new Friend: how to get an Account, what
+  happens with a lost password, the rules, and what each service is for. Change
+  it when a service for the Friends or a rule changes.
+- `tutos/01-aurral-video.md`, `tutos/02-aurral.md` and `tutos/03-tempus.md`:
+  the video tutorial of Aurral, then Aurral in writing, adding music, importing
+  playlists from Spotify, recommendations, flows and the settings of a Friend,
+  then how to install Tempus and sign it in to Aurral. Change them when Aurral
+  or Tempus moves a button or a setting.
+- `patch/<date>.md` are the [Patch notes](#patch-notes).
 
-- `discord-posts/welcome.md`, in the news channel, welcomes a new Friend: how to
-  get an Account, what happens with a lost password, the rules, and what each
-  service is for. Change it when a service for the Friends or a rule changes.
-- `discord-posts/links.md`, in the links channel, gives the public addresses,
-  the apps to install, how to ask for a book or a manga, and the commands of the
-  music bot. Change it when a public address, an app or a command changes.
-- `discord-posts/aurral-video.md`, `discord-posts/aurral.md` and
-  `discord-posts/tempus.md`, in the tutos channel, in this order: the video
-  tutorial of Aurral, then Aurral in writing, adding music, importing playlists
-  from Spotify, recommendations, flows and the settings of a Friend, then how to
-  install Tempus and sign it in to Aurral. Change them when Aurral or Tempus
-  moves a button or a setting.
+The messages are in French, for the Friends. `${DOMAIN}` and
+`${CADDY_HTTPS_PORT}` in a file are filled in from `.env`. Each file becomes an
+embed, its first level one heading the title and the rest the description.
+Discord takes 4096 characters per description, which `cargo test -p
+discord-posts` checks for every file of the repo.
 
 A file wraps at 80 columns like any Markdown file of the repo, and the service
-joins the wrapped lines back, since Discord keeps
-every line break. A new list item, heading or `-#` line stays on its own line in
-Discord. `-#` is the small grey text of Discord. A line starting with 📺 goes
-above the embed, in the text of the message, without the angle brackets around
-its link, since Discord plays a video only from a bare link there.
+joins the wrapped lines back, since Discord keeps every line break. A new list
+item, heading or `-#` line stays on its own line in Discord. `-#` is the small
+grey text of Discord. A line starting with 📺 goes above the embed, in the text
+of the message, without the angle brackets around its link, since Discord plays
+a video only from a bare link there.
 
-1. In Discord, in the settings of the links channel, Integrations > Webhooks,
-   click "New Webhook", name it `Jellynas`, and copy its URL,
-   `https://discord.com/api/webhooks/<id>/<token>`. Do the same for the news
-   channel.
-2. In `.env`, set `DISCORD_LINKS_WEBHOOK_ID` and `DISCORD_LINKS_WEBHOOK_TOKEN`,
-   then the same pair for `NEWS`, to both parts of each URL.
+### Order and sync
+
+The number in front of a file name sets its place in its channel, and the name
+after the number is the message: renumbering `03-tempus.md` to `05-tempus.md`
+keeps its message. The `discord-posts` service keeps each channel in sync with
+its folder on `main`, as doco-cd deployed it:
+
+- a new file is posted, a changed file is edited in place,
+- a file removed from the repo deletes its message,
+- Discord shows the messages of a channel in the order they were posted, so a
+  file placed before messages already posted, or a message deleted on Discord,
+  deletes and posts again every message after it, in order.
+
+Deleting a message loses its reactions and the links to it. The service deletes
+at most 3 messages of a channel in one run by itself. Beyond, it leaves the
+channel as it is and says so in `docker compose logs discord-posts`, until a run
+with `force` that the `publish-discord` skill offers. A channel with a broken
+file, such as a placeholder missing from `.env` or a name without its number, is
+left alone until the file is fixed, so its order never breaks. It keeps the id
+of each message in `${APPDATA_ROOT}/discord-posts/state.json`.
+
+The service runs every day at 00:30, in the time zone of `TZ`. A message
+then follows the repo by itself, and its footer gives the date of its last
+publication. A failure on one channel leaves the others alone and waits for the
+next night.
+
+A channel takes its webhook from `DISCORD_<CHANNEL>_WEBHOOK_ID` and
+`DISCORD_<CHANNEL>_WEBHOOK_TOKEN` in `.env`, so a new channel is a new folder
+and its pair of variables.
+
+1. In Discord, in the settings of each channel, Integrations > Webhooks, click
+   "New Webhook", name it `Jellynas`, and copy its URL,
+   `https://discord.com/api/webhooks/<id>/<token>`.
+2. In `.env`, set `DISCORD_LINKS_WEBHOOK_ID` and `DISCORD_LINKS_WEBHOOK_TOKEN`
+   to both parts of the URL, then the same pair for `NEWS`, `TUTOS` and
+   `PATCH`.
 3. Restart the `discord-posts` service so it reads the new `.env`, then publish
    as [Publishing on demand](#publishing-on-demand) shows.
 
-The `discord-posts` service republishes these files every day at 00:30, in the
-time zone of `TZ`, from the `main` branch that doco-cd deployed. A message
-then follows the repo by itself, and its footer gives the date of its last
-publication. A failure on one channel leaves the others
-alone and waits for the next night, as `docker compose logs discord-posts`
-shows.
-
-A channel takes its webhook from `DISCORD_<CHANNEL>_WEBHOOK_ID` and
-`DISCORD_<CHANNEL>_WEBHOOK_TOKEN` in `.env`. A new message joins the list of
-`services/discord-posts/src/publish.rs`, except a Patch note, which only needs
-its file.
-
 ### Patch notes
 
-The patch notes channel of the Discord server of the Friends holds the Patch
-notes, one Markdown file per note in `discord-posts/patch-notes/`, named after
-its date, such as `2026-11-27.md`, so the names sort oldest first. A note is a
-header that records the last merged pull request it covers, which the next note
-starts after, then the list of what changed:
+A Patch note is a file of `discord-posts/patch/` named after its date, such as
+`2026-11-27.md`, so the date sets its order. It is a header that records the
+last merged pull request it covers, which the next note starts after, then the
+list of what changed:
 
 ```markdown
 ---
@@ -2061,52 +2076,39 @@ covers: #507
 
 Each note becomes an embed titled by its date, "Patch note du 27 novembre
 2026", and dated to that day on Discord, whatever the day it is posted. The
-header stays off Discord, and the list follows the rules of the other messages.
-A note never gives its own `#` heading.
+header stays off Discord, a note never gives its own `#` heading, and each note
+covers later pull requests than the one before it. `cargo test -p
+discord-posts` fails on a note that breaks these rules. Without the webhook of
+the patch channel, the service skips the notes silently.
 
-The `discord-posts` service publishes the notes after the other messages,
-oldest first: a note not yet posted is posted, a note changed in git is edited
-in place. Discord shows messages in the order they are posted, so the service
-refuses to post a note out of order:
-
-- a note waits until every older note is posted,
-- a note older than one already posted is refused, as is a deleted note posted
-  again after a newer one. Delete the newer messages in Discord and their ids in
-  `${APPDATA_ROOT}/discord-posts/state.json` to post them again in order,
-- a note must cover later pull requests than the note before it.
-
-`cargo test -p discord-posts` fails on a note that breaks these rules, has no
-header, is no list or is longer than Discord takes. Without the webhook, the
-service skips the notes silently.
-
-1. In Discord, in the server of the Friends, create a text channel for the
-   Patch notes. In its settings, Integrations > Webhooks, click "New Webhook",
-   name it `Jellynas`, and copy its URL,
-   `https://discord.com/api/webhooks/<id>/<token>`.
-2. In `.env`, set `DISCORD_PATCH_WEBHOOK_ID` and `DISCORD_PATCH_WEBHOOK_TOKEN`
-   to both parts of the URL.
-3. Restart the `discord-posts` service so it reads the new `.env`.
-
-The `publish-discord` skill asks Claude to publish: it lists the messages and
-their state, says what will change, and publishes once the Admin agrees.
+The `write-discord` skill drafts the next Patch note from the pull requests
+merged since the last one, or changes any other message, and opens a pull
+request for the Admin to review. Once it is merged and deployed, it offers to
+publish with the `publish-discord` skill.
 
 ### Publishing on demand
 
-To publish without waiting for the night, click "Messages Discord" in the quick
-actions of the Dashboard, or call the API of the service, which answers in the
-internal zone only, through `scripts/check.sh` on the Clone:
+To publish without waiting for the night, ask Claude with the
+`publish-discord` skill, which shows what will change and publishes once the
+Admin agrees, or click "Messages Discord" in the quick actions of the
+Dashboard. Both go through the API of the service, which answers in the
+internal zone only, and `scripts/check.sh` reaches it from the Clone:
 
 ```sh
 sudo sh scripts/check.sh api discord-posts GET /api/posts
 sudo sh scripts/check.sh api discord-posts POST /api/publish
-sudo sh scripts/check.sh api discord-posts POST   '/api/publish?file=patch-notes/2026-11-27.md'
+sudo sh scripts/check.sh api discord-posts POST '/api/publish?channel=tutos'
+sudo sh scripts/check.sh api discord-posts POST '/api/publish?force=true'
 ```
 
-`GET /api/posts` lists each message with its channel, its file, the id of its
-Discord message once posted, and for a Patch note the last pull request it
-covers. `POST /api/publish` publishes every message, or only the one of `file`,
-and answers with the outcome of each: `posted`, `edited`, `skipped` for a Patch
-note without its webhook, or `failed` with the reason.
+`GET /api/posts` gives, per channel, each file with the id of its Discord
+message once posted, its `action` on the next run (`post`, `edit` or
+`repost`), the last pull request a Patch note `covers`, the messages it would
+`delete`, whether it `needs_force`, and the `problems` that block the channel.
+`POST /api/publish` syncs every channel, or only `channel`, past the limit of
+deletions with `force=true`, and answers with the outcome of each message:
+`posted`, `edited`, `reposted`, `deleted`, `skipped` for a channel without its
+webhook, or `failed` with the reason.
 
 ## PR radar
 

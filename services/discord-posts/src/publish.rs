@@ -4,19 +4,11 @@ use jiff::civil::Date;
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub const PATCH_CHANNEL: &str = "patch";
-pub const PATCH_NOTES: &str = "patch-notes";
+pub const LIMIT: usize = 3;
 const VIOLET: u32 = 0xA78BFA;
-const POSTS: [(&str, &str); 5] = [
-    ("links", "links.md"),
-    ("news", "welcome.md"),
-    ("tutos", "aurral-video.md"),
-    ("tutos", "aurral.md"),
-    ("tutos", "tempus.md"),
-];
-
 const MONTHS: [&str; 12] = [
     "janvier",
     "février",
@@ -33,30 +25,22 @@ const MONTHS: [&str; 12] = [
 ];
 
 pub trait Discord {
-    fn send(&self, method: &str, url: &str, body: &Value) -> Result<(u16, Value), String>;
+    fn send(&self, method: &str, url: &str, body: Option<&Value>) -> Result<(u16, Value), String>;
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Post {
     pub channel: String,
     pub file: String,
-}
-
-impl Post {
-    fn key(&self) -> String {
-        let name = Path::new(&self.file)
-            .file_name()
-            .map_or(self.file.clone(), |name| {
-                name.to_string_lossy().into_owned()
-            });
-        format!("{}/{name}", self.channel)
-    }
+    pub key: String,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Outcome {
     Posted,
     Edited,
+    Reposted,
+    Deleted,
     Skipped(String),
     Failed(String),
 }
@@ -66,10 +50,31 @@ impl Outcome {
         match self {
             Outcome::Posted => json!({"outcome": "posted"}),
             Outcome::Edited => json!({"outcome": "edited"}),
+            Outcome::Reposted => json!({"outcome": "reposted"}),
+            Outcome::Deleted => json!({"outcome": "deleted"}),
             Outcome::Skipped(reason) => json!({"outcome": "skipped", "reason": reason}),
             Outcome::Failed(error) => json!({"outcome": "failed", "error": error}),
         }
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Entry {
+    pub channel: String,
+    pub file: String,
+    pub outcome: Outcome,
+}
+
+pub struct Channel {
+    pub name: String,
+    pub posts: Vec<Post>,
+    pub errors: Vec<(String, String)>,
+}
+
+pub struct Plan {
+    pub actions: Vec<(Post, &'static str)>,
+    pub orphans: Vec<String>,
+    pub deletions: usize,
 }
 
 pub struct Publisher<'a> {
@@ -90,26 +95,91 @@ fn color(channel: &str) -> u32 {
     }
 }
 
+fn note_date(name: &str) -> Option<Date> {
+    name.strip_suffix(".md")?.parse().ok()
+}
+
+fn identity(channel: &str, name: &str) -> Result<((u64, String), String), String> {
+    if channel == PATCH_CHANNEL {
+        note_date(name)
+            .map(|date| ((0, date.to_string()), format!("{channel}/{name}")))
+            .ok_or_else(|| {
+                "a Patch note must be named after its date, such as 2026-11-27.md".into()
+            })
+    } else {
+        name.split_once('-')
+            .and_then(|(number, rest)| Some((number.parse::<u64>().ok()?, rest)))
+            .filter(|(_, rest)| rest.len() > ".md".len())
+            .map(|(number, rest)| ((number, rest.to_string()), format!("{channel}/{rest}")))
+            .ok_or_else(|| "a message must be named after its place, such as 02-aurral.md".into())
+    }
+}
+
+fn id_of(id: &str) -> u64 {
+    id.parse().unwrap_or(u64::MAX)
+}
+
+fn others_wait(entries: &mut Vec<Entry>, posts: &[Post], reason: &str) {
+    for post in posts {
+        entries.push(Entry {
+            channel: post.channel.clone(),
+            file: post.file.clone(),
+            outcome: Outcome::Failed(reason.to_string()),
+        });
+    }
+}
+
 impl Publisher<'_> {
-    pub fn posts(&self) -> Vec<Post> {
-        let mut notes: Vec<String> = fs::read_dir(self.folder.join(PATCH_NOTES))
+    pub fn channels(&self) -> Vec<Channel> {
+        let mut names: Vec<String> = fs::read_dir(&self.folder)
             .into_iter()
             .flatten()
             .flatten()
+            .filter(|entry| entry.path().is_dir())
             .map(|entry| entry.file_name().to_string_lossy().into_owned())
-            .filter(|name| name.ends_with(".md"))
             .collect();
-        notes.sort();
-        POSTS
-            .iter()
-            .map(|(channel, file)| Post {
-                channel: (*channel).into(),
-                file: (*file).into(),
+        names.sort();
+        names
+            .into_iter()
+            .map(|name| {
+                let mut found = Vec::new();
+                let mut errors = Vec::new();
+                for entry in fs::read_dir(self.folder.join(&name))
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                {
+                    let file = entry.file_name().to_string_lossy().into_owned();
+                    if !file.ends_with(".md") {
+                        continue;
+                    }
+                    match identity(&name, &file) {
+                        Ok((order, key)) => found.push((
+                            order,
+                            Post {
+                                channel: name.clone(),
+                                file: format!("{name}/{file}"),
+                                key,
+                            },
+                        )),
+                        Err(error) => errors.push((format!("{name}/{file}"), error)),
+                    }
+                }
+                found.sort_by(|a, b| a.0.cmp(&b.0));
+                for pair in found.windows(2) {
+                    if pair[0].1.key == pair[1].1.key {
+                        errors.push((
+                            pair[1].1.file.clone(),
+                            format!("{} has the same name", pair[0].1.file),
+                        ));
+                    }
+                }
+                Channel {
+                    name,
+                    posts: found.into_iter().map(|(_, post)| post).collect(),
+                    errors,
+                }
             })
-            .chain(notes.into_iter().map(|name| Post {
-                channel: PATCH_CHANNEL.into(),
-                file: format!("{PATCH_NOTES}/{name}"),
-            }))
             .collect()
     }
 
@@ -132,9 +202,26 @@ impl Publisher<'_> {
             .unwrap_or_default()
     }
 
+    fn save(&self, saved: &Map<String, Value>) -> Result<(), String> {
+        if let Some(parent) = self.state.parent() {
+            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+        let text = serde_json::to_string_pretty(saved).map_err(|error| error.to_string())?;
+        fs::write(&self.state, text + "\n").map_err(|error| error.to_string())
+    }
+
+    fn set(&self, key: &str, id: Option<&str>) -> Result<(), String> {
+        let mut saved = self.saved();
+        match id {
+            Some(id) => saved.insert(key.into(), json!(id)),
+            None => saved.remove(key),
+        };
+        self.save(&saved)
+    }
+
     pub fn message_id(&self, post: &Post) -> Option<String> {
         self.saved()
-            .get(&post.key())
+            .get(&post.key)
             .and_then(Value::as_str)
             .map(str::to_string)
     }
@@ -149,7 +236,8 @@ impl Publisher<'_> {
         if post.channel != PATCH_CHANNEL {
             return Ok(rendered);
         }
-        let date = note_date(post)?;
+        let name = post.file.rsplit('/').next().unwrap_or_default();
+        let date = note_date(name).ok_or("a Patch note must be named after its date")?;
         if message::covers(&source).is_none() {
             return Err(
                 "it must start with a header that gives the last pull request it covers, covers: #<number>".into(),
@@ -177,141 +265,300 @@ impl Publisher<'_> {
         Ok(rendered)
     }
 
-    fn notes(&self) -> Vec<Post> {
-        self.posts()
-            .into_iter()
-            .filter(|post| post.channel == PATCH_CHANNEL)
-            .collect()
-    }
-
-    pub fn check_notes(&self) -> Result<(), String> {
-        let mut last: Option<(String, u64)> = None;
-        for note in self.notes() {
-            note_date(&note)?;
-            let covers = message::covers(&self.read(&note)?)
-                .ok_or_else(|| format!("{} gives no covers: #<number> header", note.file))?;
-            if let Some((file, previous)) = &last
-                && covers <= *previous
-            {
-                return Err(format!(
-                    "{} covers up to #{covers}, which is not after #{previous} of {file}",
-                    note.file
-                ));
+    pub fn check(&self, channel: &Channel) -> Vec<(String, String)> {
+        let mut problems = channel.errors.clone();
+        for post in &channel.posts {
+            if let Err(error) = self.render(post) {
+                problems.push((post.file.clone(), error));
             }
-            last = Some((note.file.clone(), covers));
         }
-        Ok(())
+        if channel.name == PATCH_CHANNEL {
+            let mut last: Option<(String, u64)> = None;
+            for post in &channel.posts {
+                let Some(covers) = self
+                    .read(post)
+                    .ok()
+                    .and_then(|source| message::covers(&source))
+                else {
+                    continue;
+                };
+                if let Some((file, previous)) = &last
+                    && covers <= *previous
+                {
+                    problems.push((
+                        post.file.clone(),
+                        format!(
+                            "it covers up to #{covers}, which is not after #{previous} of {file}"
+                        ),
+                    ));
+                }
+                last = Some((post.file.clone(), covers));
+            }
+        }
+        problems
     }
 
-    fn out_of_order(&self, post: &Post) -> Option<String> {
-        let notes = self.notes();
-        let at = notes.iter().position(|note| note == post)?;
-        if let Some(earlier) = notes[..at]
-            .iter()
-            .find(|note| self.message_id(note).is_none())
-        {
-            return Some(format!(
-                "{} is not posted yet, and Discord shows the Patch notes in the order they are posted",
-                earlier.file
-            ));
-        }
-        notes[at + 1..]
-            .iter()
-            .find(|note| self.message_id(note).is_some())
-            .map(|later| {
-                format!(
-                    "{} is already posted, so this older note would show after it. Delete the later messages and their ids in the state to post them again in order",
-                    later.file
-                )
-            })
-    }
-
-    pub fn publish(&self, post: &Post, now: &ZonedDateTime) -> Outcome {
-        let Some(hook) = self.webhook(&post.channel) else {
-            let name = post.channel.to_uppercase().replace('-', "_");
-            let reason = format!(
-                "DISCORD_{name}_WEBHOOK_ID and DISCORD_{name}_WEBHOOK_TOKEN are not set in .env"
-            );
-            return if post.channel == PATCH_CHANNEL {
-                Outcome::Skipped(reason)
-            } else {
-                Outcome::Failed(reason)
-            };
+    pub fn plan(&self, channel: &Channel) -> Plan {
+        let saved = self.saved();
+        let id = |post: &Post| {
+            saved
+                .get(&post.key)
+                .and_then(Value::as_str)
+                .map(str::to_string)
         };
-        match self.send(post, &hook, now) {
-            Ok(outcome) => outcome,
-            Err(error) => Outcome::Failed(error),
+        let keys: Vec<&str> = channel.posts.iter().map(|post| post.key.as_str()).collect();
+        let prefix = format!("{}/", channel.name);
+        let orphans: Vec<String> = saved
+            .keys()
+            .filter(|key| key.starts_with(&prefix) && !keys.contains(&key.as_str()))
+            .cloned()
+            .collect();
+        let mut previous = 0;
+        let kept = channel
+            .posts
+            .iter()
+            .position(|post| match id(post) {
+                Some(found) if id_of(&found) > previous => {
+                    previous = id_of(&found);
+                    false
+                }
+                _ => true,
+            })
+            .unwrap_or(channel.posts.len());
+        let actions: Vec<(Post, &'static str)> = channel
+            .posts
+            .iter()
+            .enumerate()
+            .map(|(at, post)| {
+                let action = match (at < kept, id(post).is_some()) {
+                    (true, _) => "edit",
+                    (false, true) => "repost",
+                    (false, false) => "post",
+                };
+                (post.clone(), action)
+            })
+            .collect();
+        let deletions = orphans.len()
+            + actions
+                .iter()
+                .filter(|(_, action)| *action == "repost")
+                .count();
+        Plan {
+            actions,
+            orphans,
+            deletions,
         }
     }
 
-    fn send(&self, post: &Post, hook: &str, now: &ZonedDateTime) -> Result<Outcome, String> {
-        let patch = post.channel == PATCH_CHANNEL;
-        if patch {
-            self.check_notes()?;
-        }
+    fn body(&self, post: &Post, now: &ZonedDateTime) -> Result<Value, String> {
         let Message { content, mut embed } = self.render(post)?;
         embed.insert("color".into(), json!(color(&post.channel)));
-        if !patch {
+        if post.channel != PATCH_CHANNEL {
             embed.insert(
                 "footer".into(),
                 json!({"text": format!("Dernière mise à jour : {} à {}", now.strftime("%d/%m/%Y"), now.strftime("%H:%M"))}),
             );
         }
-        let body =
-            json!({"content": content, "embeds": [embed], "allowed_mentions": {"parse": []}});
-        if let Some(id) = self.message_id(post) {
-            let (status, reply) =
+        Ok(json!({"content": content, "embeds": [embed], "allowed_mentions": {"parse": []}}))
+    }
+
+    fn delete(&self, hook: &str, key: &str, id: &str) -> Result<(), String> {
+        let (status, reply) =
+            self.discord
+                .send("DELETE", &format!("{hook}/messages/{id}"), None)?;
+        if !(200..300).contains(&status) && status != 404 {
+            return Err(format!(
+                "Discord answered {status} to the deletion: {reply}"
+            ));
+        }
+        self.set(key, None)
+    }
+
+    fn post(&self, hook: &str, post: &Post, body: &Value) -> Result<(), String> {
+        let (status, reply) =
+            self.discord
+                .send("POST", &format!("{hook}?wait=true"), Some(body))?;
+        match (status, reply["id"].as_str()) {
+            (200..300, Some(id)) => self.set(&post.key, Some(id)),
+            _ => Err(format!("Discord answered {status} to the post: {reply}")),
+        }
+    }
+
+    pub fn sync(&self, channel: &Channel, now: &ZonedDateTime, force: bool) -> Vec<Entry> {
+        let mut entries = Vec::new();
+        let entry = |post: &Post, outcome: Outcome| Entry {
+            channel: post.channel.clone(),
+            file: post.file.clone(),
+            outcome,
+        };
+        let Some(hook) = self.webhook(&channel.name) else {
+            let name = channel.name.to_uppercase().replace('-', "_");
+            let reason = format!(
+                "DISCORD_{name}_WEBHOOK_ID and DISCORD_{name}_WEBHOOK_TOKEN are not set in .env"
+            );
+            for post in &channel.posts {
+                entries.push(entry(
+                    post,
+                    if channel.name == PATCH_CHANNEL {
+                        Outcome::Skipped(reason.clone())
+                    } else {
+                        Outcome::Failed(reason.clone())
+                    },
+                ));
+            }
+            return entries;
+        };
+        let problems = self.check(channel);
+        if !problems.is_empty() {
+            for (file, error) in &problems {
+                entries.push(Entry {
+                    channel: channel.name.clone(),
+                    file: file.clone(),
+                    outcome: Outcome::Failed(error.clone()),
+                });
+            }
+            let blocked: Vec<Post> = channel
+                .posts
+                .iter()
+                .filter(|post| !problems.iter().any(|(file, _)| *file == post.file))
+                .cloned()
+                .collect();
+            others_wait(
+                &mut entries,
+                &blocked,
+                &format!(
+                    "{} must be fixed first, the channel keeps its order",
+                    problems[0].0
+                ),
+            );
+            return entries;
+        }
+        let plan = self.plan(channel);
+        let mut tail = plan
+            .actions
+            .iter()
+            .position(|(_, action)| *action != "edit")
+            .unwrap_or(plan.actions.len());
+        for (at, (post, _)) in plan.actions[..tail].iter().enumerate() {
+            let sent = self.body(post, now).and_then(|body| {
+                let id = self.message_id(post).unwrap_or_default();
                 self.discord
-                    .send("PATCH", &format!("{hook}/messages/{id}"), &body)?;
-            match status {
-                200..300 => return Ok(Outcome::Edited),
-                404 => {}
-                _ => return Err(format!("Discord answered {status} to the edit: {reply}")),
+                    .send("PATCH", &format!("{hook}/messages/{id}"), Some(&body))
+            });
+            match sent {
+                Ok((200..300, _)) => entries.push(entry(post, Outcome::Edited)),
+                Ok((404, _)) => {
+                    if let Err(error) = self.set(&post.key, None) {
+                        entries.push(entry(post, Outcome::Failed(error)));
+                        return entries;
+                    }
+                    tail = at;
+                    break;
+                }
+                Ok((status, reply)) => entries.push(entry(
+                    post,
+                    Outcome::Failed(format!("Discord answered {status} to the edit: {reply}")),
+                )),
+                Err(error) => entries.push(entry(post, Outcome::Failed(error))),
             }
         }
-        if patch && let Some(problem) = self.out_of_order(post) {
-            return Err(problem);
+        let rest: Vec<&Post> = plan.actions[tail..].iter().map(|(post, _)| post).collect();
+        let deletions = plan.orphans.len()
+            + rest
+                .iter()
+                .filter(|post| self.message_id(post).is_some())
+                .count();
+        if deletions > LIMIT && !force {
+            let reason = format!(
+                "putting {} back in order deletes {deletions} messages, more than {LIMIT}, publish with force once the Admin agrees",
+                channel.name
+            );
+            println!("{reason}");
+            others_wait(
+                &mut entries,
+                &rest.into_iter().cloned().collect::<Vec<_>>(),
+                &reason,
+            );
+            for key in &plan.orphans {
+                entries.push(Entry {
+                    channel: channel.name.clone(),
+                    file: key.clone(),
+                    outcome: Outcome::Failed(reason.clone()),
+                });
+            }
+            return entries;
         }
-        let (status, reply) = self
-            .discord
-            .send("POST", &format!("{hook}?wait=true"), &body)?;
-        let id = match (status, reply["id"].as_str()) {
-            (200..300, Some(id)) => id.to_string(),
-            _ => return Err(format!("Discord answered {status} to the post: {reply}")),
-        };
-        let mut saved = self.saved();
-        saved.insert(post.key(), json!(id));
-        if let Some(parent) = self.state.parent() {
-            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        let saved = self.saved();
+        for key in &plan.orphans {
+            let id = saved.get(key).and_then(Value::as_str).unwrap_or_default();
+            let outcome = match self.delete(&hook, key, id) {
+                Ok(()) => Outcome::Deleted,
+                Err(error) => Outcome::Failed(error),
+            };
+            entries.push(Entry {
+                channel: channel.name.clone(),
+                file: key.clone(),
+                outcome,
+            });
         }
-        let text = serde_json::to_string_pretty(&saved).map_err(|error| error.to_string())?;
-        fs::write(&self.state, text + "\n").map_err(|error| error.to_string())?;
-        Ok(Outcome::Posted)
+        let stale: Vec<(&Post, String)> = rest
+            .iter()
+            .filter_map(|post| Some((*post, self.message_id(post)?)))
+            .collect();
+        for (post, id) in &stale {
+            if let Err(error) = self.delete(&hook, &post.key, id) {
+                let at = rest
+                    .iter()
+                    .position(|other| other == post)
+                    .unwrap_or_default();
+                entries.push(entry(post, Outcome::Failed(error)));
+                let waiting: Vec<Post> =
+                    rest[at + 1..].iter().map(|post| (*post).clone()).collect();
+                others_wait(
+                    &mut entries,
+                    &waiting,
+                    &format!("{} could not be deleted first", post.file),
+                );
+                return entries;
+            }
+        }
+        for (at, post) in rest.iter().enumerate() {
+            let reposted = stale.iter().any(|(other, _)| other == post);
+            match self
+                .body(post, now)
+                .and_then(|body| self.post(&hook, post, &body))
+            {
+                Ok(()) => entries.push(entry(
+                    post,
+                    if reposted {
+                        Outcome::Reposted
+                    } else {
+                        Outcome::Posted
+                    },
+                )),
+                Err(error) => {
+                    entries.push(entry(post, Outcome::Failed(error)));
+                    let waiting: Vec<Post> =
+                        rest[at + 1..].iter().map(|post| (*post).clone()).collect();
+                    others_wait(
+                        &mut entries,
+                        &waiting,
+                        &format!("{} must be posted first", post.file),
+                    );
+                    return entries;
+                }
+            }
+        }
+        entries
     }
 
-    pub fn publish_all(&self, only: Option<&str>, now: &ZonedDateTime) -> Vec<(Post, Outcome)> {
-        self.posts()
-            .into_iter()
-            .filter(|post| only.is_none_or(|file| file == post.file))
-            .map(|post| {
-                let outcome = self.publish(&post, now);
-                (post, outcome)
-            })
+    pub fn publish_all(&self, only: Option<&str>, now: &ZonedDateTime, force: bool) -> Vec<Entry> {
+        self.channels()
+            .iter()
+            .filter(|channel| only.is_none_or(|name| name == channel.name))
+            .flat_map(|channel| self.sync(channel, now, force))
             .collect()
     }
-}
-
-fn note_date(post: &Post) -> Result<Date, String> {
-    Path::new(&post.file)
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .and_then(|stem| stem.parse::<Date>().ok())
-        .ok_or_else(|| {
-            format!(
-                "{} must be named after its date, such as 2026-11-27.md",
-                post.file
-            )
-        })
 }
 
 #[cfg(test)]
@@ -322,18 +569,25 @@ mod tests {
 
     #[derive(Default)]
     struct Fake {
-        calls: RefCell<Vec<(String, String, Value)>>,
+        calls: RefCell<Vec<(String, String, Option<Value>)>>,
         messages: RefCell<Vec<Option<String>>>,
     }
 
     impl Discord for Fake {
-        fn send(&self, method: &str, url: &str, body: &Value) -> Result<(u16, Value), String> {
+        fn send(
+            &self,
+            method: &str,
+            url: &str,
+            body: Option<&Value>,
+        ) -> Result<(u16, Value), String> {
             self.calls
                 .borrow_mut()
-                .push((method.into(), url.into(), body.clone()));
-            let description = body["embeds"][0]["description"]
-                .as_str()
-                .map(str::to_string);
+                .push((method.into(), url.into(), body.cloned()));
+            let description = body.and_then(|body| {
+                body["embeds"][0]["description"]
+                    .as_str()
+                    .map(str::to_string)
+            });
             let mut messages = self.messages.borrow_mut();
             if method == "POST" {
                 messages.push(description);
@@ -341,6 +595,10 @@ mod tests {
             }
             let id: usize = url.rsplit('/').next().unwrap().parse().unwrap();
             match messages.get_mut(id - 1) {
+                Some(slot @ Some(_)) if method == "DELETE" => {
+                    *slot = None;
+                    Ok((204, Value::Null))
+                }
                 Some(slot @ Some(_)) => {
                     *slot = description;
                     Ok((200, json!({"id": id.to_string()})))
@@ -359,17 +617,8 @@ mod tests {
                 .collect()
         }
 
-        fn descriptions(&self) -> Vec<String> {
-            self.calls
-                .borrow()
-                .iter()
-                .map(|call| {
-                    call.2["embeds"][0]["description"]
-                        .as_str()
-                        .unwrap()
-                        .to_string()
-                })
-                .collect()
+        fn shown(&self) -> Vec<String> {
+            self.messages.borrow().iter().flatten().cloned().collect()
         }
     }
 
@@ -381,29 +630,34 @@ mod tests {
 
     impl Setup {
         fn new() -> Setup {
-            let folder = TempDir::new().unwrap();
-            fs::create_dir(folder.path().join(PATCH_NOTES)).unwrap();
+            let mut env = HashMap::from([
+                ("DOMAIN".to_string(), "example.com".to_string()),
+                ("CADDY_HTTPS_PORT".to_string(), "443".to_string()),
+            ]);
+            for (channel, id) in [("LINKS", "1234"), ("TUTOS", "4321"), ("PATCH", "5678")] {
+                env.insert(format!("DISCORD_{channel}_WEBHOOK_ID"), id.into());
+                env.insert(format!("DISCORD_{channel}_WEBHOOK_TOKEN"), "token".into());
+            }
             Setup {
-                folder,
+                folder: TempDir::new().unwrap(),
                 fake: Fake::default(),
-                env: HashMap::from([
-                    ("DOMAIN".into(), "example.com".into()),
-                    ("CADDY_HTTPS_PORT".into(), "443".into()),
-                    ("DISCORD_LINKS_WEBHOOK_ID".into(), "1234".into()),
-                    ("DISCORD_LINKS_WEBHOOK_TOKEN".into(), "abcd".into()),
-                    ("DISCORD_PATCH_WEBHOOK_ID".into(), "5678".into()),
-                    ("DISCORD_PATCH_WEBHOOK_TOKEN".into(), "efgh".into()),
-                ]),
+                env,
             }
         }
 
         fn write(&self, file: &str, text: &str) {
-            fs::write(self.folder.path().join(file), text).unwrap();
+            let path = self.folder.path().join(file);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
+        }
+
+        fn remove(&self, file: &str) {
+            fs::remove_file(self.folder.path().join(file)).unwrap();
         }
 
         fn note(&self, name: &str, pull: u64, text: &str) {
             self.write(
-                &format!("{PATCH_NOTES}/{name}"),
+                &format!("patch/{name}"),
                 &format!("---\ncovers: #{pull}\n---\n\n- {text}\n"),
             );
         }
@@ -411,15 +665,19 @@ mod tests {
         fn publisher(&self) -> Publisher<'_> {
             Publisher {
                 folder: self.folder.path().into(),
-                state: self.folder.path().join("appdata").join("state.json"),
+                state: self.folder.path().join("state.json"),
                 api: "https://discord".into(),
                 env: self.env.clone(),
                 discord: &self.fake,
             }
         }
 
-        fn publish_all(&self) -> Vec<(Post, Outcome)> {
-            self.publisher().publish_all(None, &now())
+        fn run(&self) -> Vec<Entry> {
+            self.publisher().publish_all(None, &now(), false)
+        }
+
+        fn forced(&self) -> Vec<Entry> {
+            self.publisher().publish_all(None, &now(), true)
         }
     }
 
@@ -427,10 +685,11 @@ mod tests {
         "2026-11-10T00:30[Europe/Paris]".parse().unwrap()
     }
 
-    fn links() -> Post {
-        Post {
-            channel: "links".into(),
-            file: "links.md".into(),
+    fn outcome(entries: &[Entry], file: &str) -> String {
+        let found = entries.iter().find(|entry| entry.file == file).unwrap();
+        match &found.outcome {
+            Outcome::Failed(error) => format!("failed: {error}"),
+            other => format!("{other:?}"),
         }
     }
 
@@ -438,13 +697,14 @@ mod tests {
     fn posts_the_message_filled_from_the_env() {
         let setup = Setup::new();
         setup.write(
-            "links.md",
+            "links/01-links.md",
             "https://jellyfin.${DOMAIN}:${CADDY_HTTPS_PORT}\n",
         );
-        assert_eq!(Outcome::Posted, setup.publisher().publish(&links(), &now()));
+        setup.run();
         let (method, url, body) = setup.fake.calls.borrow()[0].clone();
+        let body = body.unwrap();
         assert_eq!(
-            ("POST", "https://discord/1234/abcd?wait=true"),
+            ("POST", "https://discord/1234/token?wait=true"),
             (method.as_str(), url.as_str())
         );
         assert_eq!("", body["content"]);
@@ -456,34 +716,142 @@ mod tests {
     }
 
     #[test]
-    fn edits_the_same_message_the_next_time() {
+    fn a_message_is_known_by_its_name_without_its_number() {
         let setup = Setup::new();
-        setup.write("links.md", "first");
-        setup.publisher().publish(&links(), &now());
-        setup.write("links.md", "changed");
-        assert_eq!(Outcome::Edited, setup.publisher().publish(&links(), &now()));
+        setup.write("links/01-links.md", "links");
+        setup.run();
         assert_eq!(
-            "https://discord/1234/abcd/messages/1",
-            setup.fake.calls.borrow()[1].1
-        );
-        assert_eq!(
-            vec![Some("changed".to_string())],
-            *setup.fake.messages.borrow()
+            json!({"links/links.md": "1"}),
+            Value::Object(setup.publisher().saved())
         );
     }
 
     #[test]
-    fn posts_again_once_the_message_was_deleted() {
+    fn edits_the_same_message_the_next_time() {
         let setup = Setup::new();
-        setup.write("links.md", "first");
-        setup.publisher().publish(&links(), &now());
-        setup.fake.messages.borrow_mut()[0] = None;
-        assert_eq!(Outcome::Posted, setup.publisher().publish(&links(), &now()));
-        assert_eq!(vec!["POST", "PATCH", "POST"], setup.fake.methods());
+        setup.write("links/01-links.md", "first");
+        setup.run();
+        setup.write("links/01-links.md", "changed");
+        let entries = setup.run();
+        assert_eq!("Edited", outcome(&entries, "links/01-links.md"));
         assert_eq!(
-            json!({"links/links.md": "2"}),
+            "https://discord/1234/token/messages/1",
+            setup.fake.calls.borrow()[1].1
+        );
+        assert_eq!(vec!["changed"], setup.fake.shown());
+    }
+
+    #[test]
+    fn renumbering_a_file_keeps_its_message() {
+        let setup = Setup::new();
+        setup.write("links/01-links.md", "links");
+        setup.run();
+        setup.remove("links/01-links.md");
+        setup.write("links/05-links.md", "links");
+        let entries = setup.run();
+        assert_eq!("Edited", outcome(&entries, "links/05-links.md"));
+        assert_eq!(vec!["POST", "PATCH"], setup.fake.methods());
+    }
+
+    #[test]
+    fn the_messages_of_a_channel_are_posted_in_the_order_of_their_number() {
+        let setup = Setup::new();
+        setup.write("tutos/10-tempus.md", "tempus");
+        setup.write("tutos/2-aurral.md", "aurral");
+        setup.write("tutos/1-video.md", "video");
+        setup.run();
+        assert_eq!(vec!["video", "aurral", "tempus"], setup.fake.shown());
+    }
+
+    #[test]
+    fn a_message_inserted_before_others_reposts_the_rest_of_the_channel() {
+        let setup = Setup::new();
+        setup.write("tutos/01-video.md", "video");
+        setup.write("tutos/03-tempus.md", "tempus");
+        setup.run();
+        setup.write("tutos/02-aurral.md", "aurral");
+        let entries = setup.run();
+        assert_eq!("Edited", outcome(&entries, "tutos/01-video.md"));
+        assert_eq!("Posted", outcome(&entries, "tutos/02-aurral.md"));
+        assert_eq!("Reposted", outcome(&entries, "tutos/03-tempus.md"));
+        assert_eq!(vec!["video", "aurral", "tempus"], setup.fake.shown());
+    }
+
+    #[test]
+    fn a_message_deleted_on_discord_is_posted_again_with_the_rest_after_it() {
+        let setup = Setup::new();
+        setup.write("tutos/01-video.md", "video");
+        setup.write("tutos/02-aurral.md", "aurral");
+        setup.write("tutos/03-tempus.md", "tempus");
+        setup.run();
+        setup.fake.messages.borrow_mut()[1] = None;
+        let entries = setup.run();
+        assert_eq!("Posted", outcome(&entries, "tutos/02-aurral.md"));
+        assert_eq!("Reposted", outcome(&entries, "tutos/03-tempus.md"));
+        assert_eq!(vec!["video", "aurral", "tempus"], setup.fake.shown());
+    }
+
+    #[test]
+    fn a_file_removed_from_the_repo_deletes_its_message() {
+        let setup = Setup::new();
+        setup.write("tutos/01-video.md", "video");
+        setup.write("tutos/02-aurral.md", "aurral");
+        setup.run();
+        setup.remove("tutos/02-aurral.md");
+        let entries = setup.run();
+        assert_eq!("Deleted", outcome(&entries, "tutos/aurral.md"));
+        assert_eq!(vec!["video"], setup.fake.shown());
+        assert_eq!(
+            json!({"tutos/video.md": "1"}),
             Value::Object(setup.publisher().saved())
         );
+    }
+
+    #[test]
+    fn deleting_more_than_the_limit_waits_for_force() {
+        let setup = Setup::new();
+        for (number, name) in [(2, "a"), (3, "b"), (4, "c"), (5, "d")] {
+            setup.write(&format!("tutos/0{number}-{name}.md"), name);
+        }
+        setup.run();
+        setup.write("tutos/01-first.md", "first");
+        let entries = setup.run();
+        assert!(outcome(&entries, "tutos/02-a.md").contains("more than 3"));
+        assert_eq!(vec!["a", "b", "c", "d"], setup.fake.shown());
+        setup.forced();
+        assert_eq!(vec!["first", "a", "b", "c", "d"], setup.fake.shown());
+    }
+
+    #[test]
+    fn a_channel_with_a_broken_file_is_left_alone() {
+        let setup = Setup::new();
+        setup.write("tutos/01-video.md", "${MISSING}");
+        setup.write("tutos/02-aurral.md", "aurral");
+        setup.write("tutos/tempus.md", "tempus");
+        let entries = setup.run();
+        assert!(setup.fake.calls.borrow().is_empty());
+        assert!(outcome(&entries, "tutos/01-video.md").contains("MISSING"));
+        assert!(outcome(&entries, "tutos/tempus.md").contains("named after its place"));
+        assert!(outcome(&entries, "tutos/02-aurral.md").contains("must be fixed first"));
+    }
+
+    #[test]
+    fn two_files_of_the_same_name_are_refused() {
+        let setup = Setup::new();
+        setup.write("tutos/01-aurral.md", "a");
+        setup.write("tutos/02-aurral.md", "b");
+        let entries = setup.run();
+        assert!(outcome(&entries, "tutos/02-aurral.md").contains("same name"));
+    }
+
+    #[test]
+    fn a_channel_that_fails_does_not_stop_the_others() {
+        let setup = Setup::new();
+        setup.write("links/01-links.md", "links");
+        setup.write("news/01-welcome.md", "welcome");
+        let entries = setup.run();
+        assert_eq!(vec!["links"], setup.fake.shown());
+        assert!(outcome(&entries, "news/01-welcome.md").contains("DISCORD_NEWS_WEBHOOK_ID"));
     }
 
     #[test]
@@ -495,48 +863,29 @@ mod tests {
         setup
             .env
             .insert("DISCORD_FARM_WEBHOOK_TOKEN".into(), "a".into());
-        setup.write("links.md", "x");
-        let post = Post {
-            channel: "farm".into(),
-            file: "links.md".into(),
-        };
-        setup.publisher().publish(&post, &now());
-        assert_eq!(
-            json!(VIOLET),
-            setup.fake.calls.borrow()[0].2["embeds"][0]["color"]
-        );
+        setup.write("farm/01-farm.md", "x");
+        setup.run();
+        let body = setup.fake.calls.borrow()[0].2.clone().unwrap();
+        assert_eq!(json!(VIOLET), body["embeds"][0]["color"]);
     }
 
     #[test]
-    fn a_channel_that_fails_does_not_stop_the_others() {
+    fn publishes_a_single_channel_when_asked() {
         let setup = Setup::new();
-        setup.write("links.md", "links");
-        let results = setup.publish_all();
-        assert_eq!(vec!["links"], setup.fake.descriptions());
-        let welcome = results
-            .iter()
-            .find(|(post, _)| post.file == "welcome.md")
-            .unwrap();
-        assert!(
-            matches!(&welcome.1, Outcome::Failed(error) if error.contains("DISCORD_NEWS_WEBHOOK_ID"))
-        );
-    }
-
-    fn outcome(results: &[(Post, Outcome)], file: &str) -> String {
-        let (_, outcome) = results.iter().find(|(post, _)| post.file == file).unwrap();
-        match outcome {
-            Outcome::Failed(error) => format!("failed: {error}"),
-            other => format!("{other:?}"),
-        }
+        setup.write("links/01-links.md", "links");
+        setup.note("2026-11-02.md", 30, "Première.");
+        let entries = setup.publisher().publish_all(Some("patch"), &now(), false);
+        assert_eq!(1, entries.len());
+        assert_eq!(vec!["- Première."], setup.fake.shown());
     }
 
     #[test]
     fn a_note_is_an_embed_titled_by_its_date_and_dated_on_discord() {
         let setup = Setup::new();
         setup.note("2026-11-02.md", 30, "Nouveau.");
-        setup.publish_all();
+        setup.run();
         let (_, url, body) = setup.fake.calls.borrow()[0].clone();
-        assert_eq!("https://discord/5678/efgh?wait=true", url);
+        assert_eq!("https://discord/5678/token?wait=true", url);
         assert_eq!(
             json!([{
                 "title": "Patch note du 2 novembre 2026",
@@ -544,75 +893,72 @@ mod tests {
                 "color": 0xFBBF24,
                 "timestamp": "2026-11-02T12:00:00Z",
             }]),
-            body["embeds"]
+            body.unwrap()["embeds"]
         );
     }
 
     #[test]
-    fn notes_are_posted_oldest_first_after_the_other_messages() {
+    fn notes_are_posted_oldest_first() {
         let setup = Setup::new();
-        setup.write("links.md", "links");
         setup.note("2026-11-16.md", 60, "Troisième.");
         setup.note("2026-11-02.md", 30, "Première.");
         setup.note("2026-11-09.md", 45, "Deuxième.");
-        setup.publish_all();
+        setup.run();
         assert_eq!(
-            vec!["links", "- Première.", "- Deuxième.", "- Troisième."],
-            setup.fake.descriptions()
+            vec!["- Première.", "- Deuxième.", "- Troisième."],
+            setup.fake.shown()
         );
     }
 
     #[test]
-    fn a_changed_note_is_edited_in_place() {
+    fn an_older_note_added_later_reposts_the_newer_ones() {
         let setup = Setup::new();
         setup.note("2026-11-02.md", 30, "Première.");
-        setup.publish_all();
-        setup.note("2026-11-02.md", 30, "Corrigée.");
-        setup.publish_all();
-        assert_eq!(vec!["POST", "PATCH"], setup.fake.methods());
+        setup.note("2026-11-16.md", 60, "Troisième.");
+        setup.run();
+        setup.note("2026-11-09.md", 45, "Deuxième.");
+        let entries = setup.run();
+        assert_eq!("Reposted", outcome(&entries, "patch/2026-11-16.md"));
         assert_eq!(
-            vec![Some("- Corrigée.".to_string())],
-            *setup.fake.messages.borrow()
+            vec!["- Première.", "- Deuxième.", "- Troisième."],
+            setup.fake.shown()
         );
     }
 
     #[test]
     fn a_note_without_its_last_pull_request_is_refused() {
         let setup = Setup::new();
-        setup.write(&format!("{PATCH_NOTES}/2026-11-02.md"), "- Rien.\n");
-        let results = setup.publish_all();
+        setup.write("patch/2026-11-02.md", "- Rien.\n");
+        let entries = setup.run();
         assert!(setup.fake.calls.borrow().is_empty());
-        assert!(outcome(&results, "patch-notes/2026-11-02.md").contains("covers"));
+        assert!(outcome(&entries, "patch/2026-11-02.md").contains("covers"));
     }
 
     #[test]
     fn a_note_takes_no_heading_of_its_own() {
         let setup = Setup::new();
         setup.write(
-            &format!("{PATCH_NOTES}/2026-11-02.md"),
+            "patch/2026-11-02.md",
             "---\ncovers: #30\n---\n\n# Titre\n\n- Rien.\n",
         );
-        let results = setup.publish_all();
-        assert!(outcome(&results, "patch-notes/2026-11-02.md").contains("heading"));
+        assert!(outcome(&setup.run(), "patch/2026-11-02.md").contains("heading"));
     }
 
     #[test]
     fn a_note_is_a_list() {
         let setup = Setup::new();
         setup.write(
-            &format!("{PATCH_NOTES}/2026-11-02.md"),
+            "patch/2026-11-02.md",
             "---\ncovers: #30\n---\n\nUn paragraphe.\n",
         );
-        let results = setup.publish_all();
-        assert!(outcome(&results, "patch-notes/2026-11-02.md").contains("list"));
+        assert!(outcome(&setup.run(), "patch/2026-11-02.md").contains("list"));
     }
 
     #[test]
     fn a_note_is_named_after_its_date() {
         let setup = Setup::new();
-        setup.note("novembre.md", 30, "Rien.");
-        let results = setup.publish_all();
-        assert!(outcome(&results, "patch-notes/novembre.md").contains("named after its date"));
+        setup.note("01-novembre.md", 30, "Rien.");
+        assert!(outcome(&setup.run(), "patch/01-novembre.md").contains("named after its date"));
     }
 
     #[test]
@@ -620,51 +966,9 @@ mod tests {
         let setup = Setup::new();
         setup.note("2026-11-02.md", 45, "Première.");
         setup.note("2026-11-09.md", 30, "Deuxième.");
-        let results = setup.publish_all();
+        let entries = setup.run();
         assert!(setup.fake.calls.borrow().is_empty());
-        assert!(outcome(&results, "patch-notes/2026-11-02.md").contains("not after #45"));
-    }
-
-    #[test]
-    fn a_note_waits_for_the_older_ones() {
-        let setup = Setup::new();
-        setup.note("2026-11-02.md", 30, "Première.");
-        setup.note("2026-11-09.md", 45, "Deuxième.");
-        let results = setup
-            .publisher()
-            .publish_all(Some("patch-notes/2026-11-09.md"), &now());
-        assert!(setup.fake.calls.borrow().is_empty());
-        assert!(
-            outcome(&results, "patch-notes/2026-11-09.md")
-                .contains("2026-11-02.md is not posted yet")
-        );
-    }
-
-    #[test]
-    fn an_older_note_is_never_posted_after_a_newer_one() {
-        let setup = Setup::new();
-        setup.note("2026-11-02.md", 30, "Première.");
-        setup.note("2026-11-16.md", 60, "Troisième.");
-        setup.publish_all();
-        setup.note("2026-11-09.md", 45, "Deuxième.");
-        let results = setup.publish_all();
-        assert_eq!(vec!["POST", "POST", "PATCH", "PATCH"], setup.fake.methods());
-        assert!(
-            outcome(&results, "patch-notes/2026-11-09.md")
-                .contains("2026-11-16.md is already posted")
-        );
-    }
-
-    #[test]
-    fn a_deleted_note_is_not_posted_again_after_a_newer_one() {
-        let setup = Setup::new();
-        setup.note("2026-11-02.md", 30, "Première.");
-        setup.note("2026-11-09.md", 45, "Deuxième.");
-        setup.publish_all();
-        setup.fake.messages.borrow_mut()[0] = None;
-        let results = setup.publish_all();
-        assert_eq!(vec!["POST", "POST", "PATCH", "PATCH"], setup.fake.methods());
-        assert!(outcome(&results, "patch-notes/2026-11-02.md").contains("already posted"));
+        assert!(outcome(&entries, "patch/2026-11-09.md").contains("not after #45"));
     }
 
     #[test]
@@ -672,20 +976,36 @@ mod tests {
         let mut setup = Setup::new();
         setup.env.remove("DISCORD_PATCH_WEBHOOK_ID");
         setup.note("2026-11-02.md", 30, "Première.");
-        let results = setup.publish_all();
+        let entries = setup.run();
         assert!(setup.fake.calls.borrow().is_empty());
-        assert!(matches!(results.last().unwrap().1, Outcome::Skipped(_)));
+        assert!(outcome(&entries, "patch/2026-11-02.md").starts_with("Skipped"));
     }
 
     #[test]
-    fn publishes_a_single_file_when_asked() {
+    fn the_plan_shows_what_a_run_would_do() {
         let setup = Setup::new();
-        setup.write("links.md", "links");
-        setup.note("2026-11-02.md", 30, "Première.");
-        let results = setup
-            .publisher()
-            .publish_all(Some("patch-notes/2026-11-02.md"), &now());
-        assert_eq!(1, results.len());
-        assert_eq!(vec!["- Première."], setup.fake.descriptions());
+        setup.write("tutos/01-video.md", "video");
+        setup.write("tutos/03-tempus.md", "tempus");
+        setup.write("tutos/04-old.md", "old");
+        setup.run();
+        setup.remove("tutos/04-old.md");
+        setup.write("tutos/02-aurral.md", "aurral");
+        let channel = setup.publisher().channels().remove(0);
+        let plan = setup.publisher().plan(&channel);
+        let actions: Vec<(&str, &str)> = plan
+            .actions
+            .iter()
+            .map(|(post, action)| (post.file.as_str(), *action))
+            .collect();
+        assert_eq!(
+            vec![
+                ("tutos/01-video.md", "edit"),
+                ("tutos/02-aurral.md", "post"),
+                ("tutos/03-tempus.md", "repost")
+            ],
+            actions
+        );
+        assert_eq!(vec!["tutos/old.md"], plan.orphans);
+        assert_eq!(2, plan.deletions);
     }
 }

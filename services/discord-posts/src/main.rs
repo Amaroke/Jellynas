@@ -3,7 +3,7 @@ mod publish;
 
 use jiff::civil::Time;
 use jiff::{ToSpan, ZonedDateTime};
-use publish::{Discord, Outcome, PATCH_CHANNEL, Post, Publisher};
+use publish::{Discord, Entry, LIMIT, Outcome, PATCH_CHANNEL, Publisher};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -38,13 +38,13 @@ impl Webhook {
 }
 
 impl Discord for Webhook {
-    fn send(&self, method: &str, url: &str, body: &Value) -> Result<(u16, Value), String> {
+    fn send(&self, method: &str, url: &str, body: Option<&Value>) -> Result<(u16, Value), String> {
         let request = ureq::http::Request::builder()
             .method(method)
             .uri(url)
             .header("Content-Type", "application/json")
             .header("User-Agent", USER_AGENT)
-            .body(body.to_string())
+            .body(body.map(Value::to_string).unwrap_or_default())
             .map_err(|error| error.to_string())?;
         let mut response = self.agent.run(request).map_err(|error| error.to_string())?;
         let status = response.status().as_u16();
@@ -96,10 +96,6 @@ impl Reply {
     }
 }
 
-fn post_json(post: &Post) -> Value {
-    json!({"channel": post.channel, "file": post.file})
-}
-
 impl App {
     fn publisher(&self) -> Publisher<'_> {
         Publisher {
@@ -111,47 +107,77 @@ impl App {
         }
     }
 
-    fn publish(&self, only: Option<&str>) -> Vec<(Post, Outcome)> {
+    fn publish(&self, only: Option<&str>, force: bool) -> Vec<Entry> {
         let _running = self
             .running
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let results = self.publisher().publish_all(only, &ZonedDateTime::now());
-        for (post, outcome) in &results {
+        let entries = self
+            .publisher()
+            .publish_all(only, &ZonedDateTime::now(), force);
+        for Entry {
+            channel,
+            file,
+            outcome,
+        } in &entries
+        {
             match outcome {
-                Outcome::Posted => println!("Posted {} in {}", post.file, post.channel),
-                Outcome::Edited => {
-                    println!("Edited the message of {} in {}", post.file, post.channel)
+                Outcome::Posted => println!("Posted {file} in {channel}"),
+                Outcome::Edited => println!("Edited the message of {file} in {channel}"),
+                Outcome::Reposted => {
+                    println!("Posted {file} again in {channel}, to keep its order")
                 }
+                Outcome::Deleted => println!("Deleted the message of {file} in {channel}"),
                 Outcome::Skipped(_) => {}
-                Outcome::Failed(error) => {
-                    println!("Cannot publish {} in {}: {error}", post.file, post.channel)
-                }
+                Outcome::Failed(error) => println!("Cannot publish {file} in {channel}: {error}"),
             }
         }
-        results
+        entries
     }
 
     fn posts(&self) -> Value {
         let publisher = self.publisher();
-        let posts: Vec<Value> = publisher
-            .posts()
+        let channels: Vec<Value> = publisher
+            .channels()
             .iter()
-            .map(|post| {
-                let mut entry = post_json(post);
-                entry["message"] = json!(publisher.message_id(post));
-                if post.channel == PATCH_CHANNEL {
-                    entry["covers"] = json!(
-                        publisher
-                            .read(post)
-                            .ok()
-                            .and_then(|source| message::covers(&source))
-                    );
-                }
-                entry
+            .map(|channel| {
+                let plan = publisher.plan(channel);
+                let posts: Vec<Value> = plan
+                    .actions
+                    .iter()
+                    .map(|(post, action)| {
+                        let mut entry = json!({
+                            "file": post.file,
+                            "message": publisher.message_id(post),
+                            "action": action,
+                        });
+                        if post.channel == PATCH_CHANNEL {
+                            entry["covers"] = json!(
+                                publisher
+                                    .read(post)
+                                    .ok()
+                                    .and_then(|source| message::covers(&source))
+                            );
+                        }
+                        entry
+                    })
+                    .collect();
+                let problems: Vec<Value> = publisher
+                    .check(channel)
+                    .iter()
+                    .map(|(file, error)| json!({"file": file, "error": error}))
+                    .collect();
+                json!({
+                    "channel": channel.name,
+                    "posts": posts,
+                    "deletes": plan.orphans,
+                    "deletions": plan.deletions,
+                    "needs_force": plan.deletions > LIMIT,
+                    "problems": problems,
+                })
             })
             .collect();
-        json!({"posts": posts})
+        json!({"limit": LIMIT, "channels": channels})
     }
 
     fn route(&self, method: &str, url: &str, accept: &str) -> Reply {
@@ -194,30 +220,31 @@ impl App {
             }
             ("GET", "/api/posts") => Reply::json(200, &self.posts()),
             ("POST", "/api/publish") => {
-                let only = param("file");
-                if let Some(file) = &only
+                let only = param("channel");
+                if let Some(name) = &only
                     && !self
                         .publisher()
-                        .posts()
+                        .channels()
                         .iter()
-                        .any(|post| &post.file == file)
+                        .any(|channel| &channel.name == name)
                 {
                     return Reply::json(
                         404,
-                        &json!({"error": format!("{file} is no message of discord-posts")}),
+                        &json!({"error": format!("{name} is no channel of discord-posts")}),
                     );
                 }
+                let force = param("force").as_deref() == Some("true");
                 let results: Vec<Value> = self
-                    .publish(only.as_deref())
+                    .publish(only.as_deref(), force)
                     .iter()
-                    .map(|(post, outcome)| {
-                        let mut entry = post_json(post);
-                        if let (Value::Object(entry), Value::Object(outcome)) =
-                            (&mut entry, outcome.json())
+                    .map(|entry| {
+                        let mut found = json!({"channel": entry.channel, "file": entry.file});
+                        if let (Value::Object(found), Value::Object(outcome)) =
+                            (&mut found, entry.outcome.json())
                         {
-                            entry.extend(outcome);
+                            found.extend(outcome);
                         }
-                        entry
+                        found
                     })
                     .collect();
                 Reply::json(200, &json!({"results": results}))
@@ -332,7 +359,7 @@ fn daily(app: &App, wake: &Receiver<()>) {
         if let Err(RecvTimeoutError::Disconnected) = wake.recv_timeout(wait) {
             return;
         }
-        app.publish(None);
+        app.publish(None, false);
     }
 }
 
@@ -383,7 +410,7 @@ mod tests {
     }
 
     impl Discord for Fake {
-        fn send(&self, method: &str, url: &str, _: &Value) -> Result<(u16, Value), String> {
+        fn send(&self, method: &str, url: &str, _: Option<&Value>) -> Result<(u16, Value), String> {
             let mut calls = self.calls.lock().unwrap();
             calls.push(format!("{method} {url}"));
             Ok((200, json!({"id": calls.len().to_string()})))
@@ -392,12 +419,17 @@ mod tests {
 
     fn app(folder: &TempDir) -> (App, Receiver<()>) {
         let (sender, receiver) = mpsc::channel();
-        fs::create_dir_all(folder.path().join("patch-notes")).unwrap();
-        fs::write(
-            folder.path().join("patch-notes/2026-11-02.md"),
-            "---\ncovers: #30\n---\n\n- Nouveau.\n",
-        )
-        .unwrap();
+        for (file, text) in [
+            ("links/01-links.md", "links"),
+            (
+                "patch/2026-11-02.md",
+                "---\ncovers: #30\n---\n\n- Nouveau.\n",
+            ),
+        ] {
+            let path = folder.path().join(file);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
+        }
         let env = HashMap::from([
             ("DISCORD_PATCH_WEBHOOK_ID".to_string(), "1".to_string()),
             ("DISCORD_PATCH_WEBHOOK_TOKEN".to_string(), "a".to_string()),
@@ -498,19 +530,23 @@ mod tests {
     }
 
     #[test]
-    fn the_api_lists_the_messages_with_their_state() {
+    fn the_api_lists_what_a_run_would_do_per_channel() {
         let folder = TempDir::new().unwrap();
         let (app, _wake) = app(&folder);
-        let posts = body(&app.route("GET", "/api/posts", ""))["posts"].clone();
-        let note = posts.as_array().unwrap().last().unwrap().clone();
+        let found = body(&app.route("GET", "/api/posts", ""));
+        assert_eq!(json!(LIMIT), found["limit"]);
         assert_eq!(
-            json!({"channel": "patch", "file": "patch-notes/2026-11-02.md", "message": null, "covers": 30}),
-            note
+            json!({
+                "channel": "patch",
+                "posts": [{"file": "patch/2026-11-02.md", "message": null, "action": "post", "covers": 30}],
+                "deletes": [],
+                "deletions": 0,
+                "needs_force": false,
+                "problems": [],
+            }),
+            found["channels"][1]
         );
-        assert_eq!(
-            json!({"channel": "links", "file": "links.md", "message": null}),
-            posts[0]
-        );
+        assert_eq!(json!("links"), found["channels"][0]["channel"]);
     }
 
     #[test]
@@ -518,41 +554,40 @@ mod tests {
         let folder = TempDir::new().unwrap();
         let (app, _wake) = app(&folder);
         let results = body(&app.route("POST", "/api/publish", ""))["results"].clone();
-        let note = results.as_array().unwrap().last().unwrap().clone();
-        assert_eq!(
-            json!({"channel": "patch", "file": "patch-notes/2026-11-02.md", "outcome": "posted"}),
-            note
-        );
         assert_eq!(json!("failed"), results[0]["outcome"]);
-        let posts = body(&app.route("GET", "/api/posts", ""))["posts"].clone();
         assert_eq!(
-            json!("1"),
-            posts.as_array().unwrap().last().unwrap()["message"]
+            json!({"channel": "patch", "file": "patch/2026-11-02.md", "outcome": "posted"}),
+            results[1]
         );
+        let found = body(&app.route("GET", "/api/posts", ""));
+        assert_eq!(json!("1"), found["channels"][1]["posts"][0]["message"]);
+        assert_eq!(json!("edit"), found["channels"][1]["posts"][0]["action"]);
     }
 
     #[test]
-    fn the_api_publishes_a_single_file() {
+    fn the_api_publishes_a_single_channel() {
         let folder = TempDir::new().unwrap();
         let (app, _wake) = app(&folder);
-        let reply = app.route("POST", "/api/publish?file=patch-notes%2F2026-11-02.md", "");
-        let results = body(&reply)["results"].clone();
+        let results =
+            body(&app.route("POST", "/api/publish?channel=patch&force=true", ""))["results"]
+                .clone();
         assert_eq!(1, results.as_array().unwrap().len());
         assert_eq!(json!("posted"), results[0]["outcome"]);
     }
 
     #[test]
-    fn the_api_refuses_an_unknown_file() {
+    fn the_api_refuses_an_unknown_channel() {
         let folder = TempDir::new().unwrap();
         let (app, _wake) = app(&folder);
         assert_eq!(
             404,
-            app.route("POST", "/api/publish?file=../.env", "").status
+            app.route("POST", "/api/publish?channel=..%2F.env", "")
+                .status
         );
     }
 
     #[test]
-    fn every_message_of_the_repo_fits_in_discord() {
+    fn every_message_of_the_repo_fits_in_discord_and_keeps_its_order() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../discord-posts");
         let fake = Fake::default();
         let publisher = Publisher {
@@ -565,12 +600,25 @@ mod tests {
             ]),
             discord: &fake,
         };
-        publisher.check_notes().unwrap();
-        for post in publisher.posts() {
-            let message = publisher
-                .render(&post)
-                .unwrap_or_else(|error| panic!("{}: {error}", post.file));
-            assert!(message.embed.contains_key("title"), "{}", post.file);
+        let channels = publisher.channels();
+        assert_eq!(
+            vec!["links", "news", "tutos"],
+            channels
+                .iter()
+                .map(|channel| channel.name.as_str())
+                .collect::<Vec<_>>()
+        );
+        for channel in &channels {
+            assert_eq!(
+                Vec::<(String, String)>::new(),
+                publisher.check(channel),
+                "{}",
+                channel.name
+            );
+            for post in &channel.posts {
+                let message = publisher.render(post).unwrap();
+                assert!(message.embed.contains_key("title"), "{}", post.file);
+            }
         }
     }
 }

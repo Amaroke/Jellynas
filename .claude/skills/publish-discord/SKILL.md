@@ -1,59 +1,65 @@
 ---
 name: publish-discord
-description: Publish the Discord messages of discord-posts/ on the NAS now, the Patch notes included, through the API of the discord-posts service. Use when asked to publish, post or refresh a Discord message, a tuto, the links or a Patch note.
+description: Publish the Discord messages of discord-posts/ on the NAS now, the Patch notes included, through the API of the discord-posts service. Use when asked to publish, post, refresh or sync a Discord message, a tuto, the links or a Patch note.
 ---
 
 # Publish Discord
 
-The `discord-posts` service publishes the files of `discord-posts/` every night.
-This skill publishes them now. Reaching the NAS is in
-[nas-access.md](../../../docs/agents/nas-access.md).
+The `discord-posts` service keeps each channel of the Discord server of the
+Friends in sync with its folder of `discord-posts/` every night. This skill
+syncs now. Reaching the NAS is in
+[nas-access.md](../../../docs/agents/nas-access.md), how the sync works in the
+Discord messages section of the README.
 
 ## 1. Check that main holds the message
 
 The service publishes the files of `main` as doco-cd deployed them. A message
-changed on a branch is not on the NAS until its pull request is merged. If the
-Admin asks for a message that `origin/main` does not hold yet, say so and stop.
+changed on a branch is not on the NAS until its pull request is merged and
+deployed. If the Admin asks for a message that `origin/main` does not hold yet,
+say so and stop.
 
-## 2. List the messages
+## 2. Read the plan
 
 ```sh
 ssh jellynas "sudo sh /mnt/tank/jellynas/scripts/check.sh \
   api discord-posts GET /api/posts"
 ```
 
-Each entry gives the `channel`, the `file`, the `message` id once posted (null
-before), and for a Patch note the last pull request it `covers`.
+If the call cannot reach the service, it was stopped from the Dashboard: say
+so and stop, the switch is the Admin's.
+
+Each channel lists its files with their `action` on the next run, `post`,
+`edit` or `repost`, the messages it would `delete`, whether it `needs_force`,
+and the `problems` that block it.
 
 ## 3. Agree on what to publish
 
-Show the Admin, in a short table, the messages that will be posted for the
-first time and the ones that will be edited. Ask with buttons whether to
-publish all of them or only the one they named. Publishing writes to a channel
-the Friends read, so never publish before the Admin agrees.
+Show the Admin a short table per channel of what will be posted, reposted and
+deleted. Leave out the plain edits, they change nothing visible but the footer.
+Say that a repost or a deletion loses the reactions and the links to the
+message. Name each problem and its fix in the repo: a channel with a problem is
+left alone.
+
+Ask with buttons whether to publish every channel or only one. When a channel
+`needs_force`, ask for it separately, naming each message it deletes. Never
+publish before the Admin agrees: the channels are read by the Friends.
 
 ## 4. Publish
 
-All the messages:
+Every channel, or one with `?channel=<name>`, and with `force=true` only when
+the Admin agreed to it:
 
 ```sh
 ssh jellynas "sudo sh /mnt/tank/jellynas/scripts/check.sh \
   api discord-posts POST /api/publish"
-```
-
-A single one, by its `file`:
-
-```sh
 ssh jellynas "sudo sh /mnt/tank/jellynas/scripts/check.sh \
-  api discord-posts POST '/api/publish?file=patch-notes/2026-11-27.md'"
+  api discord-posts POST '/api/publish?channel=tutos&force=true'"
 ```
 
 ## 5. Report
 
-The reply gives each message an `outcome`: `posted`, `edited`, `skipped` (a
-Patch note without its webhook in `.env`) or `failed` with its `error`. Show
-the outcomes as a table. For a failure, name the cause: a webhook missing from
-`.env` is for the Admin to set, a placeholder missing from `.env` or a message
-too long is a fix in the repo. A Patch note refused for its order stays
-unposted: say which note blocks it, and never work around the order, since
-Discord would show the notes out of order for good.
+The reply gives each message an `outcome`: `posted`, `edited`, `reposted`,
+`deleted`, `skipped` (a channel without its webhook in `.env`) or `failed` with
+its `error`. Show what changed as a table. For a failure, name the cause: a
+webhook missing from `.env` is for the Admin to set, anything else is a fix in
+the repo, which the `write-discord` skill can make.
