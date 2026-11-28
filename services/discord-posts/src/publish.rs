@@ -166,12 +166,11 @@ impl Publisher<'_> {
                     }
                 }
                 found.sort_by(|a, b| a.0.cmp(&b.0));
-                for pair in found.windows(2) {
-                    if pair[0].1.key == pair[1].1.key {
-                        errors.push((
-                            pair[1].1.file.clone(),
-                            format!("{} has the same name", pair[0].1.file),
-                        ));
+                let mut first: HashMap<&str, &str> = HashMap::new();
+                for (_, post) in &found {
+                    let earlier = *first.entry(&post.key).or_insert(&post.file);
+                    if earlier != post.file {
+                        errors.push((post.file.clone(), format!("{earlier} has the same name")));
                     }
                 }
                 Channel {
@@ -842,6 +841,16 @@ mod tests {
         setup.write("tutos/02-aurral.md", "b");
         let entries = setup.run();
         assert!(outcome(&entries, "tutos/02-aurral.md").contains("same name"));
+    }
+
+    #[test]
+    fn two_files_of_the_same_name_apart_are_refused() {
+        let setup = Setup::new();
+        setup.write("tutos/01-aurral.md", "a");
+        setup.write("tutos/02-seerr.md", "b");
+        setup.write("tutos/03-aurral.md", "c");
+        let entries = setup.run();
+        assert!(outcome(&entries, "tutos/03-aurral.md").contains("same name"));
     }
 
     #[test]

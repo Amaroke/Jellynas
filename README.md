@@ -1999,11 +1999,10 @@ message, so they live in git like the rest of the NAS. Each folder is a channel,
 - `news/01-welcome.md` welcomes a new Friend: how to get an Account, what
   happens with a lost password, the rules, and what each service is for. Change
   it when a service for the Friends or a rule changes.
-- `tutos/01-aurral-video.md`, `tutos/02-aurral.md` and `tutos/03-tempus.md`:
-  the video tutorial of Aurral, then Aurral in writing, adding music, importing
-  playlists from Spotify, recommendations, flows and the settings of a Friend,
-  then how to install Tempus and sign it in to Aurral. Change them when Aurral
-  or Tempus moves a button or a setting.
+- `tutos/01-jellyfin.md`, `tutos/02-seerr.md`, `tutos/03-aurral.md` and
+  `tutos/04-kavita.md`: one message per service, what it is for, its address,
+  its video tutorial, then how to use it. Change them when a service moves a
+  button or a setting, or its video changes.
 - `patch/<date>.md` are the [Patch notes](#patch-notes).
 
 The messages are in French, for the Friends. `${DOMAIN}` and
