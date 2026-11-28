@@ -2288,6 +2288,16 @@ another release.
 A show or a movie left unmonitored is never searched on its own, and stays
 reachable by an interactive search.
 
+C411 allows 120 calls a minute per API key, Torznab and profile together, 30
+of them at most on the profile, and answers 429 beyond. Prowlarr only counts
+its limits by the hour or the day, so the C411 indexer of Prowlarr has a
+"Query Limit" of 7000 per "Hour", under "Show Advanced", just below that rate.
+Radarr and Sonarr ask Prowlarr for their RSS every 15 to 60 minutes, as C411
+asks, since its RSS is cached for 5 minutes.
+
+When C411 times out, Prowlarr, Radarr and Sonarr each stop using it for a
+while. A successful "Test" of the indexer in each of them lifts that at once.
+
 ### cross-seed
 
 cross-seed searches the private indexers of Prowlarr for torrents that hold the
