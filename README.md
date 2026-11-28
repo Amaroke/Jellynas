@@ -2007,10 +2007,11 @@ channel after one minute alone or five minutes without playing.
 
 ## Discord messages
 
-The links, news, tutos and patch notes channels of the Discord server of the
-Friends hold messages written in `discord-posts/`, one Markdown file per
-message, so they live in git like the rest of the NAS. Each folder is a channel,
-`discord-posts/<channel>/`, and each file of it one message of that channel:
+The links, news, tutos, patch notes and suggestions channels of the Discord
+server of the Friends hold messages written in `discord-posts/`, one Markdown
+file per message, so they live in git like the rest of the NAS. Each folder is
+a channel, `discord-posts/<channel>/`, and each file of it one message of that
+channel:
 
 - `links/01-links.md` gives the public addresses, the apps to install, and how
   to ask for a book or a manga. Change it when a public address or an app
@@ -2023,6 +2024,10 @@ message, so they live in git like the rest of the NAS. Each folder is a channel,
   its video tutorial, then how to use it. Change them when a service moves a
   button or a setting, or its video changes.
 - `patch/<date>.md` are the [Patch notes](#patch-notes).
+- `suggestions/01-suggestions.md` asks the Friends to post their problems and
+  ideas in that channel, where the Admin reads them with the
+  `feedback-to-issues` skill, and tells them they are tagged in the issues
+  channel once their request is noted and done.
 
 The messages are in French, for the Friends. `${DOMAIN}` and
 `${CADDY_HTTPS_PORT}` in a file are filled in from `.env`. Each file becomes an
@@ -2073,8 +2078,8 @@ and its pair of variables.
    "New Webhook", name it `Jellynas`, and copy its URL,
    `https://discord.com/api/webhooks/<id>/<token>`.
 2. In `.env`, set `DISCORD_LINKS_WEBHOOK_ID` and `DISCORD_LINKS_WEBHOOK_TOKEN`
-   to both parts of the URL, then the same pair for `NEWS`, `TUTOS` and
-   `PATCH`.
+   to both parts of the URL, then the same pair for `NEWS`, `TUTOS`,
+   `PATCH` and `SUGGESTIONS`.
 3. Restart the `discord-posts` service so it reads the new `.env`, then publish
    as [Publishing on demand](#publishing-on-demand) shows.
 

@@ -641,7 +641,7 @@ mod tests {
         };
         let channels = publisher.channels();
         assert_eq!(
-            vec!["links", "news", "patch", "tutos"],
+            vec!["links", "news", "patch", "suggestions", "tutos"],
             channels
                 .iter()
                 .map(|channel| channel.name.as_str())
