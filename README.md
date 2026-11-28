@@ -1018,6 +1018,10 @@ the tag and `http://flaresolverr:8191/` as the host, then save. Without the
 tag, no indexer uses it. FlareSolverr has no web UI and is reachable by the
 other containers only.
 
+Prowlarr starts once FlareSolverr is healthy, and Radarr and Sonarr once
+Prowlarr and qBittorrent are, so a deploy that restarts them all does not leave
+them a failure they tested too early. A shut down service is not waited for.
+
 ### VPN of the indexers
 
 In Settings > Indexers, click "+" and pick Http. Enter `vpn` as the tag,
