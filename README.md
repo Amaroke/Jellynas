@@ -1998,9 +1998,9 @@ Friends hold messages written in `discord-posts/`, one Markdown file per
 message, so they live in git like the rest of the NAS. Each folder is a channel,
 `discord-posts/<channel>/`, and each file of it one message of that channel:
 
-- `links/01-links.md` gives the public addresses, the apps to install, how to
-  ask for a book or a manga, and the commands of the music bot. Change it when a
-  public address, an app or a command changes.
+- `links/01-links.md` gives the public addresses, the apps to install, and how
+  to ask for a book or a manga. Change it when a public address or an app
+  changes.
 - `news/01-welcome.md` welcomes a new Friend: how to get an Account, what
   happens with a lost password, the rules, and what each service is for. Change
   it when a service for the Friends or a rule changes.
