@@ -75,7 +75,7 @@ services:
       start_period: 30s
 
   dashboard-socket-proxy:
-    image: lscr.io/linuxserver/socket-proxy:3.4.8-r0-ls107
+    image: lscr.io/linuxserver/socket-proxy:3.4.9-r0-ls108
     container_name: dashboard-socket-proxy
     restart: unless-stopped
     networks:
