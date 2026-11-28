@@ -1,4 +1,4 @@
-use crate::compose::{all_services, has, re, section, Services};
+use crate::compose::{Services, all_services, has, re, section};
 use std::collections::BTreeMap;
 
 type Dependency = BTreeMap<String, String>;
