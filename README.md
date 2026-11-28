@@ -2106,6 +2106,37 @@ merged since the last one, or changes any other message, and opens a pull
 request for the Admin to review. Once it is merged and deployed, it offers to
 publish with the `publish-discord` skill.
 
+### Issues on Discord
+
+The issues channel of the Discord server of the Friends shows the open issues
+of the repo that carry `from:admin` or `from:friend`, in one message with an
+Admin section and a Friends section, so a Friend sees what is planned and what
+they asked for. Every hour, `discord-posts` reads them from the public API of
+GitHub, without a token, and edits that message only when the list changes. It
+also posts a short message that tags the Friend when their issue appears, when
+it is closed as done, and when it is closed as not planned or `wontfix`.
+
+The name of a Friend comes from the `Asked by <name>.` line of the issue, as
+`docs/agents/issue-tracker.md` sets out. The service tags them with the Discord
+id that `${APPDATA_ROOT}/discord-posts/friends.toml` gives for that name, and
+shows the name as plain text, without a tag, when the table lacks it:
+
+```toml
+[admin]
+<admin name> = "111111111111111111"
+
+[friends]
+<friend name> = "222222222222222222"
+```
+
+The table stays on the NAS, out of the repo, and the service reads it on every
+run. The `feedback-to-issues` skill adds a new Friend to it. The service keeps
+the id of the message and the issues it has seen in
+`${APPDATA_ROOT}/discord-posts/issues.json`, so a restart tags nobody twice.
+The channel takes its webhook from `DISCORD_ISSUES_WEBHOOK_ID` and
+`DISCORD_ISSUES_WEBHOOK_TOKEN` in `.env`. Without them, the issues stay off
+Discord.
+
 ### Publishing on demand
 
 To publish without waiting for the night, ask Claude with the
