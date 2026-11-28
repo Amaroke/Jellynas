@@ -125,7 +125,7 @@ the upload credit bought with Zen counted as upload.
 _Avoid_: real ratio, tracker ratio
 
 **Ratio floor**:
-The Account ratio of 2 under which the NAS spends no download on C411, not
+The Account ratio of 1.2 under which the NAS spends no download on C411, not
 even for the Library, freeleech aside.
 _Avoid_: margin, buffer
 

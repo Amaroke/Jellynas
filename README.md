@@ -1096,7 +1096,7 @@ hand:
   hidden folders, so it never shows up as a movie.
 - "Unmonitor Deleted Movies" on, so a movie deleted from the disk is not
   downloaded again.
-- The qBittorrent client on `gluetun` port `8080`, with the category `movies`,
+- Each qBittorrent client on `gluetun` port `8080`, with the category `movies`,
   and "Remove Completed" and "Remove Failed" on. No indexer sets a seeding goal,
   so qBittorrent never stops a torrent and Radarr never removes one: a torrent
   of C411 seeds forever, and ratio removes a public one. policy leaves "Enable"
@@ -1208,7 +1208,7 @@ policy keeps the same settings as in Radarr, with these values:
 - Recycling bin `/data/media/shows/.recycle`, for both shows and anime.
 - "Unmonitor Deleted Episodes" on, so an episode deleted from the disk is not
   downloaded again.
-- The category `shows` for the qBittorrent client.
+- The category `shows` for each qBittorrent client.
 
 ### Indexers of Sonarr from Prowlarr
 
@@ -2263,6 +2263,31 @@ anime groups post there and on C411 alike.
 Prowlarr syncs Nyaa to Radarr and Sonarr like any indexer. It returns almost
 only anime, so it costs nothing to search it for the other works.
 
+### Approve the C411 grabs
+
+Radarr and Sonarr search C411 on their own, by RSS and automatic search, but a
+C411 grab reaches qBittorrent stopped, so it downloads nothing and costs no
+ratio until the Admin starts it. LazyLibrarian grabs from C411 without
+approval, since a book weighs little.
+
+1. In Radarr, Settings > Download Clients, add a second qBittorrent client with
+   the same host, port, login and category as the first. Name it
+   `qBittorrent C411` and set "Initial State" to "Stopped". Click "Test", then
+   "Save". policy keeps its Initial State.
+2. In Settings > Indexers, edit "C411 (Prowlarr)", click "Show Advanced" and set
+   "Download Client" to `qBittorrent C411`. Prowlarr keeps that choice on each
+   sync, unless the indexer is removed from Radarr and added again.
+3. Do the same in Sonarr.
+
+The qBittorrent widget of the Dashboard counts the torrents to approve, the
+stopped ones that downloaded nothing, and leaves them out of the leeches.
+Start a release in qBittorrent to approve it. To refuse one, remove it from
+Activity > Queue in Radarr or Sonarr with "Blocklist Release", so it searches
+another release.
+
+A show or a movie left unmonitored is never searched on its own, and stays
+reachable by an interactive search.
+
 ### cross-seed
 
 cross-seed searches the private indexers of Prowlarr for torrents that hold the
@@ -2313,7 +2338,7 @@ Every switch and setting below lives in the Farm section of the Dashboard.
 1. **Reads the account.** It reads the profile of C411 once per run with
    `C411_PROFILE_API_KEY`: uploaded and downloaded totals with the credit bought
    with Zen, Zen, class and grade.
-2. **Holds the Ratio floor.** Under the floor, 2 by default, or when the profile
+2. **Holds the Ratio floor.** Under the floor, 1.2 by default, or when the profile
    cannot be read, ratio spends no download on C411, whatever the switches say.
    While the "Hold Prowlarr under the floor" switch is on, it also moves each
    indexer of `RATIO_HOLD_INDEXER_IDS` onto a sync profile named Paused, which
