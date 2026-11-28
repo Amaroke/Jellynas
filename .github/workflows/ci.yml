@@ -79,7 +79,17 @@ jobs:
             caddy.output=type=docker
             ${{ steps.cache.outputs.to }}
       - run: |
-          docker run --rm             -v "$PWD/services/caddy/Caddyfile:/etc/caddy/Caddyfile:ro"             -e DOMAIN=example.com             -e LAN_SUBNET=192.168.1.0/24             -e CADDY_HTTPS_PORT=443             -e OVH_ENDPOINT=ovh-eu             -e OVH_APPLICATION_KEY=ci             -e OVH_APPLICATION_SECRET=ci             -e OVH_CONSUMER_KEY=ci             ghcr.io/amaroke/jellynas-caddy:main             caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          docker run --rm \
+            -v "$PWD/services/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -e DOMAIN=example.com \
+            -e LAN_SUBNET=192.168.1.0/24 \
+            -e CADDY_HTTPS_PORT=443 \
+            -e OVH_ENDPOINT=ovh-eu \
+            -e OVH_APPLICATION_KEY=ci \
+            -e OVH_APPLICATION_SECRET=ci \
+            -e OVH_CONSUMER_KEY=ci \
+            ghcr.io/amaroke/jellynas-caddy:main \
+            caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
   publish:
     name: Publish
@@ -91,7 +101,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      packages: write
+      packages: write  # push the images to GHCR
     env:
       SOURCE_DATE_EPOCH: 0
     steps:
