@@ -1149,8 +1149,8 @@ not start on its own: Wanted > Missing > "Search All" fetches it.
 8. Pick what to fetch. Radarr only searches a movie that is monitored: in
    Movies, click the bookmark of a movie to unmonitor it, and Radarr ignores it
    for good, even when a better release shows up. Then Wanted > Missing >
-   "Search All" fetches the movies without a file, and Wanted > Cutoff Unmet >
-   "Search All" replaces the files below the quality profile.
+   "Search All" fetches the movies without a file. The profiles allow no
+   upgrade, so a movie that has a file stays as it is.
 
 Jellyfin sees the renamed files as new items: a movie already watched loses its
 watched state. Seerr shows each movie as available after its next scan of
@@ -2294,6 +2294,17 @@ another release.
 A show or a movie left unmonitored is never searched on its own, and stays
 reachable by an interactive search.
 
+C411 allows 120 calls a minute per API key, Torznab and profile together, 30
+of them at most on the profile, and answers 429 beyond. Prowlarr only counts
+its limits by the hour or the day, so the C411 indexer of Prowlarr has a
+"Query Limit" of 1750 per "Hour", under "Show Advanced", a quarter of that
+rate, to leave room for ratio and for bursts within an hour.
+Radarr and Sonarr ask Prowlarr for their RSS every 15 to 60 minutes, as C411
+asks, since its RSS is cached for 5 minutes.
+
+When C411 times out, Prowlarr, Radarr and Sonarr each stop using it for a
+while. ratio lifts that pause once C411 answers again, see [ratio](#ratio).
+
 ### cross-seed
 
 cross-seed searches the private indexers of Prowlarr for torrents that hold the
@@ -2386,6 +2397,14 @@ Every switch and setting below lives in the Farm section of the Dashboard.
 
 Prowlarr answers 429 when it is queried too often, and ratio then leaves it
 alone for as long as it asks, an hour when it does not say.
+
+When C411 times out, Prowlarr, Radarr and Sonarr each stop using its indexer
+for a while, longer after each failure. Once its own read of C411 works again,
+ratio tests the indexers of `RATIO_HOLD_INDEXER_IDS` that Prowlarr still
+holds back, then their copy in Radarr and Sonarr when their health reports
+it unavailable, and reruns their health check. A successful test lifts the
+pause at once. ratio uses `RADARR_API_KEY` and `SONARR_API_KEY` for that, and
+skips an app whose key is empty.
 
 Each Zen is worth 1 GB of upload in the shop of C411, a purchase only the Admin
 makes.
@@ -2967,6 +2986,9 @@ audio track. Quality always ranks before score, and H265 outweighs the release
 group, since it makes much smaller files without a lossy re-encode. Change a
 rule in the config, never in Radarr or Sonarr, since each sync overwrites the
 profiles.
+
+No profile allows upgrades: Radarr and Sonarr only fetch what has no file, and
+never replace a file they already have with a better release.
 
 #### Sync
 

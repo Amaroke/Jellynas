@@ -3,6 +3,7 @@ mod farm;
 mod http;
 mod ledger;
 mod state;
+mod unblock;
 
 use clients::{C411, Fail, Indexers, Prowlarr, QBittorrent, Qbt, Tracker};
 use farm::{C411_CALLS, Torrents};
@@ -14,6 +15,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use unblock::{Apps, PROWLARR_URL, Servarr};
 
 const STATE: &str = "/state/state.json";
 const CONTROLS: &str = "/state/controls.json";
@@ -96,9 +98,11 @@ fn spent(outcome: Result<(), Fail>) -> bool {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_once(
     qbt: &dyn Qbt,
     prowlarr: &dyn Indexers,
+    apps: &[&dyn Apps],
     c411: &dyn Tracker,
     base: &Settings,
     controls: &Snapshot,
@@ -122,6 +126,7 @@ fn run_once(
     }) {
         println!("Cannot reach Prowlarr: {error}");
     }
+    unblock::lift(apps, &settings.hold_indexers, account.is_some(), now);
     if controls.on("adopt") {
         farm::adopt(qbt, &settings, state, &mut torrents)?;
     }
@@ -211,11 +216,7 @@ fn main() {
                 &read("QBITTORRENT_USER"),
                 &read("QBITTORRENT_PASSWORD"),
             )?,
-            Prowlarr::new(
-                "http://prowlarr:9696",
-                &read("PROWLARR_API_KEY"),
-                proxy.as_deref(),
-            )?,
+            Prowlarr::new(PROWLARR_URL, &read("PROWLARR_API_KEY"), proxy.as_deref())?,
             C411::new(
                 &read("C411_PROFILE_API_KEY"),
                 &read("C411_TORZNAB_API_KEY"),
@@ -227,6 +228,20 @@ fn main() {
         eprintln!("Cannot set up the clients: {error}");
         std::process::exit(1);
     });
+    let servarrs: Vec<Servarr> = [
+        ("Prowlarr", PROWLARR_URL, "PROWLARR_API_KEY"),
+        ("Radarr", "http://radarr:7878", "RADARR_API_KEY"),
+        ("Sonarr", "http://sonarr:8989", "SONARR_API_KEY"),
+    ]
+    .into_iter()
+    .filter(|(_, _, key)| !read(key).is_empty())
+    .map(|(name, url, key)| Servarr::new(name, url, &read(key)))
+    .collect::<Result<_, _>>()
+    .unwrap_or_else(|error| {
+        eprintln!("Cannot set up the clients: {error}");
+        std::process::exit(1);
+    });
+    let apps: Vec<&dyn Apps> = servarrs.iter().map(|app| app as &dyn Apps).collect();
     let mut state = state::load_state(Path::new(STATE)).unwrap_or_else(|error| {
         eprintln!("{error}");
         std::process::exit(1);
@@ -258,6 +273,7 @@ fn main() {
         match run_once(
             &qbt,
             &prowlarr,
+            &apps,
             &c411,
             &settings,
             &snapshot,
@@ -313,6 +329,7 @@ mod tests {
         let board = run_once(
             &qbt,
             &FakeProwlarr::default(),
+            &[],
             &c411,
             &settings(),
             &controls,
@@ -346,6 +363,7 @@ mod tests {
             run_once(
                 &qbt,
                 &FakeProwlarr::default(),
+                &[],
                 c411,
                 &settings(),
                 &controls,
