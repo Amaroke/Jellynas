@@ -9,6 +9,7 @@ pub struct Arr {
     pub rename: (&'static str, &'static str, &'static str),
     pub naming: Map<String, Value>,
     pub category: (&'static str, &'static str),
+    pub missing: &'static str,
 }
 
 pub fn radarr() -> Arr {
@@ -24,6 +25,7 @@ pub fn radarr() -> Arr {
             "movieFolderFormat": "{Movie Title} ({Release Year}) [tmdbid-{TmdbId}]",
         })),
         category: ("movieCategory", "movies"),
+        missing: "MissingMoviesSearch",
     }
 }
 
@@ -42,6 +44,7 @@ pub fn sonarr() -> Arr {
             "seriesFolderFormat": "{Series TitleYear} [tvdbid-{TvdbId}]",
         })),
         category: ("tvCategory", "shows"),
+        missing: "MissingEpisodeSearch",
     }
 }
 
@@ -157,6 +160,16 @@ pub fn enforce(arr: &Arr, api: &impl Api, private: &[String]) -> Result<usize, S
     Ok(changed)
 }
 
+pub fn search_missing(arr: &Arr, api: &impl Api) -> Result<(), String> {
+    api.send(
+        "POST",
+        "/command",
+        &json!({"name": arr.missing, "monitored": true}),
+    )?;
+    println!("{} search: every monitored item without a file", arr.name);
+    Ok(())
+}
+
 fn rename(arr: &Arr, api: &impl Api) -> Result<usize, String> {
     let (list, param, file) = arr.rename;
     let mut changed = 0;
@@ -222,6 +235,19 @@ mod tests {
         pages.insert(list.into(), json!([{"id": 7, "title": "Kept"}]));
         pages.insert(format!("/rename?{param}=7"), json!([]));
         pages
+    }
+
+    #[test]
+    fn each_app_searches_its_missing_items() {
+        for (arr, command) in [
+            (radarr(), "MissingMoviesSearch"),
+            (sonarr(), "MissingEpisodeSearch"),
+        ] {
+            let fake = Fake::new(BTreeMap::new());
+            assert_eq!(Ok(()), search_missing(&arr, &fake));
+            assert_eq!(vec!["POST /command"], fake.paths());
+            assert_eq!(json!({"name": command, "monitored": true}), fake.body(0));
+        }
     }
 
     #[test]
