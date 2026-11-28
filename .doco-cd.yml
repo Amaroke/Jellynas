@@ -5,3 +5,4 @@ compose_files:
 env_files:
   - /jellynas/.env
 remove_orphans: true
+force_image_pull: true

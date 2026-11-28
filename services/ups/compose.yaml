@@ -1,9 +1,7 @@
 ---
 services:
   ups:
-    build:
-      context: ../..
-      target: ups
+    image: ghcr.io/amaroke/jellynas-ups:main
     container_name: ups
     restart: unless-stopped
     networks:

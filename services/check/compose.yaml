@@ -3,9 +3,7 @@ name: jellynas-check
 
 services:
   check:
-    build:
-      context: ../..
-      target: check
+    image: ghcr.io/amaroke/jellynas-check:main
     networks:
       - internal-zone
     security_opt:
@@ -27,9 +25,7 @@ services:
       - ${DATA_ROOT}/media/aurral:/data/media/aurral:ro
       - ${DATA_ROOT}/torrents/soulseek:/data/torrents/soulseek:ro
   repair:
-    build:
-      context: ../..
-      target: check
+    image: ghcr.io/amaroke/jellynas-check:main
     profiles:
       - repair
     network_mode: none

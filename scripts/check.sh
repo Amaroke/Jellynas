@@ -64,20 +64,20 @@ jobs() {
 
 case "${1:-}" in
   radarr | sonarr | lazylibrarian)
-    compose build --quiet check
+    compose pull --quiet check
     facts "$1" prowlarr gluetun qbittorrent ratio | compose run --rm -T check "$1"
     ;;
   aurral)
-    compose build --quiet check
+    compose pull --quiet check
     { facts aurral slskd gluetun; jobs; } | compose run --rm -T check aurral
     ;;
   repair-aurral | clean-slskd)
-    compose --profile repair build --quiet repair
+    compose --profile repair pull --quiet repair
     compose --profile repair run --rm -T repair "$1"
     ;;
   api)
     shift
-    compose build --quiet check
+    compose pull --quiet check
     compose run --rm -T check api "$@"
     ;;
   *)
