@@ -2,8 +2,9 @@
 set -eu
 
 usage() {
-  echo "Usage: check.sh radarr|sonarr|lazylibrarian" >&2
-  echo "       check.sh api radarr|sonarr|prowlarr|lazylibrarian|discord-posts METHOD PATH [JSON|-]" >&2
+  echo "Usage: check.sh radarr|sonarr|lazylibrarian|aurral" >&2
+  echo "       check.sh repair-aurral|clean-slskd" >&2
+  echo "       check.sh api radarr|sonarr|prowlarr|lazylibrarian|aurral|discord-posts METHOD PATH [JSON|-]" >&2
   exit 2
 }
 
@@ -44,10 +45,35 @@ facts() {
   done
 }
 
+jobs() {
+  appdata=$(sed -n 's/^APPDATA_ROOT=//p' "$env_file" | tr -d "\"'")
+  db="$appdata/aurral/aurral.db"
+  [ -f "$db" ] && command -v sqlite3 >/dev/null || return 0
+  sqlite3 "file:$db?mode=ro" "
+    select 'job|aurral|' ||
+      case when status = 'done' then 'lossy' else 'failed' end || '|' ||
+      id || '|' || replace(artist_name, '|', '/') || '|' ||
+      replace(track_name, '|', '/') || '|' ||
+      replace(ifnull(album_name, ''), '|', '/') || '|' ||
+      ifnull(quality_format, '') || '|' ||
+      replace(replace(ifnull(error, status), char(10), ' '), '|', '/')
+    from download_jobs
+    where status in ('failed', 'blocked')
+      or (status = 'done' and quality_format in ('mp3', 'm4a', 'aac', 'ogg', 'opus'))"
+}
+
 case "${1:-}" in
   radarr | sonarr | lazylibrarian)
     compose build --quiet check
     facts "$1" prowlarr gluetun qbittorrent ratio | compose run --rm -T check "$1"
+    ;;
+  aurral)
+    compose build --quiet check
+    { facts aurral slskd gluetun; jobs; } | compose run --rm -T check aurral
+    ;;
+  repair-aurral | clean-slskd)
+    compose --profile repair build --quiet repair
+    compose --profile repair run --rm -T repair "$1"
     ;;
   api)
     shift
