@@ -2296,7 +2296,7 @@ Radarr and Sonarr ask Prowlarr for their RSS every 15 to 60 minutes, as C411
 asks, since its RSS is cached for 5 minutes.
 
 When C411 times out, Prowlarr, Radarr and Sonarr each stop using it for a
-while. A successful "Test" of the indexer in each of them lifts that at once.
+while. ratio lifts that pause once C411 answers again, see [ratio](#ratio).
 
 ### cross-seed
 
@@ -2390,6 +2390,14 @@ Every switch and setting below lives in the Farm section of the Dashboard.
 
 Prowlarr answers 429 when it is queried too often, and ratio then leaves it
 alone for as long as it asks, an hour when it does not say.
+
+When C411 times out, Prowlarr, Radarr and Sonarr each stop using its indexer
+for a while, longer after each failure. Once its own read of C411 works again,
+ratio tests the indexers of `RATIO_HOLD_INDEXER_IDS` that Prowlarr still
+holds back, then their copy in Radarr and Sonarr when their health reports
+it unavailable, and reruns their health check. A successful test lifts the
+pause at once. ratio uses `RADARR_API_KEY` and `SONARR_API_KEY` for that, and
+skips an app whose key is empty.
 
 Each Zen is worth 1 GB of upload in the shop of C411, a purchase only the Admin
 makes.
