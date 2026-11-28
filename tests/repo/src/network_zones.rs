@@ -39,7 +39,7 @@ const PROXIES: [&str; 4] = [
 const INSPECTORS: [&str; 2] = ["uptime-kuma-socket-proxy", "dozzle-socket-proxy"];
 const OUTSIDE_INTERNAL_ZONE: [&str; 6] =
     ["jellyfin", "seerr", "authelia", "lldap", "aurral", "kavita"];
-const PROXY_TEMPLATE_IMAGE: &str = "lscr.io/linuxserver/socket-proxy:3.4.8-r0-ls107";
+const PROXY_TEMPLATE_IMAGE: &str = "lscr.io/linuxserver/socket-proxy:3.4.9-r0-ls108";
 const DIRECT_ADDRESSES: [&str; 5] = [
     "jellyfin:8096",
     "seerr:5055",
