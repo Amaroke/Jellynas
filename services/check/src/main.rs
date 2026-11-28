@@ -17,7 +17,9 @@ use std::path::Path;
 use std::time::SystemTime;
 use std::{env, io, process};
 
-const USAGE: &str = "Usage: check radarr|sonarr|lazylibrarian|aurral < facts\n       check repair-aurral|clean-slskd\n       check api radarr|sonarr|prowlarr|lazylibrarian|aurral METHOD PATH [JSON|-]";
+const USAGE: &str = "Usage: check radarr|sonarr|lazylibrarian|aurral < facts
+       check repair-aurral|clean-slskd
+       check api radarr|sonarr|prowlarr|lazylibrarian|aurral|discord-posts METHOD PATH [JSON|-]";
 const LIBRARY: &str = "/data/media/aurral";
 const SOULSEEK: &str = "/data/torrents/soulseek";
 const QBITTORRENT: &str = "http://gluetun:8080/api/v2/app/version";
@@ -29,6 +31,12 @@ fn http(app: &str) -> Result<Http, String> {
         "prowlarr" => ("http://prowlarr:9696", "PROWLARR_API_KEY"),
         "lazylibrarian" => ("http://lazylibrarian:5299", "LAZYLIBRARIAN_API_KEY"),
         "aurral" => ("", "AURRAL_API_KEY"),
+        "discord-posts" => {
+            return Ok(Http {
+                base: "http://discord-posts:8000".into(),
+                key: Key::None,
+            });
+        }
         _ => return Err(format!("Unknown app {app}")),
     };
     let base = if app == "aurral" {

@@ -4,7 +4,7 @@ set -eu
 usage() {
   echo "Usage: check.sh radarr|sonarr|lazylibrarian|aurral" >&2
   echo "       check.sh repair-aurral|clean-slskd" >&2
-  echo "       check.sh api radarr|sonarr|prowlarr|lazylibrarian|aurral METHOD PATH [JSON|-]" >&2
+  echo "       check.sh api radarr|sonarr|prowlarr|lazylibrarian|aurral|discord-posts METHOD PATH [JSON|-]" >&2
   exit 2
 }
 

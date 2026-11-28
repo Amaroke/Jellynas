@@ -5,7 +5,7 @@ Films, séries, animés, musique, livres et mangas en streaming.
 ## 🔑 Compte
 
 Demande-moi tes identifiants en message privé.
--# Le même compte sert pour Jellyfin, Seerr et Aurral.
+-# Le même compte sert pour Jellyfin, Seerr, Aurral et Kavita.
 
 ## ⚠️ Règles
 
@@ -23,9 +23,7 @@ Demande-moi tes identifiants en message privé.
 - **Jellyfin** · regarder, lire et télécharger
 - **Seerr** · demander un film, une série ou un animé
 - **Aurral** · écouter la musique, en découvrir et recevoir tes playlists
-- **Bot musique** · écouter à plusieurs dans un salon vocal, avec le rôle
-  MusicDJ
-- **Ton salon** · demander un livre ou un manga, où me poser une question
-  si tu as un soucis
+- **Kavita** · lire tes livres et mangas, avec ta progression gardée d'un
+  appareil à l'autre
 
 -# Les adresses et les applis sont dans links.

@@ -31,6 +31,7 @@ pub fn fetch(report: &mut Report, api: &impl Api, path: &str) -> Option<Value> {
 pub enum Key {
     Header(String),
     Query(String),
+    None,
 }
 
 pub struct Http {
@@ -53,7 +54,7 @@ fn clean(error: impl ToString) -> String {
 impl Api for Http {
     fn call(&self, method: &str, path: &str, body: Option<&str>) -> Result<(u16, String), String> {
         let uri = match &self.key {
-            Key::Header(_) => format!("{}{path}", self.base),
+            Key::Header(_) | Key::None => format!("{}{path}", self.base),
             Key::Query(key) => format!("{}/api?apikey={key}&{path}", self.base),
         };
         let mut builder = ureq::http::Request::builder().method(method).uri(uri);

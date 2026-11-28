@@ -62,11 +62,12 @@ ssh jellynas "sudo sh /mnt/tank/jellynas/scripts/check.sh \
   api prowlarr PUT /api/v1/indexer/1 -" < indexer.json
 ```
 
-The apps are `radarr`, `sonarr`, `prowlarr`, `lazylibrarian` and `aurral`.
-Radarr and Sonarr answer under `/api/v3`, Prowlarr under `/api/v1`, Aurral
-under `/api`. For LazyLibrarian the path is the query after the key, starting
-with `cmd=`. A `GET` reads, anything else changes the NAS: send it only after
-the Admin said yes to that exact change.
+The apps are `radarr`, `sonarr`, `prowlarr`, `lazylibrarian`, `aurral` and
+`discord-posts`. Radarr and Sonarr answer under `/api/v3`, Prowlarr under
+`/api/v1`, Aurral under `/api`. For LazyLibrarian the path is the query after
+the key, starting with `cmd=`. `discord-posts` needs no key and answers under
+`/api`, as the `publish-discord` skill shows. A `GET` reads, anything else
+changes the NAS: send it only after the Admin said yes to that exact change.
 
 ## Reading further
 

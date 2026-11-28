@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "services/check",
     "services/dashboard",
+    "services/discord-posts",
     "services/policy",
     "services/ratio",
     "services/ups",

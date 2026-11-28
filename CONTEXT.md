@@ -73,6 +73,12 @@ The endless random play of the whole music of the Library, which plays every
 track once before any repeats.
 _Avoid_: random, radio
 
+**Patch note**:
+A message in French, for the Friends, that sums up what changed on the NAS for
+them since the previous one, and records the last merged pull request it
+covers.
+_Avoid_: changelog, release notes
+
 ### Ratio
 
 **C411**:

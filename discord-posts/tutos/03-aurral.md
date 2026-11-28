@@ -1,9 +1,12 @@
 # 🎧 Tuto Aurral
 
-Toute la musique du serveur, en FLAC, un format sans perte : le son est
-identique à celui du CD, meilleur qu'un MP3 qui en retire une partie.
+Aurral, c'est le Spotify du serveur : toute la musique, des recommandations et
+des playlists faites pour toi. Le tout en FLAC, un format sans perte : le son
+est identique à celui du CD, meilleur qu'un MP3 qui en retire une partie.
 **<https://aurral.${DOMAIN}:${CADDY_HTTPS_PORT}>**
 -# Connexion avec le bouton SSO, même compte que Jellyfin.
+
+📺 <https://www.youtube.com/watch?v=F9ysEZdGBWY>
 
 ## 🔍 Ajouter de la musique
 
