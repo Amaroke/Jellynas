@@ -2019,9 +2019,11 @@ discord-posts` checks for every file of the repo.
 A file wraps at 80 columns like any Markdown file of the repo, and the service
 joins the wrapped lines back, since Discord keeps every line break. A new list
 item, heading or `-#` line stays on its own line in Discord. `-#` is the small
-grey text of Discord. A line starting with 📺 goes above the embed, in the text
-of the message, without the angle brackets around its link, since Discord plays
-a video only from a bare link there.
+grey text of Discord. A line starting with 📺 leaves the embed and becomes a
+second message right under it, alone and without the angle brackets around its
+link, since Discord previews a video only from a bare link in a message without
+an embed. That message is known as the name of its file followed by `#video`,
+and dropping the line deletes it.
 
 ### Order and sync
 
