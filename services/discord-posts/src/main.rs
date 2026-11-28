@@ -1,6 +1,8 @@
+mod issues;
 mod message;
 mod publish;
 
+use issues::Board;
 use jiff::civil::Time;
 use jiff::{ToSpan, ZonedDateTime};
 use publish::{Discord, Entry, LIMIT, Outcome, PATCH_CHANNEL, Publisher};
@@ -16,6 +18,7 @@ const API: &str = "https://discord.com/api/v10/webhooks";
 const USER_AGENT: &str = "DiscordBot (https://github.com/Amaroke/Jellynas, 1.0)";
 const FOLDER: &str = "/app/discord-posts";
 const PORT: u16 = 8000;
+const ISSUES_EVERY: Duration = Duration::from_secs(3600);
 const ACTION_RUNNING: &str = "Publication en cours";
 const ACTIONS: [(&str, &str, &str); 1] =
     [("discord", "Messages Discord", "Liens, tutos et patch notes")];
@@ -63,6 +66,7 @@ struct App {
     folder: PathBuf,
     state: PathBuf,
     api: String,
+    github: String,
     env: HashMap<String, String>,
     discord: Box<dyn Discord + Send + Sync>,
     running: Mutex<()>,
@@ -133,6 +137,32 @@ impl App {
             }
         }
         entries
+    }
+
+    fn board(&self) -> Board<'_> {
+        let folder = self.state.parent().map(PathBuf::from).unwrap_or_default();
+        let part = |part: &str| {
+            self.env
+                .get(&format!("DISCORD_ISSUES_WEBHOOK_{part}"))
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        };
+        Board {
+            github: self.github.clone(),
+            hook: part("ID")
+                .zip(part("TOKEN"))
+                .map(|(id, token)| format!("{}/{id}/{token}", self.api)),
+            state: folder.join("issues.json"),
+            people: folder.join("friends.toml"),
+            http: self.discord.as_ref(),
+        }
+    }
+
+    fn issues(&self) {
+        match self.board().run() {
+            Ok(lines) => lines.iter().for_each(|line| println!("{line}")),
+            Err(error) => println!("Cannot publish the issues: {error}"),
+        }
     }
 
     fn posts(&self) -> Value {
@@ -381,12 +411,20 @@ fn run() -> Result<(), String> {
             .join("discord-posts")
             .join("state.json"),
         api: API.into(),
+        github: issues::GITHUB.into(),
         env,
         discord: Box::new(Webhook::new()),
         running: Mutex::new(()),
         wake: Mutex::new(sender),
     });
     serve(Arc::clone(&app))?;
+    let hourly = Arc::clone(&app);
+    thread::spawn(move || {
+        loop {
+            hourly.issues();
+            thread::sleep(ISSUES_EVERY);
+        }
+    });
     daily(&app, &receiver);
     Ok(())
 }
@@ -438,6 +476,7 @@ mod tests {
             folder: folder.path().into(),
             state: folder.path().join("state.json"),
             api: "https://discord".into(),
+            github: "https://github".into(),
             env,
             discord: Box::new(Fake::default()),
             running: Mutex::new(()),
@@ -602,7 +641,7 @@ mod tests {
         };
         let channels = publisher.channels();
         assert_eq!(
-            vec!["links", "news", "patch", "tutos"],
+            vec!["links", "news", "patch", "suggestions", "tutos"],
             channels
                 .iter()
                 .map(|channel| channel.name.as_str())

@@ -828,8 +828,9 @@ pub fn qbittorrent(torrents: &Value) -> Parsed {
         "queuedDL",
         "pausedDL",
     ];
+    const STOPPED: [&str; 2] = ["stoppedDL", "pausedDL"];
     let torrents = items(torrents)?;
-    let (mut down, mut up, mut seeds) = (0.0, 0.0, 0);
+    let (mut down, mut up, mut seeds, mut pending) = (0.0, 0.0, 0, 0);
     let mut leeches = vec![];
     for torrent in torrents {
         down += number(torrent, "dlspeed")?;
@@ -839,7 +840,9 @@ pub fn qbittorrent(torrents: &Value) -> Parsed {
             seeds += 1;
         }
         let state = text(torrent, "state")?;
-        if state.contains("DL") || state == "downloading" {
+        if progress <= 0.0 && STOPPED.contains(&state.as_str()) {
+            pending += 1;
+        } else if state.contains("DL") || state == "downloading" {
             let rank = LEECHING
                 .iter()
                 .position(|known| *known == state)
@@ -849,7 +852,8 @@ pub fn qbittorrent(torrents: &Value) -> Parsed {
     }
     leeches.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.total_cmp(&a.1)));
     let mut found = reading(vec![
-        ("Leech", count((torrents.len() - seeds) as u64)),
+        ("Leech", count((torrents.len() - seeds - pending) as u64)),
+        ("To approve", count(pending as u64)),
         ("Download", rate(down)),
         ("Seed", count(seeds as u64)),
         ("Upload", rate(up)),
@@ -1593,13 +1597,17 @@ mod tests {
             {"name": "Seeding", "state": "uploading", "progress": 1, "dlspeed": 0, "upspeed": 1000, "size": gib},
             {"name": "Stalled", "state": "stalledDL", "progress": 0.5, "dlspeed": 0, "upspeed": 0, "size": 2 * gib},
             {"name": "Active", "state": "downloading", "progress": 0.1, "dlspeed": 2048, "upspeed": 0, "size": gib},
-            {"name": "Paused", "state": "stoppedUP", "progress": 1, "dlspeed": 0, "upspeed": 0, "size": gib}
+            {"name": "Paused", "state": "stoppedUP", "progress": 1, "dlspeed": 0, "upspeed": 0, "size": gib},
+            {"name": "Waiting", "state": "stoppedDL", "progress": 0, "dlspeed": 0, "upspeed": 0, "size": gib},
+            {"name": "Older", "state": "pausedDL", "progress": 0, "dlspeed": 0, "upspeed": 0, "size": gib},
+            {"name": "Halfway", "state": "stoppedDL", "progress": 0.3, "dlspeed": 0, "upspeed": 0, "size": gib}
         ]);
         let reading = qbittorrent(&torrents).unwrap();
         assert_eq!(Some("Nothing downloading".to_string()), reading.idle);
         assert_eq!(
             vec![
-                ("Leech", "2"),
+                ("Leech", "3"),
+                ("To approve", "2"),
                 ("Download", "2.0 KiB/s"),
                 ("Seed", "2"),
                 ("Upload", "1000 B/s")
@@ -1610,6 +1618,7 @@ mod tests {
             vec![
                 ("Active", "10.0% of 1.0 GiB", Some(0.1)),
                 ("Stalled", "50.0% of 2.0 GiB", Some(0.5)),
+                ("Halfway", "30.0% of 1.0 GiB", Some(0.3)),
             ],
             rows(&reading)
         );

@@ -25,13 +25,18 @@ services:
       DISCORD_TUTOS_WEBHOOK_TOKEN: ${DISCORD_TUTOS_WEBHOOK_TOKEN}
       DISCORD_PATCH_WEBHOOK_ID: ${DISCORD_PATCH_WEBHOOK_ID}
       DISCORD_PATCH_WEBHOOK_TOKEN: ${DISCORD_PATCH_WEBHOOK_TOKEN}
+      DISCORD_SUGGESTIONS_WEBHOOK_ID: ${DISCORD_SUGGESTIONS_WEBHOOK_ID:-}
+      DISCORD_SUGGESTIONS_WEBHOOK_TOKEN: ${DISCORD_SUGGESTIONS_WEBHOOK_TOKEN:-}
+      DISCORD_ISSUES_WEBHOOK_ID: ${DISCORD_ISSUES_WEBHOOK_ID:-}
+      DISCORD_ISSUES_WEBHOOK_TOKEN: ${DISCORD_ISSUES_WEBHOOK_TOKEN:-}
     labels:
       kuma.discord-posts.docker.name: Discord posts
       docker-volume-backup.stop-during-backup: "true"
       dashboard.name: Discord posts
       dashboard.section: Discord
       dashboard.description:
-        Republishes the Discord messages, every day at 00:30
+        Republishes the Discord messages every day at 00:30, and the open
+        issues every hour
       dashboard.icon: discord.svg
       dashboard.switchable: "true"
       cd.doco.deployment.autostart: "false"

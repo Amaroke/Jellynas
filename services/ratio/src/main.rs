@@ -64,7 +64,7 @@ fn settings_from_env() -> Settings {
         hold_indexers: ids("RATIO_HOLD_INDEXER_IDS"),
         cross_seed_key: read("CROSS_SEED_API_KEY"),
         farm_size: positive("RATIO_MAX_SIZE_GB", 100.0) * GB,
-        floor: positive("RATIO_FLOOR", 2.0),
+        floor: positive("RATIO_FLOOR", 1.2),
         free_max_size: 5.0 * GB,
     }
 }
