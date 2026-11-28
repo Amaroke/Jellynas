@@ -1149,8 +1149,8 @@ not start on its own: Wanted > Missing > "Search All" fetches it.
 8. Pick what to fetch. Radarr only searches a movie that is monitored: in
    Movies, click the bookmark of a movie to unmonitor it, and Radarr ignores it
    for good, even when a better release shows up. Then Wanted > Missing >
-   "Search All" fetches the movies without a file, and Wanted > Cutoff Unmet >
-   "Search All" replaces the files below the quality profile.
+   "Search All" fetches the movies without a file. The profiles allow no
+   upgrade, so a movie that has a file stays as it is.
 
 Jellyfin sees the renamed files as new items: a movie already watched loses its
 watched state. Seerr shows each movie as available after its next scan of
@@ -2961,6 +2961,9 @@ audio track. Quality always ranks before score, and H265 outweighs the release
 group, since it makes much smaller files without a lossy re-encode. Change a
 rule in the config, never in Radarr or Sonarr, since each sync overwrites the
 profiles.
+
+No profile allows upgrades: Radarr and Sonarr only fetch what has no file, and
+never replace a file they already have with a better release.
 
 #### Sync
 

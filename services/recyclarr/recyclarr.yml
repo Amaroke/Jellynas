@@ -53,7 +53,7 @@ radarr:
         min_format_score: -5000
         min_upgrade_format_score: 1
         upgrade:
-          allowed: true
+          allowed: false
           until_quality: 1080p
           until_score: 100000
         qualities:
@@ -75,7 +75,7 @@ radarr:
         min_format_score: -5000
         min_upgrade_format_score: 1
         upgrade:
-          allowed: true
+          allowed: false
           until_quality: 1080p
           until_score: 100000
         qualities:
@@ -243,7 +243,7 @@ sonarr:
         min_format_score: -5000
         min_upgrade_format_score: 1
         upgrade:
-          allowed: true
+          allowed: false
           until_quality: 1080p
           until_score: 100000
         qualities:
@@ -265,7 +265,7 @@ sonarr:
         min_format_score: -5000
         min_upgrade_format_score: 1
         upgrade:
-          allowed: true
+          allowed: false
           until_quality: 1080p
           until_score: 100000
         qualities:
