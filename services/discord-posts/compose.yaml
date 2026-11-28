@@ -1,9 +1,7 @@
 ---
 services:
   discord-posts:
-    build:
-      context: ../..
-      target: discord-posts
+    image: ghcr.io/amaroke/jellynas-discord-posts:main
     container_name: discord-posts
     restart: unless-stopped
     networks:

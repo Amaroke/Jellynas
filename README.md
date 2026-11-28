@@ -360,10 +360,20 @@ docker compose -f services/doco-cd/compose.yaml up -d
 Each deploy runs from a copy of the merged revision, kept in the data volume of
 doco-cd. It recreates the services whose compose definition or image changed,
 and those that mount a file of the repo that changed, such as
-`services/cross-seed/config.js`. It rebuilds the services built from a
-Dockerfile, such as Caddy and the Rust services of the root `Dockerfile`, and
-removes the services commented out in `compose.yaml`. A failed deploy is
-retried at the next poll, a minute later.
+`services/cross-seed/config.js`, and removes the services commented out in
+`compose.yaml`. A failed deploy is retried at the next poll, a minute later.
+
+The NAS builds no image. The Publish job of the CI builds Caddy and the Rust
+services of the root `Dockerfile` from `docker-bake.hcl` once a pull request
+is merged, and pushes them to `ghcr.io/amaroke/jellynas-<service>:main`. With
+`force_image_pull` in `.doco-cd.yml`, doco-cd compares at every poll the image
+each service runs with the one of the registry, and recreates the services
+whose image changed. A merge that touches a Rust service thus reaches the NAS a
+few minutes later, once the CI has built it. The images are built
+reproducibly: a binary that did not change keeps the digest of its image, so
+its service is not restarted. A service with a `build:` key would be compiled
+on the NAS and recreated at every commit, since doco-cd counts any file of its
+build context as a change, and `cargo test -p repo-tests` refuses one.
 
 doco-cd reaches Docker through its socket, which gives it full control of the
 machine, like any tool that runs Compose. Its logs name each deploy, and the
@@ -1670,7 +1680,7 @@ docker logs policy
 ```
 
 It is a small Rust program in `services/policy`, one module per app, which
-doco-cd builds into an image of 2 MB that runs in 1 MB of memory. To change a
+the CI builds into an image of 2 MB that runs in 1 MB of memory. To change a
 rule, edit the module of the app and open a pull request: the CI checks its
 format, its lints and its tests.
 
@@ -2825,13 +2835,13 @@ Run it from the Clone, on `main` without local changes:
 sudo sh scripts/check.sh radarr
 ```
 
-It builds `services/check`, a Rust tool that runs once in the internal zone and
-reads the API keys of `.env`, then feeds it the logs and container states it
-reads through Docker. `sudo sh scripts/check.sh api <app> <METHOD> <path>`
-sends one request to the API of Radarr, Sonarr, Prowlarr or LazyLibrarian with
-its key, or of `discord-posts`, which needs none, and prints the reply with every
-key masked. doco-cd never deploys the
-tool: its compose file stays out of `compose.yaml`.
+It pulls the image of `services/check` that the CI builds, a Rust tool that
+runs once in the internal zone and reads the API keys of `.env`, then feeds it
+the logs and container states it reads through Docker.
+`sudo sh scripts/check.sh api <app> <METHOD> <path>` sends one request to the
+API of Radarr, Sonarr, Prowlarr or LazyLibrarian with its key, or of
+`discord-posts`, which needs none, and prints the reply with every key masked.
+doco-cd never deploys the tool: its compose file stays out of `compose.yaml`.
 
 The Claude Code skills `check-radarr`, `check-sonarr` and `check-lazylibrarian`
 run it over SSH, show each library as tables, offer searches of what is

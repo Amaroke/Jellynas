@@ -33,7 +33,7 @@ The app is `radarr`, `sonarr`, `lazylibrarian` or `aurral`. The script refuses
 to run when the Clone is not on `main` or has local changes. Report that to the
 Admin as it is, since the Clone is theirs to clean.
 
-The script builds `services/check` (the first build takes a few minutes), feeds
+The script pulls the image of `services/check` that the CI builds, feeds
 it the state, mounts and last 24 hours of logs of the app, Prowlarr, Gluetun,
 qBittorrent and ratio, and runs it in the internal zone with the keys of `.env`.
 For `aurral` it feeds the jobs of its database and the logs of slskd and

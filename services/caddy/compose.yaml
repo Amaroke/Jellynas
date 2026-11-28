@@ -1,7 +1,7 @@
 ---
 services:
   caddy:
-    build: .
+    image: ghcr.io/amaroke/jellynas-caddy:main
     container_name: caddy
     restart: unless-stopped
     networks:

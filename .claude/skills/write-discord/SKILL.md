@@ -78,6 +78,6 @@ its diff. Never merge it: merging deploys.
 ## 6. Publish once deployed
 
 When the Admin says the pull request is merged, or its merge reaches you, wait
-for doco-cd to deploy it: `origin/main` holds the commit, then up to a minute
-and the build of `discord-posts`. Then offer, with buttons, to publish with the
-`publish-discord` skill.
+for doco-cd to deploy it: `origin/main` holds the commit, then the CI builds
+`discord-posts` in a few minutes and doco-cd pulls it within a minute. Then
+offer, with buttons, to publish with the `publish-discord` skill.

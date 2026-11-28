@@ -1,9 +1,7 @@
 ---
 services:
   ratio:
-    build:
-      context: ../..
-      target: ratio
+    image: ghcr.io/amaroke/jellynas-ratio:main
     container_name: ratio
     restart: unless-stopped
     networks:
