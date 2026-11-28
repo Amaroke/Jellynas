@@ -147,7 +147,7 @@ impl App {
                     .iter()
                     .map(|(post, action)| {
                         let mut entry = json!({
-                            "file": post.file,
+                            "file": post.label(),
                             "message": publisher.message_id(post),
                             "action": action,
                         });
@@ -618,6 +618,15 @@ mod tests {
             for post in &channel.posts {
                 let message = publisher.render(post).unwrap();
                 assert!(message.embed.contains_key("title"), "{}", post.file);
+                assert_eq!(
+                    channel.name == "tutos",
+                    channel
+                        .posts
+                        .iter()
+                        .any(|other| other.video && other.file == post.file),
+                    "{}",
+                    post.file
+                );
             }
         }
     }

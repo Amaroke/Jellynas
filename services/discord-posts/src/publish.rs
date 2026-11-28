@@ -33,6 +33,17 @@ pub struct Post {
     pub channel: String,
     pub file: String,
     pub key: String,
+    pub video: bool,
+}
+
+impl Post {
+    pub fn label(&self) -> String {
+        if self.video {
+            format!("{} (video)", self.file)
+        } else {
+            self.file.clone()
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -123,7 +134,7 @@ fn others_wait(entries: &mut Vec<Entry>, posts: &[Post], reason: &str) {
     for post in posts {
         entries.push(Entry {
             channel: post.channel.clone(),
-            file: post.file.clone(),
+            file: post.label(),
             outcome: Outcome::Failed(reason.to_string()),
         });
     }
@@ -160,6 +171,7 @@ impl Publisher<'_> {
                                 channel: name.clone(),
                                 file: format!("{name}/{file}"),
                                 key,
+                                video: false,
                             },
                         )),
                         Err(error) => errors.push((format!("{name}/{file}"), error)),
@@ -173,9 +185,23 @@ impl Publisher<'_> {
                         errors.push((post.file.clone(), format!("{earlier} has the same name")));
                     }
                 }
+                let posts = found
+                    .into_iter()
+                    .flat_map(|(_, post)| {
+                        let video = self
+                            .render(&post)
+                            .is_ok_and(|message| !message.content.is_empty())
+                            .then(|| Post {
+                                key: format!("{}#video", post.key),
+                                video: true,
+                                ..post.clone()
+                            });
+                        std::iter::once(post).chain(video)
+                    })
+                    .collect();
                 Channel {
                     name,
-                    posts: found.into_iter().map(|(_, post)| post).collect(),
+                    posts,
                     errors,
                 }
             })
@@ -266,7 +292,7 @@ impl Publisher<'_> {
 
     pub fn check(&self, channel: &Channel) -> Vec<(String, String)> {
         let mut problems = channel.errors.clone();
-        for post in &channel.posts {
+        for post in channel.posts.iter().filter(|post| !post.video) {
             if let Err(error) = self.render(post) {
                 problems.push((post.file.clone(), error));
             }
@@ -351,6 +377,11 @@ impl Publisher<'_> {
 
     fn body(&self, post: &Post, now: &ZonedDateTime) -> Result<Value, String> {
         let Message { content, mut embed } = self.render(post)?;
+        if post.video {
+            return Ok(
+                json!({"content": content, "embeds": [], "allowed_mentions": {"parse": []}}),
+            );
+        }
         embed.insert("color".into(), json!(color(&post.channel)));
         if post.channel != PATCH_CHANNEL {
             embed.insert(
@@ -358,7 +389,7 @@ impl Publisher<'_> {
                 json!({"text": format!("Dernière mise à jour : {} à {}", now.strftime("%d/%m/%Y"), now.strftime("%H:%M"))}),
             );
         }
-        Ok(json!({"content": content, "embeds": [embed], "allowed_mentions": {"parse": []}}))
+        Ok(json!({"content": "", "embeds": [embed], "allowed_mentions": {"parse": []}}))
     }
 
     fn delete(&self, hook: &str, key: &str, id: &str) -> Result<(), String> {
@@ -387,7 +418,7 @@ impl Publisher<'_> {
         let mut entries = Vec::new();
         let entry = |post: &Post, outcome: Outcome| Entry {
             channel: post.channel.clone(),
-            file: post.file.clone(),
+            file: post.label(),
             outcome,
         };
         let Some(hook) = self.webhook(&channel.name) else {
@@ -585,6 +616,7 @@ mod tests {
             let description = body.and_then(|body| {
                 body["embeds"][0]["description"]
                     .as_str()
+                    .or_else(|| body["content"].as_str())
                     .map(str::to_string)
             });
             let mut messages = self.messages.borrow_mut();
@@ -861,6 +893,44 @@ mod tests {
         let entries = setup.run();
         assert_eq!(vec!["links"], setup.fake.shown());
         assert!(outcome(&entries, "news/01-welcome.md").contains("DISCORD_NEWS_WEBHOOK_ID"));
+    }
+
+    #[test]
+    fn the_video_of_a_tuto_is_posted_alone_under_its_embed() {
+        let setup = Setup::new();
+        setup.write(
+            "tutos/01-jellyfin.md",
+            "# Tuto\n\nIntro.\n\n📺 <https://youtu.be/x>\n\n## Next\n",
+        );
+        let entries = setup.run();
+        assert_eq!("Posted", outcome(&entries, "tutos/01-jellyfin.md"));
+        assert_eq!("Posted", outcome(&entries, "tutos/01-jellyfin.md (video)"));
+        let calls = setup.fake.calls.borrow();
+        let embed = calls[0].2.clone().unwrap();
+        assert_eq!("", embed["content"]);
+        assert_eq!("Intro.\n\n## Next", embed["embeds"][0]["description"]);
+        let video = calls[1].2.clone().unwrap();
+        assert_eq!("📺 https://youtu.be/x", video["content"]);
+        assert_eq!(json!([]), video["embeds"]);
+        assert_eq!(
+            json!({"tutos/jellyfin.md": "1", "tutos/jellyfin.md#video": "2"}),
+            Value::Object(setup.publisher().saved())
+        );
+    }
+
+    #[test]
+    fn a_video_dropped_from_a_tuto_deletes_its_message() {
+        let setup = Setup::new();
+        setup.write(
+            "tutos/01-jellyfin.md",
+            "# Tuto\n\n📺 <https://youtu.be/x>\n",
+        );
+        setup.run();
+        setup.write("tutos/01-jellyfin.md", "# Tuto\n\nIntro.\n");
+        let entries = setup.run();
+        assert_eq!("Edited", outcome(&entries, "tutos/01-jellyfin.md"));
+        assert_eq!("Deleted", outcome(&entries, "tutos/jellyfin.md#video"));
+        assert_eq!(vec!["Intro."], setup.fake.shown());
     }
 
     #[test]
