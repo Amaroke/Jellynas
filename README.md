@@ -1672,6 +1672,12 @@ It keeps the settings listed in
 [Settings of Kavita kept by policy](#settings-of-kavita-kept-by-policy) and
 [Settings of LazyLibrarian kept by policy](#settings-of-lazylibrarian-kept-by-policy).
 
+Radarr and Sonarr only search an item when it is added or shows up in the RSS.
+So after its nightly pass, once a day, policy starts "Search All" of Wanted >
+Missing in both, for the monitored items only. The pass at its start and a
+pass that tries again the same day search nothing. A C411 release still lands
+stopped in qBittorrent, see [Approve the C411 grabs](#approve-the-c411-grabs).
+
 It keeps an app once its API key is in `.env`: `JELLYFIN_API_KEY`,
 `KAVITA_API_KEY`, `RADARR_API_KEY`, `SONARR_API_KEY`, `AURRAL_API_KEY` or
 `LAZYLIBRARIAN_API_KEY`. It reaches Radarr, Sonarr and LazyLibrarian in the

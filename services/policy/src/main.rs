@@ -50,6 +50,13 @@ impl App {
             App::LazyLibrarian(api) => lazylibrarian::enforce(api),
         }
     }
+
+    fn search(&self) -> Result<(), String> {
+        match self {
+            App::Arr(arr, api) => arr::search_missing(arr, api),
+            _ => Ok(()),
+        }
+    }
 }
 
 fn apps(vars: impl Fn(&str) -> Option<String>) -> Vec<App> {
@@ -162,6 +169,7 @@ fn main() {
     let directory = directory(|name| env::var(name).ok());
     let names: Vec<&str> = apps.iter().map(App::name).collect();
     println!("Keeping the settings of {}", names.join(", "));
+    let mut searched = Some(ZonedDateTime::now().date());
     loop {
         let mut failed = false;
         let accounts = match &directory {
@@ -177,6 +185,15 @@ fn main() {
                 eprintln!("Cannot keep the settings of {}: {error}", app.name());
                 failed = true;
             }
+        }
+        let today = ZonedDateTime::now().date();
+        if searched != Some(today) {
+            for app in &apps {
+                if let Err(error) = app.search() {
+                    eprintln!("Cannot search the missing items of {}: {error}", app.name());
+                }
+            }
+            searched = Some(today);
         }
         if !failed && let Err(error) = fs::write(HEARTBEAT, b"ok") {
             eprintln!("Cannot write the heartbeat: {error}");
